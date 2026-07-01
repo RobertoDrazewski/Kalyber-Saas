@@ -10,7 +10,7 @@ export default function Footer() {
             <img 
               src="/kaliber-banner.png" 
               alt="Kyber ML Logo" 
-              className="h-12 w-auto mb-6 object-contain" 
+              className="h-40 w-auto mb-24 object-contain" 
             />
             <p className="text-sm text-slate-400 max-w-sm leading-relaxed">
               Inteligencia Artificial aplicada a la gestión operativa de vehículos. 
