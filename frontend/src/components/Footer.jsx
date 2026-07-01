@@ -2,23 +2,26 @@ export default function Footer() {
   return (
     <footer className="w-full bg-[#050B14] border-t border-slate-800/80 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+        {/* Contenedor principal del grid */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
           
-          <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded bg-gradient-to-br from-[#6366F1] to-[#10B981] flex items-center justify-center font-bold text-white text-xs">
-                K
-              </div>
-              <span className="text-lg font-bold tracking-widest text-white">KYBER</span>
-            </div>
-            <p className="text-sm text-slate-400 max-w-sm">
-              Inteligencia Artificial aplicada a la gestión operativa de vehículos. Diseñado para dueños de flotas de Uber, Cabify y logística.
+          {/* Columna de Logo y Descripción (Centrada/Alineada) */}
+          <div className="md:col-span-5 flex flex-col items-center md:items-start text-center md:text-left">
+            <img 
+              src="/kaliber-banner.png" 
+              alt="Kyber ML Logo" 
+              className="h-12 w-auto mb-6 object-contain" 
+            />
+            <p className="text-sm text-slate-400 max-w-sm leading-relaxed">
+              Inteligencia Artificial aplicada a la gestión operativa de vehículos. 
+              Diseñado para dueños de flotas de Uber, Cabify y logística avanzada.
             </p>
           </div>
 
-          <div>
-            <h4 className="text-white font-semibold mb-4">Producto</h4>
-            <ul className="space-y-2 text-sm text-slate-400">
+          {/* Columna de Producto */}
+          <div className="md:col-span-3 md:col-start-7">
+            <h4 className="text-white font-semibold mb-6">Producto</h4>
+            <ul className="space-y-3 text-sm text-slate-400">
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Telemetría en Vivo</a></li>
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Mantenimiento Predictivo</a></li>
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Scoring de Choferes</a></li>
@@ -26,9 +29,10 @@ export default function Footer() {
             </ul>
           </div>
 
-          <div>
-            <h4 className="text-white font-semibold mb-4">Compañía</h4>
-            <ul className="space-y-2 text-sm text-slate-400">
+          {/* Columna de Compañía */}
+          <div className="md:col-span-2">
+            <h4 className="text-white font-semibold mb-6">Compañía</h4>
+            <ul className="space-y-3 text-sm text-slate-400">
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Sobre Nosotros</a></li>
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Contacto</a></li>
               <li><a href="#" className="hover:text-[#6366F1] transition-colors">Términos Legales</a></li>
@@ -37,9 +41,12 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500">
-          <p>© 2026 Kyber AI. Todos los derechos reservados.</p>
-          <p className="mt-2 md:mt-0">Operaciones en Mendoza, Argentina.</p>
+        {/* Línea inferior */}
+        <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-4">
+          <p>© 2026 Kyber ML. Todos los derechos reservados.</p>
+          <div className="flex gap-6">
+            <p>Operaciones en Mendoza, Argentina.</p>
+          </div>
         </div>
       </div>
     </footer>
