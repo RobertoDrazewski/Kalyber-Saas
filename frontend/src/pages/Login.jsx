@@ -34,7 +34,7 @@ export default function Login() {
         {/* Logo de Kyber Actualizado */}
         <div className="flex justify-center mb-8">
           <img 
-            src="/kybernavbar.png" 
+            src="/kalyber.png" 
             alt="Logo Kyber" 
             className="h-50 w-auto object-contain drop-shadow-[0_0_20px_rgba(99,102,241,0.4)]"
           />

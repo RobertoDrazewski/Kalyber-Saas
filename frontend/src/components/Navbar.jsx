@@ -8,7 +8,7 @@ export default function Navbar() {
         {/* Logo Actualizado */}
         <Link to="/" className="flex items-center gap-3 group">
           <img 
-            src="/kybernavbar.png" 
+            src="/kaliber-banner.png" 
             alt="Logo Puma Code / Kyber" 
             className="h-60 w-auto object-contain group-hover:scale-105 transition-transform drop-shadow-[0_0_15px_rgba(99,102,241,0.3)]"
           />
