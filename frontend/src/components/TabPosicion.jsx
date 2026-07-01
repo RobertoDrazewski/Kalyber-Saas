@@ -57,14 +57,14 @@ export default function TabPosicion() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-white">Mapa en Tiempo Real</h2>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Lista de autos por patente */}
-        <div className="w-64 shrink-0 bg-[#1E293B]/30 border border-slate-700 rounded-2xl p-3 h-[500px] overflow-y-auto space-y-2">
+        <div className="w-full md:w-64 shrink-0 bg-[#1E293B]/30 border border-slate-700 rounded-2xl p-3 h-48 md:h-[500px] overflow-y-auto space-y-2 flex md:block flex-row overflow-x-auto md:overflow-x-visible">
           {vehicles.map(v => (
             <button
               key={v.id}
               onClick={() => setSelected(v)}
-              className={`w-full flex items-center gap-3 p-2 rounded-xl text-left transition-colors ${
+              className={`w-full md:w-full shrink-0 md:shrink flex items-center gap-3 p-2 rounded-xl text-left transition-colors min-w-[160px] md:min-w-0 ${
                 selected?.id === v.id ? 'bg-[#6366F1]/20 border border-[#6366F1]/40' : 'hover:bg-[#0B1120] border border-transparent'
               }`}
             >
@@ -79,7 +79,7 @@ export default function TabPosicion() {
         </div>
 
         {/* Mapa */}
-        <div className="flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[500px] relative">
+        <div className="flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -109,7 +109,7 @@ export default function TabPosicion() {
       {/* Panel lateral de info + gráfico al seleccionar un auto */}
       {selected && (
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-4">
               <img src={selected.photo_url || FALLBACK_PHOTO} className="w-16 h-16 rounded-xl object-cover border border-slate-700" />
               <div>

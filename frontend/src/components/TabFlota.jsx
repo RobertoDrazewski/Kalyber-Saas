@@ -73,7 +73,7 @@ export default function TabFlota() {
 
       <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
         {error && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{error}</div>}
-        <form onSubmit={handleAdd} className="flex flex-wrap gap-4 items-end">
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
           <div>
             <label className="block text-xs text-slate-400 mb-1">Foto</label>
             <label className="w-16 h-16 rounded-xl border border-dashed border-slate-600 flex items-center justify-center cursor-pointer overflow-hidden bg-[#0B1120] hover:border-[#6366F1]">
@@ -83,19 +83,19 @@ export default function TabFlota() {
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Patente</label>
-            <input placeholder="AB123CD" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-32" value={newVehicle.plate} onChange={e => setNewVehicle({ ...newVehicle, plate: e.target.value.toUpperCase() })} required />
+            <input placeholder="AB123CD" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-32" value={newVehicle.plate} onChange={e => setNewVehicle({ ...newVehicle, plate: e.target.value.toUpperCase() })} required />
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Marca</label>
-            <input placeholder="Marca" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-32" value={newVehicle.brand} onChange={e => setNewVehicle({ ...newVehicle, brand: e.target.value })} required />
+            <input placeholder="Marca" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-32" value={newVehicle.brand} onChange={e => setNewVehicle({ ...newVehicle, brand: e.target.value })} required />
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Modelo</label>
-            <input placeholder="Modelo" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-32" value={newVehicle.model} onChange={e => setNewVehicle({ ...newVehicle, model: e.target.value })} required />
+            <input placeholder="Modelo" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-32" value={newVehicle.model} onChange={e => setNewVehicle({ ...newVehicle, model: e.target.value })} required />
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">ID de equipo (IMEI)</label>
-            <input placeholder="Opcional — se parea después" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-48" value={newVehicle.device_imei} onChange={e => setNewVehicle({ ...newVehicle, device_imei: e.target.value })} />
+            <input placeholder="Opcional — se parea después" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-48" value={newVehicle.device_imei} onChange={e => setNewVehicle({ ...newVehicle, device_imei: e.target.value })} />
           </div>
           <button type="submit" className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center gap-2 hover:bg-[#4F46E5] h-[42px]">
             <Plus size={18} /> Agregar
@@ -110,7 +110,7 @@ export default function TabFlota() {
         <div className="p-4 bg-[#0B1120] border-b border-slate-800">
           <h3 className="font-bold text-white">Flota real</h3>
         </div>
-        <table className="w-full text-left text-sm text-slate-300">
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-300">
           <thead className="bg-[#0B1120] text-slate-400">
             <tr>
               <th className="px-6 py-4">Foto</th>
@@ -136,7 +136,7 @@ export default function TabFlota() {
               <tr><td colSpan="5" className="px-6 py-8 text-center text-slate-500">Todavía no cargaste ningún auto real.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {demoVehicles.length > 0 && (
@@ -145,7 +145,7 @@ export default function TabFlota() {
             <h3 className="font-bold text-white">Flota de demo (simulador)</h3>
             <span className="text-xs text-[#F59E0B]">{demoVehicles.length} autos — no editables</span>
           </div>
-          <table className="w-full text-left text-sm text-slate-400">
+          <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400">
             <tbody className="divide-y divide-slate-800">
               {demoVehicles.map(v => (
                 <tr key={v.id}>
@@ -155,7 +155,7 @@ export default function TabFlota() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

@@ -33,7 +33,7 @@ export default function TabViajes() {
         <div className="p-4 bg-[#0B1120] border-b border-slate-800">
           <h3 className="font-bold text-white">Historial Reciente</h3>
         </div>
-        <table className="w-full text-left text-sm text-slate-300">
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-300">
           <thead className="bg-[#0B1120] text-slate-400">
             <tr>
               <th className="px-6 py-4 font-medium">Patente</th>
@@ -59,7 +59,7 @@ export default function TabViajes() {
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

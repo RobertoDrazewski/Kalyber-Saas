@@ -56,7 +56,7 @@ export default function TabTelemetria() {
       )}
 
       <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden">
-        <table className="w-full text-left text-sm text-slate-300">
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-300">
           <thead className="bg-[#0B1120] text-slate-400">
             <tr>
               <th className="px-6 py-4 font-medium">Patente</th>
@@ -77,7 +77,7 @@ export default function TabTelemetria() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );
