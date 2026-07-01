@@ -1,0 +1,29 @@
+# --- Dependencias (Nunca se deben subir) ---
+node_modules/
+dist/
+build/
+.output/
+
+# --- Variables de Entorno (Confidenciales) ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Archivos de Sistema y Temporales ---
+.DS_Store
+*.log
+*.log.*
+.cache/
+.eslintcache
+.vite/
+
+# --- IDEs y Editores ---
+.vscode/
+.idea/
+
+# --- Otros ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
