@@ -26,7 +26,7 @@ const menuItems = [
     <aside className="w-64 bg-[#050B14] border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0">
       <div className="p-6 flex items-center gap-3">
         <div className="w-8 h-8 rounded bg-gradient-to-br from-[#6366F1] to-[#10B981] flex items-center justify-center font-bold text-white">K</div>
-        <span className="text-xl font-bold tracking-widest text-white">KYBER</span>
+        <span className="text-xl font-bold tracking-widest text-white">Kalyber</span>
       </div>
       
       <nav className="flex-1 px-4 space-y-2 mt-4">
