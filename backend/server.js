@@ -17,6 +17,7 @@ const app = express();
 const corsOptions = {
     origin: [
         'https://kalyber.com.ar',
+        'https://www.kalyber.com.ar', // ¡Agrega esta línea!
         'http://localhost:5173',
         'http://localhost:3000'
     ],
