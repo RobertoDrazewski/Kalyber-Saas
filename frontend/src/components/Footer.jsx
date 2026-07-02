@@ -22,8 +22,8 @@ export default function Footer() {
             <img 
   src="/kaliber-banner.png" 
   alt="Kalyber Logo" 
-  style={{ height: '40px', flexShrink: 0 }}
-  className="w-auto object-contain mb-6" 
+  style={{ height: '65px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
+  className="object-contain mb-6" 
 />
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
               Inteligencia Artificial aplicada a la gestión operativa de vehículos. 
@@ -66,8 +66,8 @@ export default function Footer() {
           <img 
   src="/puma-code.png" 
   alt="Puma Code Logo" 
-  style={{ height: '32px', flexShrink: 0 }}
-  className="w-auto object-contain brightness-90 hover:brightness-100 transition-all"
+  style={{ height: '45px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
+  className="object-contain brightness-90 hover:brightness-100 transition-all"
 />
           <p className="text-[11px] text-slate-600 tracking-wide">
             Kalyber.com.ar es un producto de software que pertenece a{' '}

@@ -89,8 +89,8 @@ export default function Navbar() {
             <img 
   src="/kaliber-banner.png" 
   alt="Logo Kalyber" 
-  style={{ height: '48px', minWidth: '120px', flexShrink: 0 }}
-  className="w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+  style={{ height: '75px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
+  className="object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
 />
           </Link>
 
