@@ -85,18 +85,18 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            {/* CORRECCIÓN DE LOGO: h-10 en móvil, h-12 en desktop (aprox 40-48px de alto) */}
+            {/* CORRECCIÓN DE LOGO: Tamaños forzados en px y shrink-0 para evitar colapso en producción */}
             <img 
               src="/kaliber-banner.png" 
               alt="Logo Kalyber" 
-              className="h-10 sm:h-12 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+              className="h-[40px] sm:h-[50px] min-w-[120px] w-auto shrink-0 object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
             />
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
             <a href="#features" onClick={(e) => handleScroll(e, '#features')} className="hover:text-white transition-all">Características</a>
             <a href="#hardware" onClick={(e) => handleScroll(e, '#hardware')} className="hover:text-white transition-all">Hardware</a>
-            <a href="#pricing" onClick={(e) => handleScroll(e, '#pricing')} className="hover:text-white transition-all">Planes Corporativos</a>
+            <a href="#pricing" onClick={(e) => handleScroll(e, '#pricing')} className="hover:text-white transition-all">Suscripciones</a>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
