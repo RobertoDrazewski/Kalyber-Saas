@@ -66,9 +66,17 @@ export default function Navbar() {
   return (
     <>
       <style>{`
-        .skiptranslate iframe { display: none !important; }
-        body { top: 0 !important; }
+        /* Oculta la barra de traducción */
+        .goog-te-banner-frame { display: none !important; }
+        /* Oculta cualquier globo flotante de traducción */
+        #goog-gt-tt { display: none !important; }
+        /* Elimina el margen superior que Google pone al body */
+        body { top: 0 !important; position: static !important; }
+        /* Oculta el contenedor del widget */
         #google_translate_element { display: none !important; }
+        /* Fuerza la ocultación de elementos iframe que Google inyecta */
+        iframe.goog-te-menu-frame { display: none !important; }
+        .skiptranslate { display: none !important; }
         .goog-te-spinner-pos { display: none !important; }
       `}</style>
       <div id="google_translate_element"></div>
@@ -77,10 +85,11 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           
           <Link to="/" className="flex items-center gap-3 group shrink-0">
+            {/* CORRECCIÓN DE LOGO: h-10 en móvil, h-12 en desktop (aprox 40-48px de alto) */}
             <img 
               src="/kaliber-banner.png" 
               alt="Logo Kalyber" 
-              className="h-80 sm:h-40 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+              className="h-10 sm:h-12 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
             />
           </Link>
 
@@ -121,7 +130,7 @@ export default function Navbar() {
 
             <Link 
               to="/login" 
-              className="group relative px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#4F46E5] text-white text-sm font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.6)] overflow-hidden"
+              className="group relative px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#4F46E5] text-white text-sm font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.6)] overflow-hidden shrink-0"
             >
               <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
               <span className="relative z-10">Iniciar Sesión</span>
