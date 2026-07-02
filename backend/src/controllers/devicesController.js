@@ -1,18 +1,24 @@
 const pool = require('../config/database');
 
-// Alta de un equipo GPS+OBD2 por IMEI (antes de parearlo a un auto).
-// Esto es lo que hacés vos como admin cuando compras un Teltonika:
-// lo das de alta acá con su IMEI, y después desde la tab de Flota
-// lo vinculás a un vehículo puntual.
+// Alta de un equipo GPS/OBD2 por IMEI (antes de parearlo a un auto).
+// Esto es lo que hacés vos como admin cuando llega un JM-VL04 o
+// JM-VL502 de Jimi IoT: lo das de alta acá con su IMEI y modelo, y
+// después desde la tab de Flota lo vinculás a un vehículo puntual.
+// El modelo importa: VL502 lee ECU/CAN real (RPM, temp, combustible,
+// DTC), VL04 es inercial puro (GPS + acelerómetro, sin OBD) — eso
+// determina qué tabs de IA tienen sentido mostrar para ese auto.
 const addDevice = async (req, res) => {
-    const { imei, label } = req.body;
+    const { imei, label, model } = req.body;
     if (!imei) return res.status(400).json({ error: 'Falta el IMEI' });
+    if (model && !['VL04', 'VL502'].includes(model)) {
+        return res.status(400).json({ error: 'Modelo inválido (tiene que ser VL04 o VL502)' });
+    }
     try {
         const [result] = await pool.query(
-            `INSERT INTO Devices (imei, label, status) VALUES (?, ?, 'unpaired')`,
-            [imei, label || null]
+            `INSERT INTO Devices (imei, label, model, status) VALUES (?, ?, ?, 'unpaired')`,
+            [imei, label || null, model || 'VL502']
         );
-        res.json({ id: result.insertId, imei, label, status: 'unpaired' });
+        res.json({ id: result.insertId, imei, label, model: model || 'VL502', status: 'unpaired' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Ese IMEI ya está registrado' });

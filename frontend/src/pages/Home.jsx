@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import Hero from '../components/Hero';
 import Footer from '../components/Footer';
+import QuoteChatWidget from '../components/QuoteChatWidget';
 
 // Subcomponente: Características
 function Features() {
@@ -157,7 +159,7 @@ function Hardware() {
 }
 
 // Subcomponente: Pricing (Actualizado con aclaración por unidad y cotizador IA para flotas)
-function Pricing() {
+function Pricing({ onOpenChat }) {
   return (
     <section id="pricing" className="py-24 bg-[#0B1120] scroll-mt-20">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -277,7 +279,7 @@ function Pricing() {
             <p className="text-slate-400">Podemos estructurar descuentos por volumen en el hardware y en tu suscripción mensual corporativa.</p>
           </div>
           
-          <button className="shrink-0 z-10 flex items-center gap-3 px-8 py-4 bg-[#1E293B] hover:bg-[#2D3748] border border-[#6366F1]/50 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.4)] group">
+          <button onClick={onOpenChat} className="shrink-0 z-10 flex items-center gap-3 px-8 py-4 bg-[#1E293B] hover:bg-[#2D3748] border border-[#6366F1]/50 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.4)] group">
             {/* Ícono de "Bot/Sparkles" genérico para representar IA */}
             <svg className="w-5 h-5 text-[#6366F1] group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
@@ -292,18 +294,33 @@ function Pricing() {
 }
 
 export default function Home() {
+  const [chatOpen, setChatOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-[#0B1120] text-white selection:bg-[#6366F1] selection:text-white font-sans flex flex-col scroll-smooth">
       <Navbar />
-      
+
       <main className="flex-grow">
         <Hero />
         <Features />
         <Hardware />
-        <Pricing />
+        <Pricing onOpenChat={() => setChatOpen(true)} />
       </main>
 
       <Footer />
+
+      <QuoteChatWidget isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+
+      {/* Botón flotante permanente, así el chat también se puede abrir sin scrollear a Pricing */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-6 right-6 z-40 bg-[#6366F1] hover:bg-[#4F46E5] text-white p-4 rounded-full shadow-[0_0_25px_rgba(99,102,241,0.5)] transition-transform hover:scale-105"
+          aria-label="Cotizar con IA"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.5 0-2.91-.325-4.156-.898L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+        </button>
+      )}
     </div>
   );
 }

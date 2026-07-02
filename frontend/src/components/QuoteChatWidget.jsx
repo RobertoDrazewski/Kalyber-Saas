@@ -1,0 +1,123 @@
+import { useState, useRef, useEffect } from 'react';
+import { X, Send, Sparkles } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+export default function QuoteChatWidget({ isOpen, onClose }) {
+  const [messages, setMessages] = useState([
+    { role: 'assistant', content: '¡Hola! Soy el asistente de Kalyber 👋 ¿Cuántos vehículos tenés en tu flota y te ayudo a armar la cotización?' }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
+
+  const send = async (e) => {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || loading) return;
+
+    setError('');
+    const nextMessages = [...messages, { role: 'user', content: text }];
+    setMessages(nextMessages);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/quote-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          // Mandamos el historial en el formato que espera Claude
+          // (el backend igual lo trunca y sanea, esto es solo para
+          // que la conversación tenga contexto).
+          history: messages.map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Error al consultar el asistente');
+
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:justify-end p-0 sm:p-6 bg-black/50 sm:bg-transparent">
+      <div className="w-full sm:w-96 h-[85vh] sm:h-[560px] bg-[#0B1120] border border-slate-700 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-[#6366F1]/20 to-transparent shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#6366F1]/20 flex items-center justify-center text-[#6366F1]">
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <p className="text-white font-bold text-sm">Cotizador Kalyber</p>
+              <p className="text-[11px] text-slate-500">Asistente de planes</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Mensajes */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                m.role === 'user'
+                  ? 'bg-[#6366F1] text-white rounded-br-sm'
+                  : 'bg-[#1E293B] text-slate-200 rounded-bl-sm'
+              }`}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-[#1E293B] text-slate-400 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm">
+                Escribiendo...
+              </div>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/40 text-red-400 text-xs p-2.5 rounded-xl">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <form onSubmit={send} className="p-3 border-t border-slate-800 flex gap-2 shrink-0">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Escribí tu consulta..."
+            maxLength={500}
+            className="flex-1 bg-[#1E293B] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-[#6366F1]"
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="bg-[#6366F1] hover:bg-[#4F46E5] text-white p-2.5 rounded-xl disabled:opacity-40 shrink-0"
+          >
+            <Send size={18} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

@@ -8,6 +8,7 @@ import TabViajes from '../components/TabViajes';
 import TabHistorico from '../components/TabHistorico';
 import TabFlota from '../components/TabFlota';
 import TabCalendario from '../components/TabCalendario';
+import TabEquipos from '../components/TabEquipos';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('telemetria');
@@ -22,6 +23,7 @@ export default function Dashboard() {
       case 'viajes': return <TabViajes />;
       case 'historico': return <TabHistorico />;
       case 'flota': return <TabFlota />;
+      case 'equipos': return <TabEquipos />;
       default: return <TabTelemetria />;
     }
   };

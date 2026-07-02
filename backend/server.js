@@ -10,6 +10,7 @@ const tripRoutes = require('./src/routes/tripRoutes');
 const driverRoutes = require('./src/routes/driverRoutes');
 const maintenanceRoutes = require('./src/routes/maintenanceRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
+const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/quote-chat', quoteChatRoutes);
 
 // Ruta de estado / Health check
 app.get('/api/status', (req, res) => {
