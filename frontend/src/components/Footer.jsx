@@ -1,5 +1,4 @@
 export default function Footer() {
-  // Manejador del desplazamiento suave al hacer click en las secciones
   const handleScroll = (e, targetId) => {
     if (window.location.pathname === '/') {
       e.preventDefault();
@@ -13,25 +12,20 @@ export default function Footer() {
   return (
     <footer className="w-full bg-[#050B14] border-t border-slate-800/80 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        {/* Contenedor principal del grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-12">
           
-          {/* Columna de Logo y Descripción */}
           <div className="md:col-span-6 flex flex-col items-center md:items-start text-center md:text-left">
-            {/* CORRECCIÓN DE LOGO KALYBER: Tamaño forzado en px y shrink-0 */}
             <img 
-  src="/kaliber-banner.png" 
-  alt="Kalyber Logo" 
-  style={{ height: '65px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
-  className="object-contain mb-6" 
-/>
+              src="/kaliber-banner.png" 
+              alt="Kalyber Logo" 
+              className="h-16 md:h-20 w-auto object-contain mb-6" 
+            />
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
               Inteligencia Artificial aplicada a la gestión operativa de vehículos. 
               El verdadero cerebro de telemetría predictiva y auditoría para flotas corporativas y de logística.
             </p>
           </div>
 
-          {/* Columna de Navegación del Sitio Simplificada */}
           <div className="md:col-span-4 md:col-start-9 flex flex-col items-center md:items-start text-center md:text-left">
             <h4 className="text-white font-semibold mb-6 uppercase tracking-wider text-xs">Secciones</h4>
             <ul className="space-y-4 text-sm font-medium text-slate-400">
@@ -54,21 +48,17 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Línea inferior y Derechos Reservados */}
         <div className="border-t border-slate-800/60 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-4 mb-8">
           <p>© 2026 Kalyber.com.ar. Todos los derechos reservados.</p>
           <p>Operaciones en Mendoza, Argentina.</p>
         </div>
 
-        {/* Bloque de Autoría: Centrado, logo en miniatura y enlaces de Puma Code */}
         <div className="border-t border-slate-800/40 pt-6 flex flex-col items-center justify-center text-center gap-3">
-          {/* CORRECCIÓN DE LOGO PUMA CODE: Tamaño forzado en px y shrink-0 */}
           <img 
-  src="/puma-code.png" 
-  alt="Puma Code Logo" 
-  style={{ height: '45px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
-  className="object-contain brightness-90 hover:brightness-100 transition-all"
-/>
+            src="/puma-code.png" 
+            alt="Puma Code Logo" 
+            className="h-8 md:h-10 w-auto object-contain brightness-90 hover:brightness-100 transition-all"
+          />
           <p className="text-[11px] text-slate-600 tracking-wide">
             Kalyber.com.ar es un producto de software que pertenece a{' '}
             <a 

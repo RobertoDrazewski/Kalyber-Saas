@@ -66,15 +66,10 @@ export default function Navbar() {
   return (
     <>
       <style>{`
-        /* Oculta la barra de traducción */
         .goog-te-banner-frame { display: none !important; }
-        /* Oculta cualquier globo flotante de traducción */
         #goog-gt-tt { display: none !important; }
-        /* Elimina el margen superior que Google pone al body */
         body { top: 0 !important; position: static !important; }
-        /* Oculta el contenedor del widget */
         #google_translate_element { display: none !important; }
-        /* Fuerza la ocultación de elementos iframe que Google inyecta */
         iframe.goog-te-menu-frame { display: none !important; }
         .skiptranslate { display: none !important; }
         .goog-te-spinner-pos { display: none !important; }
@@ -85,13 +80,11 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            {/* CORRECCIÓN DE LOGO: Tamaños forzados en px y shrink-0 para evitar colapso en producción */}
             <img 
-  src="/kaliber-banner.png" 
-  alt="Logo Kalyber" 
-  style={{ height: '75px', width: 'auto', maxWidth: 'none', flexShrink: 0 }}
-  className="object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
-/>
+              src="/kaliber-banner.png" 
+              alt="Logo Kalyber" 
+              className="h-12 md:h-16 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+            />
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
