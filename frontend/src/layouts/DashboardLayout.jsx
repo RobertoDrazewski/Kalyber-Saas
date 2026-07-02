@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+import BottomNav from '../components/BottomNav';
 
 export default function DashboardLayout({ children, activeTab, setActiveTab }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -14,15 +15,18 @@ export default function DashboardLayout({ children, activeTab, setActiveTab }) {
         onClose={() => setMobileNavOpen(false)}
       />
 
-      {/* Barra superior solo en mobile, con botón hamburguesa */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-[#050B14] border-b border-slate-800 flex items-center px-4 z-30">
+      {/* Barra superior solo en mobile — logo + botón para el menú completo */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-[#050B14] border-b border-slate-800 flex items-center justify-between px-4 z-30">
+        <span className="font-bold text-white tracking-widest text-sm">KALYBER</span>
         <button onClick={() => setMobileNavOpen(true)} className="text-white">
           <Menu size={22} />
         </button>
-        <span className="ml-3 font-bold text-white tracking-widest text-sm">KYBER</span>
       </div>
 
-      <main className="flex-1 md:ml-64 p-4 pt-20 md:p-8 overflow-y-auto w-full">
+      {/* Navegación inferior tipo app — acceso rápido a los tabs más usados */}
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} onOpenMore={() => setMobileNavOpen(true)} />
+
+      <main className="flex-1 md:ml-64 p-4 pt-20 pb-24 md:p-8 md:pb-8 overflow-y-auto w-full">
         {children}
       </main>
     </div>

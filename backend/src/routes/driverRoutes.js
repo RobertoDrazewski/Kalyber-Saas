@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { getDrivers } = require('../controllers/driversController');
-const { verifyToken } = require('../middlewares/authMiddleware'); // 1. Importar
+const { getDrivers, addDriver, updateDriver, deleteDriver } = require('../controllers/driversController');
+const { verifyToken } = require('../middlewares/authMiddleware');
 
-// 2. Colocar verifyToken en el medio
 router.get('/', verifyToken, getDrivers);
+router.post('/', verifyToken, addDriver);
+router.patch('/:id', verifyToken, updateDriver);
+router.delete('/:id', verifyToken, deleteDriver);
 
 module.exports = router;

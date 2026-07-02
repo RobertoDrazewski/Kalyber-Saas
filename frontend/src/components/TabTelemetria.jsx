@@ -58,7 +58,41 @@ export default function TabTelemetria() {
         </div>
       )}
 
-      <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden">
+      {/* Mobile: tarjetas en vez de tabla */}
+      <div className="md:hidden space-y-3">
+        {data.map(t => (
+          <button
+            key={t.vehicle_id}
+            onClick={() => setSelectedId(t.vehicle_id)}
+            className={`w-full text-left bg-[#1E293B]/50 rounded-2xl border p-4 ${
+              selectedId === t.vehicle_id ? 'border-[#6366F1]' : 'border-slate-700'
+            }`}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-mono text-[#10B981] font-bold">{t.plate}</span>
+              <span className="text-[11px] text-slate-500">{t.vehicle_source === 'simulated' ? 'Demo' : 'Real'}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-white font-bold text-sm">{t.engine_rpm}</p>
+                <p className="text-[11px] text-slate-500">RPM</p>
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">{t.speed_kmh}</p>
+                <p className="text-[11px] text-slate-500">km/h</p>
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">{t.engine_load}%</p>
+                <p className="text-[11px] text-slate-500">Carga</p>
+              </div>
+            </div>
+          </button>
+        ))}
+        {data.length === 0 && !loadError && <p className="text-slate-500 text-sm">Sin datos de telemetría todavía.</p>}
+      </div>
+
+      {/* Desktop: tabla */}
+      <div className="hidden md:block bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-300">
           <thead className="bg-[#0B1120] text-slate-400">
             <tr>

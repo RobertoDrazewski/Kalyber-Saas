@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
 import { Plus, Trash2, Car, Upload } from 'lucide-react';
+import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -13,14 +14,35 @@ function fileToBase64(file) {
   });
 }
 
+function VehicleCard({ v, onDelete }) {
+  return (
+    <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4 flex items-center gap-4">
+      <img src={v.photo_url || FALLBACK_PHOTO} className="w-14 h-14 rounded-xl object-cover border border-slate-700 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="font-mono text-[#10B981] font-bold">{v.plate}</p>
+        <p className="text-sm text-slate-300 truncate">{v.brand} {v.model}</p>
+        <p className="text-xs mt-1">
+          {v.device_imei ? <span className="text-[#10B981]">Pareado ({v.device_imei})</span> : <span className="text-slate-500">Sin equipo</span>}
+        </p>
+      </div>
+      {onDelete && (
+        <button onClick={() => onDelete(v.id)} className="text-red-500 hover:text-red-400 shrink-0">
+          <Trash2 size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TabFlota() {
   const [vehicles, setVehicles] = useState([]);
   const [newVehicle, setNewVehicle] = useState({ plate: '', brand: '', model: '', device_imei: '' });
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoBase64, setPhotoBase64] = useState(null);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
-  const loadVehicles = () => fetchAPI('/vehicles').then(setVehicles);
+  const loadVehicles = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
   useEffect(() => { loadVehicles(); }, []);
 
@@ -70,6 +92,7 @@ export default function TabFlota() {
       <h2 className="text-2xl font-bold text-white flex items-center gap-2">
         <Car className="text-[#10B981]" /> Administración de Flota
       </h2>
+      <ErrorBanner message={loadError} />
 
       <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
         {error && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{error}</div>}
@@ -97,7 +120,7 @@ export default function TabFlota() {
             <label className="block text-xs text-slate-400 mb-1">ID de equipo (IMEI)</label>
             <input placeholder="Opcional — se parea después" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-48" value={newVehicle.device_imei} onChange={e => setNewVehicle({ ...newVehicle, device_imei: e.target.value })} />
           </div>
-          <button type="submit" className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center gap-2 hover:bg-[#4F46E5] h-[42px]">
+          <button type="submit" className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center justify-center gap-2 hover:bg-[#4F46E5] h-[42px]">
             <Plus size={18} /> Agregar
           </button>
         </form>
@@ -106,7 +129,24 @@ export default function TabFlota() {
         </p>
       </div>
 
-      <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden">
+      {/* Mobile: tarjetas */}
+      <div className="md:hidden space-y-3">
+        <h3 className="font-bold text-white text-sm">Flota real</h3>
+        {realVehicles.map(v => <VehicleCard key={v.id} v={v} onDelete={handleDelete} />)}
+        {realVehicles.length === 0 && <p className="text-slate-500 text-sm">Todavía no cargaste ningún auto real.</p>}
+
+        {demoVehicles.length > 0 && (
+          <>
+            <h3 className="font-bold text-white text-sm mt-6 flex items-center justify-between">
+              Flota de demo <span className="text-xs text-[#F59E0B] font-normal">{demoVehicles.length} autos</span>
+            </h3>
+            {demoVehicles.map(v => <VehicleCard key={v.id} v={v} />)}
+          </>
+        )}
+      </div>
+
+      {/* Desktop: tabla */}
+      <div className="hidden md:block bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden">
         <div className="p-4 bg-[#0B1120] border-b border-slate-800">
           <h3 className="font-bold text-white">Flota real</h3>
         </div>
@@ -140,7 +180,7 @@ export default function TabFlota() {
       </div>
 
       {demoVehicles.length > 0 && (
-        <div className="bg-[#1E293B]/30 rounded-2xl border border-slate-800 overflow-hidden opacity-80">
+        <div className="hidden md:block bg-[#1E293B]/30 rounded-2xl border border-slate-800 overflow-hidden opacity-80">
           <div className="p-4 bg-[#0B1120] border-b border-slate-800 flex justify-between items-center">
             <h3 className="font-bold text-white">Flota de demo (simulador)</h3>
             <span className="text-xs text-[#F59E0B]">{demoVehicles.length} autos — no editables</span>

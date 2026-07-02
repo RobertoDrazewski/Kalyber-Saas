@@ -36,6 +36,18 @@ function FlyToVehicle({ vehicle }) {
   return null;
 }
 
+// NUEVO COMPONENTE: Fuerza el recálculo del mapa tras el montaje en el DOM móvil
+function MapResizer() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
 export default function TabPosicion() {
   const [vehicles, setVehicles] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -82,8 +94,10 @@ export default function TabPosicion() {
         </div>
 
         {/* Mapa */}
-        <div className="flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative">
+        {/* CORRECCIÓN: Se cambió flex-1 por w-full md:flex-1 y se agregó z-0 */}
+        <div className="w-full md:flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
+            <MapResizer />
             <TileLayer
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'

@@ -43,7 +43,7 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
         <div className="p-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded bg-gradient-to-br from-[#6366F1] to-[#10B981] flex items-center justify-center font-bold text-white">K</div>
-            <span className="text-xl font-bold tracking-widest text-white">KYBER</span>
+            <span className="text-xl font-bold tracking-widest text-white">KALYBER</span>
           </div>
           <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
             <X size={22} />
