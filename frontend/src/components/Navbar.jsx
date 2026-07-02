@@ -80,10 +80,11 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           
           <Link to="/" className="flex items-center gap-3 group shrink-0">
+            {/* LOGO RECTANGULAR: Controlado por ancho */}
             <img 
               src="/kaliber-banner.png" 
               alt="Logo Kalyber" 
-              className="h-12 md:h-16 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+              className="w-36 md:w-48 h-auto object-contain shrink-0 group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
             />
           </Link>
 

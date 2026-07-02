@@ -15,10 +15,11 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-12">
           
           <div className="md:col-span-6 flex flex-col items-center md:items-start text-center md:text-left">
+            {/* LOGO RECTANGULAR: Controlado por ancho */}
             <img 
               src="/kaliber-banner.png" 
               alt="Kalyber Logo" 
-              className="h-16 md:h-20 w-auto object-contain mb-6" 
+              className="w-40 md:w-52 h-auto object-contain shrink-0 mb-6" 
             />
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
               Inteligencia Artificial aplicada a la gestión operativa de vehículos. 
@@ -54,10 +55,11 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-slate-800/40 pt-6 flex flex-col items-center justify-center text-center gap-3">
+          {/* LOGO PUMA CODE: Controlado por ancho */}
           <img 
             src="/puma-code.png" 
             alt="Puma Code Logo" 
-            className="h-8 md:h-10 w-auto object-contain brightness-90 hover:brightness-100 transition-all"
+            className="w-28 md:w-32 h-auto object-contain shrink-0 brightness-90 hover:brightness-100 transition-all"
           />
           <p className="text-[11px] text-slate-600 tracking-wide">
             Kalyber.com.ar es un producto de software que pertenece a{' '}
