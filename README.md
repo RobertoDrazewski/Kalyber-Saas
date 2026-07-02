@@ -1,5 +1,5 @@
 🚀 Kalyber.com.ar — SaaS de Gestión de Flota
-Kyber es una plataforma integral para la gestión y monitoreo de flotas de vehículos. Permite el seguimiento en tiempo real, análisis heurístico de mantenimiento preventivo, y está preparado para operar tanto con simulaciones de prueba como con hardware telemático real (GPS/OBD2).
+Es una plataforma integral para la gestión y monitoreo de flotas de vehículos. Permite el seguimiento en tiempo real, análisis heurístico de mantenimiento preventivo, y está preparado para operar tanto con simulaciones de prueba como con hardware telemático real (GPS/OBD2).
 
 ✨ Características Principales
 🧠 Motor Heurístico Inteligente (mlService): Analiza el desgaste de neumáticos y frenos basado en kilometraje y eventos de frenada brusca. Detecta anomalías mediante z-score comparando el comportamiento del auto contra su propio historial.
