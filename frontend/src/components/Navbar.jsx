@@ -87,10 +87,11 @@ export default function Navbar() {
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             {/* CORRECCIÓN DE LOGO: Tamaños forzados en px y shrink-0 para evitar colapso en producción */}
             <img 
-              src="/kaliber-banner.png" 
-              alt="Logo Kalyber" 
-              className="h-[40px] sm:h-[50px] min-w-[120px] w-auto shrink-0 object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
-            />
+  src="/kaliber-banner.png" 
+  alt="Logo Kalyber" 
+  style={{ height: '48px', minWidth: '120px', flexShrink: 0 }}
+  className="w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+/>
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
