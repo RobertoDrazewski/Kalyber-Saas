@@ -21,7 +21,7 @@ export default function Footer() {
             <img 
               src="/kaliber-banner.png" 
               alt="Kalyber Logo" 
-              className="h-10 w-auto mb-6 object-contain" 
+              className="h-20 w-auto mb-6 object-contain" 
             />
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
               Inteligencia Artificial aplicada a la gestión operativa de vehículos. 

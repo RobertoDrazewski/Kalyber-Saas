@@ -80,7 +80,7 @@ export default function Navbar() {
             <img 
               src="/kaliber-banner.png" 
               alt="Logo Kalyber" 
-              className="h-10 sm:h-12 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
+              className="h-30 sm:h-12 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]"
             />
           </Link>
 
