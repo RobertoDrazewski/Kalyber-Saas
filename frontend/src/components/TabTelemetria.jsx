@@ -3,16 +3,18 @@ import { fetchAPI } from '../services/api';
 import MetricCard from './MetricCard';
 import { Activity, Gauge } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import ErrorBanner from './ErrorBanner';
 
 export default function TabTelemetria() {
   const [data, setData] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [series, setSeries] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   const load = () => fetchAPI('/telemetry/live').then(rows => {
     setData(rows);
     if (!selectedId && rows.length > 0) setSelectedId(rows[0].vehicle_id);
-  }).catch(console.error);
+  }).catch(err => setLoadError(err.message));
 
   useEffect(() => {
     load();
@@ -34,6 +36,7 @@ export default function TabTelemetria() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-white">Telemetría en Vivo</h2>
+      <ErrorBanner message={loadError} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricCard title="Autos Activos" value={data.length} icon={Activity} trend="Actualizado ahora" />
         <MetricCard title="Anomalías activas" value={activeAnomalies} icon={Gauge} trend={activeAnomalies > 0 ? 'Revisar mantenimiento' : 'Todo en rango'} />

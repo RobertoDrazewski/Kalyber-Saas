@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { RadialBarChart, RadialBar, ResponsiveContainer } from 'recharts';
+import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -25,9 +26,10 @@ function ScoreGauge({ label, value }) {
 
 export default function TabMantenimiento() {
   const [alerts, setAlerts] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    fetchAPI('/maintenance/alerts').then(setAlerts).catch(console.error);
+    fetchAPI('/maintenance/alerts').then(setAlerts).catch(err => setLoadError(err.message));
   }, []);
 
   return (
@@ -35,6 +37,7 @@ export default function TabMantenimiento() {
       <h2 className="text-2xl font-bold text-white flex items-center gap-2">
         <AlertTriangle className="text-[#F59E0B]" /> Mantenimiento Predictivo (IA)
       </h2>
+      <ErrorBanner message={loadError} />
       <p className="text-slate-400 text-sm max-w-3xl">
         Los scores de neumáticos y frenos son una estimación por kilometraje y patrón de manejo, no una medición directa de desgaste físico.
         Las anomalías sí se calculan sobre datos reales del motor (RPM, temperatura, voltaje) comparados contra el historial propio de cada auto.

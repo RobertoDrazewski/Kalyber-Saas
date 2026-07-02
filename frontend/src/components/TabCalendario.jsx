@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchAPI } from '../services/api';
 import { CalendarDays, Clock, Navigation, X } from 'lucide-react';
+import ErrorBanner from './ErrorBanner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -11,9 +12,10 @@ export default function TabCalendario() {
   const [days, setDays] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
   const [dayTrips, setDayTrips] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    fetchAPI(`/trips/calendar?month=${month}`).then(setDays).catch(console.error);
+    fetchAPI(`/trips/calendar?month=${month}`).then(setDays).catch(err => setLoadError(err.message));
   }, [month]);
 
   const dayMap = useMemo(() => {
@@ -63,6 +65,8 @@ export default function TabCalendario() {
           <button onClick={() => shiftMonth(1)} className="text-slate-400 hover:text-white px-2">›</button>
         </div>
       </div>
+
+      <ErrorBanner message={loadError} />
 
       <p className="text-slate-400 text-sm">
         Horas y viajes por día, reconstruidos a partir del GPS (equipo real o simulador). Cada celda es un día real de actividad, no un turno cargado a mano.

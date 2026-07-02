@@ -5,6 +5,7 @@ import L from 'leaflet';
 import { fetchAPI } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { X } from 'lucide-react';
+import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -39,8 +40,9 @@ export default function TabPosicion() {
   const [vehicles, setVehicles] = useState([]);
   const [selected, setSelected] = useState(null);
   const [series, setSeries] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
-  const load = () => fetchAPI('/vehicles').then(setVehicles).catch(console.error);
+  const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
   useEffect(() => {
     load();
@@ -56,6 +58,7 @@ export default function TabPosicion() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-white">Mapa en Tiempo Real</h2>
+      <ErrorBanner message={loadError} />
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Lista de autos por patente */}
