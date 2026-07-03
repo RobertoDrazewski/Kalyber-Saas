@@ -1,7 +1,8 @@
 // ============================================================
 // Chat de IA para cotizar planes en la landing (botón "Cotizar
 // con IA"). Corre server-side: la API key de OpenAI nunca llega
-// al navegador. 
+// al navegador. Usa OpenAI porque ya es el proveedor que Roberto
+// tiene contratado.
 // ============================================================
 
 const { Resend } = require('resend');
@@ -87,6 +88,7 @@ const quoteChat = async (req, res) => {
         return res.status(400).json({ error: `El mensaje es demasiado largo (máximo ${MAX_MESSAGE_LENGTH} caracteres)` });
     }
 
+    // Saneamos y truncamos el historial que manda el cliente
     const safeHistory = Array.isArray(history)
         ? history
             .filter(m => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))
@@ -123,8 +125,8 @@ const sendQuoteEmail = async (req, res) => {
         ).join('');
 
         const data = await resend.emails.send({
-            from: 'Kalyber IA <onboarding@resend.dev>', // Si tienes dominio verificado ponlo aquí
-            to: ['Kalyber@puma-code.com'],
+            from: 'Kalyber IA <cotizaciones@kalyber.com.ar>', 
+            to: ['kalyber@puma-code.com'],
             subject: 'Nueva Solicitud de Cotización (Chat IA)',
             html: `
                 <h2 style="font-family: sans-serif; color: #1E293B;">El cliente ha solicitado una cotización</h2>

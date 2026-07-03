@@ -7,9 +7,12 @@ const sendContactEmail = async (req, res) => {
     const { name, email, message } = req.body;
     try {
         const data = await resend.emails.send({
-            // Cambia el "from" por tu dominio verificado en Resend si ya lo tienes, ej: 'contacto@kalyber.com.ar'
-            from: 'Kalyber Web <onboarding@resend.dev>', 
-            to: ['Kalyber@puma-code.com'],
+            // El remitente inventado bajo tu dominio verificado
+            from: 'Kalyber Web <contacto@kalyber.com.ar>', 
+            // A dónde te llega la notificación
+            to: ['kalyber@puma-code.com'],
+            // Si le das a "Responder" en tu Gmail, le responderás al cliente
+            reply_to: email, 
             subject: `Nuevo mensaje de contacto de ${name}`,
             html: `
                 <h2>Nuevo mensaje desde la web de Kalyber</h2>
@@ -28,35 +31,37 @@ const sendContactEmail = async (req, res) => {
 const sendQuoteEmail = async (req, res) => {
     const { history } = req.body;
     
-    if (!history || !Array.isArray(history)) {
-        return res.status(400).json({ error: 'Historial de chat inválido o vacío' });
+    if (!history || !Array.isArray(history) || history.length === 0) {
+        return res.status(400).json({ error: 'El historial está vacío o es inválido' });
     }
 
     try {
         const historyHtml = history.map(msg => 
-            `<p style="margin-bottom: 10px;">
-                <strong>${msg.role === 'user' ? '👤 Cliente' : '🤖 Asistente (IA)'}:</strong><br/>
+            `<p style="margin-bottom: 12px; font-family: sans-serif;">
+                <strong style="color: ${msg.role === 'user' ? '#4F46E5' : '#475569'};">
+                    ${msg.role === 'user' ? '👤 Cliente' : '🤖 Asistente (IA)'}:
+                </strong><br/>
                 ${msg.content}
             </p>`
         ).join('');
 
         const data = await resend.emails.send({
-            from: 'Kalyber Cotizaciones <onboarding@resend.dev>',
-            to: ['Kalyber@puma-code.com'],
-            subject: 'Solicitud de Cotización Finalizada (Chat IA)',
+            // El remitente inventado para el bot
+            from: 'Kalyber IA <cotizaciones@kalyber.com.ar>', 
+            to: ['kalyber@puma-code.com'],
+            subject: 'Nueva Solicitud de Cotización (Chat IA)',
             html: `
-                <h2>Nueva solicitud de cotización vía Asistente Virtual</h2>
-                <p>El cliente ha presionado el botón "Enviar Cotización". A continuación se adjunta el historial de la charla para evaluar la cantidad de móviles y sus necesidades:</p>
-                <hr />
-                <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; color: #334155;">
+                <h2 style="font-family: sans-serif; color: #1E293B;">El cliente ha solicitado una cotización</h2>
+                <p style="font-family: sans-serif; color: #475569;">A continuación se detalla la conversación con la IA para evaluar sus necesidades:</p>
+                <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
                     ${historyHtml}
                 </div>
             `
         });
         res.status(200).json({ success: true, data });
     } catch (error) {
-        console.error("Error enviando email de cotización:", error);
-        res.status(500).json({ error: error.message });
+        console.error("[sendQuoteEmail] error:", error);
+        res.status(500).json({ error: 'No se pudo enviar el correo de cotización.' });
     }
 };
 
