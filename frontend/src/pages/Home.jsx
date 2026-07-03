@@ -290,9 +290,11 @@ function Contact() {
     e.preventDefault();
     setStatus({ type: 'loading', msg: 'Enviando mensaje...' });
     
+    // Se define la URL base y se concatena el endpoint correcto sin duplicar "/api"
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    
     try {
-      // Ajusta la URL de fetch si es necesario según tus variables de entorno
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/contact`, {
+      const res = await fetch(`${API_URL}/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
