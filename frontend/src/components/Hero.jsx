@@ -11,33 +11,33 @@ export default function Hero() {
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#1E293B]/80 border border-[#ef4444]/30 backdrop-blur-md mb-8 shadow-lg shadow-black/50">
           <span className="flex h-2.5 w-2.5 rounded-full bg-[#ef4444] animate-pulse"></span>
           <span className="text-xs font-bold tracking-widest text-slate-300 uppercase">
-            El fin del GPS tradicional • Telemetría Predictiva
+            Evolución del Monitoreo • Telemetría Predictiva
           </span>
         </div>
 
         {/* Título de alto impacto */}
         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-white leading-tight">
-          No rastrees tus vehículos. <br />
+          No se limite a rastrear su flota. <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] to-[#10B981]">
-            Hazlos Inteligentes.
+            Hágala Inteligente.
           </span>
         </h1>
 
-        {/* Párrafo descriptivo enfocado en el dolor del cliente (dinero y roturas) */}
+        {/* Párrafo descriptivo técnico pero accesible */}
         <p className="mt-4 text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-          Un GPS normal solo te dice dónde está tu camioneta. <strong className="text-white font-semibold">Kalyber te dice qué le duele, cómo la manejan y cuánto dinero te hace perder.</strong> Conecta nuestro Cerebro de IA al motor de tu flota y evita averías de miles de dólares antes de que sucedan.
+          Los sistemas GPS convencionales solo indican la ubicación. <strong className="text-white font-semibold">Kalyber procesa los datos de la computadora de sus vehículos en tiempo real.</strong> Anticipe fallas mecánicas de alto costo, audite el comportamiento de los conductores y optimice la eficiencia operativa mediante Inteligencia Artificial.
         </p>
 
-        {/* Viñetas de refuerzo corporativo (Micro-copy) */}
+        {/* Viñetas de refuerzo corporativo */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mt-2 text-sm font-bold text-slate-400 tracking-wide uppercase">
           <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> LECTURA DE MOTOR OBD2
+            <span className="text-[#10B981] text-lg">✓</span> DIAGNÓSTICO DE MOTOR OBD2
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> AUDITORÍA DE CHOFERES
+            <span className="text-[#10B981] text-lg">✓</span> ANÁLISIS DE CONDUCTORES
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> CERO CORTES DE CABLES
+            <span className="text-[#10B981] text-lg">✓</span> INSTALACIÓN NO INVASIVA
           </div>
         </div>
 
