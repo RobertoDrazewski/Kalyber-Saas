@@ -11,6 +11,7 @@ const driverRoutes = require('./src/routes/driverRoutes');
 const maintenanceRoutes = require('./src/routes/maintenanceRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
+const contactRoutes = require('./src/routes/contactRoutes'); // NUEVA RUTA DE CONTACTO
 
 const app = express();
 
@@ -18,7 +19,7 @@ const app = express();
 const corsOptions = {
     origin: [
         'https://kalyber.com.ar',
-        'https://www.kalyber.com.ar', // ¡Agrega esta línea!
+        'https://www.kalyber.com.ar', 
         'http://localhost:5173',
         'http://localhost:3000'
     ],
@@ -41,6 +42,7 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
+app.use('/api/contact', contactRoutes); // APLICACIÓN DE LA NUEVA RUTA
 
 // Ruta de estado / Health check
 app.get('/api/status', (req, res) => {

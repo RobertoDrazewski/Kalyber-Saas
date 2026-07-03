@@ -15,7 +15,6 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-12">
           
           <div className="md:col-span-6 flex flex-col items-center md:items-start text-center md:text-left">
-            {/* LOGO RECTANGULAR: Controlado por ancho */}
             <img 
               src="/kaliber-banner.png" 
               alt="Kalyber Logo" 
@@ -45,6 +44,12 @@ export default function Footer() {
                   Planes Corporativos
                 </a>
               </li>
+              <li>
+                <a href="mailto:Kalyber@puma-code.com" className="hover:text-[#10B981] transition-colors flex items-center justify-center md:justify-start gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                  Kalyber@puma-code.com
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -55,7 +60,6 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-slate-800/40 pt-6 flex flex-col items-center justify-center text-center gap-3">
-          {/* LOGO PUMA CODE: Controlado por ancho */}
           <img 
             src="/puma-code.png" 
             alt="Puma Code Logo" 

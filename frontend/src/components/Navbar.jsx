@@ -80,7 +80,6 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            {/* LOGO RECTANGULAR: Controlado por ancho */}
             <img 
               src="/kaliber-banner.png" 
               alt="Logo Kalyber" 
@@ -92,6 +91,7 @@ export default function Navbar() {
             <a href="#features" onClick={(e) => handleScroll(e, '#features')} className="hover:text-white transition-all">Características</a>
             <a href="#hardware" onClick={(e) => handleScroll(e, '#hardware')} className="hover:text-white transition-all">Hardware</a>
             <a href="#pricing" onClick={(e) => handleScroll(e, '#pricing')} className="hover:text-white transition-all">Suscripciones</a>
+            <a href="#contacto" onClick={(e) => handleScroll(e, '#contacto')} className="hover:text-white transition-all">Contacto</a>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">

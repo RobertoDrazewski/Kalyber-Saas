@@ -281,6 +281,89 @@ function Pricing({ onOpenChat }) {
   );
 }
 
+// Subcomponente: Contacto (NUEVO FORMULARIO)
+function Contact() {
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+  const [status, setStatus] = useState({ type: '', msg: '' });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatus({ type: 'loading', msg: 'Enviando mensaje...' });
+    
+    try {
+      // Ajusta la URL de fetch si es necesario según tus variables de entorno
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      
+      if(res.ok) {
+        setStatus({ type: 'success', msg: 'Mensaje enviado con éxito. Te contactaremos a la brevedad.' });
+        setFormData({ name: '', email: '', message: '' });
+      } else {
+        setStatus({ type: 'error', msg: 'Hubo un error al enviar el mensaje. Intenta nuevamente.' });
+      }
+    } catch (error) {
+      setStatus({ type: 'error', msg: 'Error de red. Verifica tu conexión.' });
+    }
+  };
+
+  return (
+    <section id="contacto" className="py-24 bg-[#0B1120] border-t border-slate-800/50 scroll-mt-20">
+      <div className="max-w-3xl mx-auto px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Contáctenos</h2>
+          <p className="text-lg text-slate-400">Envíenos un mensaje y nuestro equipo se comunicará para brindarle soporte o asesoramiento comercial.</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 shadow-xl">
+          <div className="mb-6">
+            <label className="block text-slate-300 text-sm font-bold mb-2" htmlFor="name">Nombre / Empresa</label>
+            <input 
+              id="name" type="text" required 
+              value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} 
+              className="w-full bg-[#050B14] text-white border border-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:border-[#6366F1] transition-colors" 
+              placeholder="Su nombre o razón social" 
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-slate-300 text-sm font-bold mb-2" htmlFor="email">Correo Electrónico</label>
+            <input 
+              id="email" type="email" required 
+              value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} 
+              className="w-full bg-[#050B14] text-white border border-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:border-[#6366F1] transition-colors" 
+              placeholder="su@email.com" 
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-slate-300 text-sm font-bold mb-2" htmlFor="message">Mensaje</label>
+            <textarea 
+              id="message" required rows="4" 
+              value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})} 
+              className="w-full bg-[#050B14] text-white border border-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:border-[#6366F1] transition-colors" 
+              placeholder="¿En qué podemos ayudarle?"
+            ></textarea>
+          </div>
+          <button 
+            type="submit" 
+            disabled={status.type === 'loading'}
+            className="w-full bg-gradient-to-r from-[#6366F1] to-[#4F46E5] text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] disabled:opacity-70"
+          >
+            {status.type === 'loading' ? 'Enviando...' : 'Enviar Mensaje'}
+          </button>
+          
+          {status.msg && (
+            <div className={`mt-6 p-4 rounded-xl text-center text-sm font-semibold border ${status.type === 'success' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+              {status.msg}
+            </div>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -293,6 +376,7 @@ export default function Home() {
         <Features />
         <Hardware />
         <Pricing onOpenChat={() => setChatOpen(true)} />
+        <Contact /> {/* NUEVA SECCIÓN DE CONTACTO */}
       </main>
 
       <Footer />

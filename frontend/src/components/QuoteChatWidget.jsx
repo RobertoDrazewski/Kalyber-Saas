@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Send, Sparkles } from 'lucide-react';
+import { X, Send, Sparkles, Mail } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -9,6 +9,8 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sendingQuote, setSendingQuote] = useState(false);
+  const [quoteSuccess, setQuoteSuccess] = useState(false);
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
 
@@ -33,9 +35,6 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          // Mandamos el historial en el formato que espera Claude
-          // (el backend igual lo trunca y sanea, esto es solo para
-          // que la conversación tenga contexto).
           history: messages.map(m => ({ role: m.role, content: m.content })),
         }),
       });
@@ -48,6 +47,38 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendQuoteEmail = async () => {
+    if (messages.length <= 1) {
+      setError('Debes chatear primero antes de enviar la cotización.');
+      return;
+    }
+    
+    setSendingQuote(true);
+    setError('');
+    setQuoteSuccess(false);
+
+    try {
+      const response = await fetch(`${API_URL}/quote-chat/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: messages.map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo enviar la cotización.');
+      }
+      
+      setQuoteSuccess(true);
+      setTimeout(() => setQuoteSuccess(false), 5000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSendingQuote(false);
     }
   };
 
@@ -67,7 +98,7 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
               <p className="text-[11px] text-slate-500">Asistente de planes</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -97,10 +128,27 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
               {error}
             </div>
           )}
+          {quoteSuccess && (
+            <div className="bg-[#10B981]/10 border border-[#10B981]/40 text-[#10B981] text-xs p-2.5 rounded-xl text-center">
+              ¡Cotización enviada al equipo de ventas con éxito!
+            </div>
+          )}
+        </div>
+
+        {/* Action Panel: Enviar por email */}
+        <div className="px-3 pb-2 pt-2 border-t border-slate-800/50 bg-[#0B1120] shrink-0">
+          <button 
+            onClick={handleSendQuoteEmail}
+            disabled={sendingQuote || messages.length <= 1}
+            className="w-full flex items-center justify-center gap-2 bg-[#1E293B] hover:bg-[#2D3748] border border-slate-700 text-slate-300 hover:text-white py-2 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            <Mail size={14} />
+            {sendingQuote ? 'Enviando...' : 'Enviar Cotización a Ventas'}
+          </button>
         </div>
 
         {/* Input */}
-        <form onSubmit={send} className="p-3 border-t border-slate-800 flex gap-2 shrink-0">
+        <form onSubmit={send} className="p-3 bg-[#0B1120] flex gap-2 shrink-0">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -112,7 +160,7 @@ export default function QuoteChatWidget({ isOpen, onClose }) {
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="bg-[#6366F1] hover:bg-[#4F46E5] text-white p-2.5 rounded-xl disabled:opacity-40 shrink-0"
+            className="bg-[#6366F1] hover:bg-[#4F46E5] text-white p-2.5 rounded-xl disabled:opacity-40 shrink-0 transition-colors"
           >
             <Send size={18} />
           </button>

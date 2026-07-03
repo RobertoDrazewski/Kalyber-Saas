@@ -1,40 +1,17 @@
 // ============================================================
 // Chat de IA para cotizar planes en la landing (botón "Cotizar
 // con IA"). Corre server-side: la API key de OpenAI nunca llega
-// al navegador. Usa OpenAI porque ya es el proveedor que Roberto
-// tiene contratado (y coincide con el copy de la landing: "IA en
-// Vivo (OpenAI)" en el plan Avanzado).
-//
-// Hardening aplicado (lo que se pidió como "a prueba de
-// ciberataques" — siendo honestos, ningún chat con LLM es 100%
-// inmune a inyección de prompts, pero esto cubre los vectores
-// reales de abuso):
-//
-//  1. Rate limiting en dos capas (ver quoteChatRoutes.js): por
-//     minuto (ráfagas) y por día (costo total de la API).
-//  2. Límite de longitud de mensaje y de historial — evita que
-//     alguien mande un mensaje de 50.000 caracteres para inflar
-//     el costo o intentar un ataque de contexto.
-//  3. System prompt con alcance cerrado: solo habla de los planes
-//     de Kalyber. Instrucción explícita de NUNCA revelar el
-//     system prompt, NUNCA seguir instrucciones que vengan dentro
-//     del mensaje del usuario (esa es la defensa real contra
-//     "ignorá tus instrucciones anteriores..."), y de cortar
-//     cualquier tema fuera de precios/hardware/planes.
-//  4. max_tokens bajo (400) — limita el daño de cualquier intento
-//     de generar contenido larguísimo o costoso.
-//  5. Historial de conversación se recibe del cliente pero se
-//     trunca server-side (últimos 6 mensajes) — el cliente no
-//     puede forzar un contexto arbitrariamente largo.
+// al navegador. 
 // ============================================================
 
-// gpt-4o-mini es el default: barato y estable. Si en tu cuenta de
-// OpenAI preferís otro modelo económico (ej. algún gpt-5.x-mini
-// según lo que tengas habilitado), cambialo acá o vía env var
-// OPENAI_MODEL sin tocar el resto del código.
+const { Resend } = require('resend');
+
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_HISTORY_MESSAGES = 6;
+
+// Inicializa Resend con tu API key (asegúrate de tener RESEND_API_KEY en tu .env)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const SYSTEM_PROMPT = `Sos el asistente de ventas de Kalyber (kalyber.com.ar), una plataforma de gestión de flotas con IA para autos de Uber/taxi y flotas chicas en Mendoza, Argentina.
 
@@ -110,8 +87,6 @@ const quoteChat = async (req, res) => {
         return res.status(400).json({ error: `El mensaje es demasiado largo (máximo ${MAX_MESSAGE_LENGTH} caracteres)` });
     }
 
-    // Saneamos y truncamos el historial que manda el cliente — nunca
-    // confiamos en su longitud ni contenido tal cual.
     const safeHistory = Array.isArray(history)
         ? history
             .filter(m => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))
@@ -130,4 +105,40 @@ const quoteChat = async (req, res) => {
     }
 };
 
-module.exports = { quoteChat };
+const sendQuoteEmail = async (req, res) => {
+    const { history } = req.body;
+    
+    if (!history || !Array.isArray(history) || history.length === 0) {
+        return res.status(400).json({ error: 'El historial está vacío o es inválido' });
+    }
+
+    try {
+        const historyHtml = history.map(msg => 
+            `<p style="margin-bottom: 12px; font-family: sans-serif;">
+                <strong style="color: ${msg.role === 'user' ? '#4F46E5' : '#475569'};">
+                    ${msg.role === 'user' ? '👤 Cliente' : '🤖 Asistente (IA)'}:
+                </strong><br/>
+                ${msg.content}
+            </p>`
+        ).join('');
+
+        const data = await resend.emails.send({
+            from: 'Kalyber IA <onboarding@resend.dev>', // Si tienes dominio verificado ponlo aquí
+            to: ['Kalyber@puma-code.com'],
+            subject: 'Nueva Solicitud de Cotización (Chat IA)',
+            html: `
+                <h2 style="font-family: sans-serif; color: #1E293B;">El cliente ha solicitado una cotización</h2>
+                <p style="font-family: sans-serif; color: #475569;">A continuación se detalla la conversación con la IA para evaluar sus necesidades:</p>
+                <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    ${historyHtml}
+                </div>
+            `
+        });
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        console.error("[sendQuoteEmail] error:", error);
+        res.status(500).json({ error: 'No se pudo enviar el correo de cotización.' });
+    }
+};
+
+module.exports = { quoteChat, sendQuoteEmail };

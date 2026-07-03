@@ -7,39 +7,41 @@ export default function Hero() {
 
       <div className="relative max-w-7xl mx-auto px-6 lg:px-8 z-10 flex flex-col items-center text-center">
         
-        {/* Etiqueta superior disruptiva */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#1E293B]/80 border border-[#ef4444]/30 backdrop-blur-md mb-8 shadow-lg shadow-black/50">
-          <span className="flex h-2.5 w-2.5 rounded-full bg-[#ef4444] animate-pulse"></span>
+        {/* Etiqueta superior */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#1E293B]/80 border border-[#10B981]/30 backdrop-blur-md mb-8 shadow-lg shadow-black/50">
+          <span className="flex h-2.5 w-2.5 rounded-full bg-[#10B981] animate-pulse"></span>
           <span className="text-xs font-bold tracking-widest text-slate-300 uppercase">
-            Evolución del Monitoreo • Telemetría Predictiva
+            Telemetría especializada para Vehículos Livianos
           </span>
         </div>
 
-        {/* Título de alto impacto */}
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-white leading-tight">
-          No se limite a rastrear su flota. <br />
+        {/* Título de impacto */}
+        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-white leading-tight">
+          La inteligencia definitiva para <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] to-[#10B981]">
-            Hágala Inteligente.
+            flotas de vehículos livianos.
           </span>
         </h1>
 
-        {/* Párrafo descriptivo técnico pero accesible */}
+        {/* Descripción clara y directa */}
         <p className="mt-4 text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-          Los sistemas GPS convencionales solo indican la ubicación. <strong className="text-white font-semibold">Kalyber procesa los datos de la computadora de sus vehículos en tiempo real.</strong> Anticipe fallas mecánicas de alto costo, audite el comportamiento de los conductores y optimice la eficiencia operativa mediante Inteligencia Artificial.
+          Kalyber es la herramienta perfecta para <strong>autos de Uber, Cabify, taxis y utilitarios de reparto</strong>. Somos compatibles 100% con puerto <strong>OBD2</strong>. Usted es dueño del equipo desde el primer día: simplemente conéctelo y muévalo libremente entre los vehículos de su flota.
         </p>
 
-        {/* Viñetas de refuerzo corporativo */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mt-2 text-sm font-bold text-slate-400 tracking-wide uppercase">
-          <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> DIAGNÓSTICO DE MOTOR OBD2
+        {/* Viñetas de valor añadido */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm font-bold text-slate-300 mb-10">
+          <div className="flex items-center gap-2 bg-[#1E293B]/50 px-4 py-2 rounded-lg">
+            <span className="text-[#10B981]">✓</span> Perfiles de conducción de choferes
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> ANÁLISIS DE CONDUCTORES
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[#10B981] text-lg">✓</span> INSTALACIÓN NO INVASIVA
+          <div className="flex items-center gap-2 bg-[#1E293B]/50 px-4 py-2 rounded-lg">
+            <span className="text-[#10B981]">✓</span> Mantenimiento preventivo con Machine Learning
           </div>
         </div>
+
+        {/* Nota de instalación */}
+        <p className="text-slate-500 text-sm italic">
+          * Tecnología Plug & Play: No requiere instalación técnica. Autogestión total de su flota.
+        </p>
 
       </div>
     </div>
