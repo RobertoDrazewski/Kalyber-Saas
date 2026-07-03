@@ -11,9 +11,16 @@ const driverRoutes = require('./src/routes/driverRoutes');
 const maintenanceRoutes = require('./src/routes/maintenanceRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
-const contactRoutes = require('./src/routes/contactRoutes'); // NUEVA RUTA DE CONTACTO
+const contactRoutes = require('./src/routes/contactRoutes'); 
 
 const app = express();
+
+// =========================================================
+// FIX: Configuración para el Rate Limit y el Proxy
+// =========================================================
+// Esto soluciona el error ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// al decirle a Express que confíe en el primer proxy (ej. Nginx)
+app.set('trust proxy', 1);
 
 // Configuración de CORS
 const corsOptions = {
@@ -42,7 +49,7 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
-app.use('/api/contact', contactRoutes); // APLICACIÓN DE LA NUEVA RUTA
+app.use('/api/contact', contactRoutes); 
 
 // Ruta de estado / Health check
 app.get('/api/status', (req, res) => {
