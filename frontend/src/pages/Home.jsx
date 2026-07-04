@@ -70,7 +70,6 @@ function Hardware() {
         
         <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
           
-          {/* Hardware Básico */}
           <div className="bg-[#1E293B]/30 rounded-3xl border border-slate-700 overflow-hidden flex flex-col relative hover:border-slate-500 transition-colors">
             <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-4 left-4 bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-slate-600">
@@ -103,7 +102,6 @@ function Hardware() {
             </div>
           </div>
 
-          {/* Hardware Avanzado */}
           <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
             <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-4 left-4 bg-[#6366F1] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
@@ -155,7 +153,7 @@ function Hardware() {
           </div>
         </div>
 
-        {/* NUEVA SECCIÓN: Conectividad M2M */}
+        {/* Conectividad M2M */}
         <div className="bg-[#1E293B]/40 rounded-3xl border border-slate-700 p-8 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-1/4 w-64 h-64 bg-[#6366F1] blur-[120px] opacity-10 pointer-events-none"></div>
           
@@ -167,8 +165,6 @@ function Hardware() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-            
-            {/* Multi-Carrier */}
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#6366F1]/50 transition-colors">
               <div className="w-14 h-14 bg-[#6366F1]/10 text-[#6366F1] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,7 +175,6 @@ function Hardware() {
               <p className="text-xs text-[#6366F1] font-bold uppercase tracking-wide">Multi-Carrier</p>
             </div>
 
-            {/* Conmutación */}
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#10B981]/50 transition-colors">
               <div className="w-14 h-14 bg-[#10B981]/10 text-[#10B981] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,7 +185,6 @@ function Hardware() {
               <p className="text-xs text-[#10B981] font-bold uppercase tracking-wide">Automática</p>
             </div>
 
-            {/* Guardia 24/7 */}
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#F59E0B]/50 transition-colors">
               <div className="w-14 h-14 bg-[#F59E0B]/10 text-[#F59E0B] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,7 +195,6 @@ function Hardware() {
               <p className="text-xs text-[#F59E0B] font-bold uppercase tracking-wide">Urgencias Críticas</p>
             </div>
 
-            {/* SIM Bonificada */}
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#EF4444]/50 transition-colors">
               <div className="w-14 h-14 bg-[#EF4444]/10 text-[#EF4444] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -211,10 +204,122 @@ function Hardware() {
               <h4 className="text-white font-bold text-lg mb-1">SIM 100%</h4>
               <p className="text-xs text-[#EF4444] font-bold uppercase tracking-wide">Bonificadas</p>
             </div>
-
           </div>
         </div>
 
+      </div>
+    </section>
+  );
+}
+
+// Subcomponente: Pricing (¡TUS TARJETAS RESTAURADAS!)
+function Pricing() {
+  return (
+    <section id="pricing" className="pt-24 pb-12 bg-[#0B1120] scroll-mt-20">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Estructura de Suscripciones Corporativas</h2>
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+            Prevenga incidentes mecánicos severos con una inversión inicial mínima. Adquiera el hardware en propiedad mediante un pago único y acceda a la plataforma Kalyber a través de una suscripción recurrente.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 w-full">
+          
+          <div className="bg-[#1E293B]/30 p-8 rounded-3xl border border-slate-700 flex flex-col hover:border-slate-500 transition-colors">
+            <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
+            <p className="text-slate-400 mb-8 h-12">Herramientas de auditoría digital para la gestión y evaluación del comportamiento de los operadores.</p>
+            
+            <div className="mb-6 p-5 bg-[#050B14] rounded-2xl border border-slate-800">
+              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
+              <div className="flex items-end gap-2 mb-2">
+                <p className="text-4xl font-extrabold text-white">$110</p>
+                <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">/ unidad</span></p>
+              </div>
+              <p className="text-xs text-slate-500">Incluye: Hardware Rastreador Inercial (JM-VL04), conectividad M2M y parametrización.</p>
+            </div>
+
+            <div className="mb-8">
+              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
+              <div className="flex items-end gap-2">
+                <p className="text-5xl font-extrabold text-white">$30</p>
+                <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por unidad</span></p>
+              </div>
+            </div>
+
+            <hr className="border-slate-800 mb-8" />
+
+            <ul className="text-slate-300 space-y-5 flex-1">
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Análisis de Operadores (Machine Learning):</strong> Evaluación algorítmica de los patrones de conducción para identificar áreas de mejora.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Rastreo Satelital Continuo:</strong> Posicionamiento global con registro histórico de recorridos.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Gestión de Perímetros (Geocercas):</strong> Configuración de áreas operativas y alertas automáticas por desvíos.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Control de Velocidad:</strong> Parametrización de límites y advertencias dinámicas en el interior de la unidad.</div>
+              </li>
+            </ul>
+          </div>
+          
+          <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#6366F1]/50 flex flex-col relative transform md:-translate-y-4 shadow-2xl shadow-[#6366F1]/10">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#6366F1] text-white px-5 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase shadow-lg shadow-[#6366F1]/40">
+              Integración IA Avanzada
+            </div>
+            
+            <h3 className="text-2xl font-bold text-white mb-2">Plan Avanzado</h3>
+            <p className="text-slate-400 mb-8 h-12">Solución integral de diagnóstico predictivo y telemetría para la gestión proactiva de flotas corporativas.</p>
+            
+            <div className="mb-6 p-5 bg-[#050B14] rounded-2xl border border-[#6366F1]/30">
+              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
+              <div className="flex items-end gap-2 mb-2">
+                <p className="text-4xl font-extrabold text-white">$130</p>
+                <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">/ unidad</span></p>
+              </div>
+              <p className="text-xs text-slate-500">Incluye: Escáner Telemétrico OBD2 (JM-VL502), conectividad M2M y vinculación de API.</p>
+            </div>
+
+            <div className="mb-8">
+              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
+              <div className="flex items-end gap-2">
+                <p className="text-5xl font-extrabold text-[#6366F1]">$60</p>
+                <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por unidad</span></p>
+              </div>
+            </div>
+
+            <hr className="border-slate-800 mb-8" />
+
+            <ul className="text-slate-300 space-y-5 flex-1">
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Mantenimiento Predictivo Integral:</strong> Modelos de IA aplicados simultáneamente al diagnóstico del vehículo y al análisis del operador.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Datos Directos del Motor (ECU):</strong> Acceso en tiempo real a indicadores críticos de rendimiento mecánico.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Intercepción de códigos de error (DTC) para la prevención de paradas operativas no planificadas.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Procesamiento y Notificación Inteligente:</strong> Generación de alertas contextuales y reportes consolidados mediante tecnología OpenAI.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Funcionalidad Completa:</strong> Incluye absolutamente todas las características operativas del Plan Básico.</div>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -231,10 +336,10 @@ function FeatureItem({ text }) {
   );
 }
 
-// Subcomponente: Banner Corporativo 
-function CorporateBanner({ onOpenChat }) {
+// Subcomponente: Banner Corporativo (+50 flotas)
+function CorporateBanner({ onOpenContact }) {
   return (
-    <section id="pricing" className="py-24 bg-[#0B1120] scroll-mt-20 px-6 lg:px-8">
+    <section className="pb-24 pt-12 bg-[#0B1120] px-6 lg:px-8">
       <div className="max-w-5xl mx-auto bg-gradient-to-br from-[#1E293B] to-[#0B1120] border border-slate-700 rounded-3xl p-8 md:p-12 shadow-2xl relative overflow-hidden">
         
         {/* Efecto de luz decorativo */}
@@ -249,7 +354,7 @@ function CorporateBanner({ onOpenChat }) {
               Accedé a nuestro programa exclusivo para Integradores y Grandes Flotas. Optimizamos tu rentabilidad y escalabilidad técnica desde el primer día.
             </p>
             <button 
-              onClick={onOpenChat}
+              onClick={onOpenContact}
               className="bg-[#6366F1] hover:bg-[#4F46E5] text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)]"
             >
               Consultar programa corporativo
@@ -277,7 +382,6 @@ function Contact() {
     e.preventDefault();
     setStatus({ type: 'loading', msg: 'Enviando mensaje...' });
     
-    // Se define la URL base y se concatena el endpoint correcto sin duplicar "/api"
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
     
     try {
@@ -353,23 +457,25 @@ function Contact() {
   );
 }
 
+// Componente Principal
 export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
+
+  const scrollToContact = () => {
+    document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-white selection:bg-[#6366F1] selection:text-white font-sans flex flex-col scroll-smooth">
       <Navbar />
 
       <main className="flex-grow">
-        <Hero 
-  onOpenChat={() => setChatOpen(true)} 
-  onOpenContact={() => {
-    document.getElementById('contacto').scrollIntoView({ behavior: 'smooth' });
-  }} 
-/>
+        {/* Aquí pasamos las funciones a los botones del Hero */}
+        <Hero onOpenChat={() => setChatOpen(true)} onOpenContact={scrollToContact} />
         <Features />
         <Hardware />
-        <CorporateBanner onOpenChat={() => setChatOpen(true)} />
+        <Pricing />
+        <CorporateBanner onOpenContact={scrollToContact} />
         <Contact />
       </main>
 
