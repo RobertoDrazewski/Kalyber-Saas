@@ -1,4 +1,4 @@
-export default function Hero() {
+export default function Hero({ onOpenChat, onOpenContact }) {
   return (
     <div className="relative min-h-[85vh] flex items-center justify-center overflow-hidden">
       {/* Efectos de luces de fondo */}
@@ -27,6 +27,34 @@ export default function Hero() {
         <p className="mt-4 text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
           Kalyber es la herramienta perfecta para <strong>autos de Uber, Cabify, taxis y utilitarios de reparto</strong>. Somos compatibles 100% con puerto <strong>OBD2</strong>. Usted es dueño del equipo desde el primer día: simplemente conéctelo y muévalo libremente entre los vehículos de su flota.
         </p>
+
+        {/* BOTONES DE CALL TO ACTION (NUEVO) */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12 w-full max-w-2xl mx-auto">
+          
+          {/* Botón Asesor IA */}
+          <button
+            onClick={onOpenChat}
+            className="group relative w-full sm:w-auto flex items-center justify-center gap-3 bg-gradient-to-r from-[#6366F1] to-[#4F46E5] text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:shadow-[0_0_35px_rgba(99,102,241,0.6)] hover:-translate-y-1 overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out"></div>
+            <svg className="w-6 h-6 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.5 0-2.91-.325-4.156-.898L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+            </svg>
+            <span className="relative z-10">Hablar con asesor IA</span>
+          </button>
+
+          {/* Botón Flota +50 */}
+          <button
+            onClick={onOpenContact}
+            className="group w-full sm:w-auto flex items-center justify-center gap-3 bg-[#1E293B]/80 hover:bg-[#2D3748] border border-slate-600 hover:border-[#10B981] text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 hover:shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:-translate-y-1"
+          >
+            <svg className="w-6 h-6 text-[#10B981] group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+            </svg>
+            <span>Flota de +50 unidades</span>
+          </button>
+
+        </div>
 
         {/* Viñetas de valor añadido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm font-bold text-slate-300 mb-10">
