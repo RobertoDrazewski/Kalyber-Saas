@@ -70,6 +70,7 @@ function Hardware() {
         
         <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
           
+          {/* Hardware Básico */}
           <div className="bg-[#1E293B]/30 rounded-3xl border border-slate-700 overflow-hidden flex flex-col relative hover:border-slate-500 transition-colors">
             <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-4 left-4 bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-slate-600">
@@ -102,6 +103,7 @@ function Hardware() {
             </div>
           </div>
 
+          {/* Hardware Avanzado */}
           <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
             <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-4 left-4 bg-[#6366F1] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
@@ -136,9 +138,9 @@ function Hardware() {
 
         </div>
 
-        {/* Cable Extensor */}
-        <div className="max-w-3xl mx-auto mb-12 bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col sm:flex-row items-center gap-6 text-left shadow-lg overflow-hidden relative">
-          <div className="w-28 h-28 shrink-0 flex items-center justify-center rounded-xl bg-gradient-to-br from-[#050B14] to-[#1E293B] border border-slate-600 relative z-10 p-3">
+        {/* Cable Extensor Actualizado */}
+        <div className="max-w-3xl mx-auto mb-12 bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-8 rounded-2xl border border-slate-700 flex flex-col sm:flex-row items-center gap-8 text-left shadow-lg overflow-hidden relative">
+          <div className="w-40 h-40 shrink-0 flex items-center justify-center rounded-xl bg-gradient-to-br from-[#050B14] to-[#1E293B] border border-slate-600 relative z-10 p-4">
             <img 
               src="/cable-extensor.png" 
               alt="Cable Extensor OBD2" 
@@ -146,9 +148,9 @@ function Hardware() {
             />
           </div>
           <div className="flex-1 relative z-10">
-            <h4 className="text-white font-bold text-lg mb-1">Solución de Instalación Oculta (Cable Extensor)</h4>
-            <p className="text-sm text-slate-400">
-              Si el puerto OBD2 de la unidad presenta problemas de espacio o riesgo de impacto accidental, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Esta opción facilita el montaje interno detrás del panel, garantizando la seguridad del dispositivo.
+            <h4 className="text-white font-bold text-xl mb-2">Solución de Instalación Oculta (Cable Extensor)</h4>
+            <p className="text-sm md:text-base text-slate-400 leading-relaxed">
+              Si el puerto OBD2 de la unidad presenta problemas de espacio o riesgo de impacto accidental, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Esta opción facilita el montaje interno detrás del panel, garantizando la seguridad del dispositivo y una terminación estética impecable.
             </p>
           </div>
         </div>
@@ -336,7 +338,7 @@ function FeatureItem({ text }) {
   );
 }
 
-// Subcomponente: Banner Corporativo (+50 flotas)
+// Subcomponente: Banner Corporativo (+50 flotas) - Tono Profesional Neutro
 function CorporateBanner({ onOpenContact }) {
   return (
     <section className="pb-24 pt-12 bg-[#0B1120] px-6 lg:px-8">
@@ -348,10 +350,10 @@ function CorporateBanner({ onOpenContact }) {
         <div className="grid md:grid-cols-2 gap-12 items-center relative z-10">
           <div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">
-              ¿Tenés una flota de más de 50 dispositivos?
+              ¿Cuenta con una flota de más de 50 dispositivos?
             </h2>
             <p className="text-slate-400 text-lg mb-8">
-              Accedé a nuestro programa exclusivo para Integradores y Grandes Flotas. Optimizamos tu rentabilidad y escalabilidad técnica desde el primer día.
+              Acceda a nuestro programa exclusivo para integradores y grandes flotas. Optimizamos su rentabilidad y escalabilidad técnica desde el primer día.
             </p>
             <button 
               onClick={onOpenContact}
@@ -363,9 +365,9 @@ function CorporateBanner({ onOpenContact }) {
 
           <div className="space-y-4">
             <FeatureItem text="Escala de precios mayorista por volumen" />
-            <FeatureItem text="API abierta para integración con tu software de gestión (ERP)" />
+            <FeatureItem text="API abierta para integración con su software de gestión (ERP)" />
             <FeatureItem text="Soporte técnico dedicado nivel ingeniería" />
-            <FeatureItem text="Opciones de IP Fija y VPN Privada" />
+            <FeatureItem text="Opciones de IP fija y VPN privada" />
           </div>
         </div>
       </div>
