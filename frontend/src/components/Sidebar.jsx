@@ -1,4 +1,4 @@
-import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio } from 'lucide-react';
+import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio, UserCog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const menuItems = [
@@ -11,6 +11,7 @@ const menuItems = [
   { id: 'viajes', label: 'KPIs Viajes', icon: Navigation },
   { id: 'flota', label: 'Gestión de Flota', icon: Car },
   { id: 'equipos', label: 'Equipos GPS', icon: Radio },
+  { id: 'usuarios', label: 'Usuarios', icon: UserCog },
 ];
 
 export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {

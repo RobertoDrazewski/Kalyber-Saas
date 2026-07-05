@@ -65,4 +65,72 @@ const sendQuoteEmail = async (req, res) => {
     }
 };
 
-module.exports = { sendContactEmail, sendQuoteEmail };
+const PLAN_INFO = {
+    basico: { label: 'Plan Básico (JM-VL04)', monthly: 30, hardware: 110 },
+    avanzado: { label: 'Plan Avanzado (JM-VL502)', monthly: 60, hardware: 130 },
+};
+
+// Recalculamos el descuento y los totales server-side — nunca
+// confiamos en los números que manda el navegador, el cliente podría
+// mandar cualquier cosa (ej. "descuento: 90%") y no nos damos cuenta.
+function calcDiscount(vehicleCount) {
+    if (vehicleCount >= 50) return 20;
+    if (vehicleCount >= 10) return 10;
+    return 0;
+}
+
+const sendCartQuote = async (req, res) => {
+    const { plan, vehicleCount, billingName, billingTaxId, billingEmail, billingPhone } = req.body;
+
+    if (!PLAN_INFO[plan]) {
+        return res.status(400).json({ error: 'Plan inválido' });
+    }
+    const qty = parseInt(vehicleCount, 10);
+    if (!qty || qty < 1 || qty > 10000) {
+        return res.status(400).json({ error: 'Cantidad de vehículos inválida' });
+    }
+    if (!billingName || !billingEmail) {
+        return res.status(400).json({ error: 'Faltan datos de contacto (nombre y email)' });
+    }
+
+    const info = PLAN_INFO[plan];
+    const discountPct = calcDiscount(qty);
+    const monthlyTotal = (info.monthly * qty * (1 - discountPct / 100)).toFixed(2);
+    const hardwareTotal = (info.hardware * qty).toFixed(2);
+
+    try {
+        const data = await resend.emails.send({
+            from: 'Kalyber Carrito <cotizaciones@kalyber.com.ar>',
+            to: ['kalyber@puma-code.com'],
+            reply_to: billingEmail,
+            subject: `Nueva cotización de carrito — ${info.label} x${qty} (${billingName})`,
+            html: `
+                <h2 style="font-family: sans-serif; color: #1E293B;">Nueva solicitud desde el carrito de Kalyber</h2>
+                <table style="font-family: sans-serif; color: #334155; border-collapse: collapse;">
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Plan</strong></td><td>${info.label}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Cantidad de vehículos</strong></td><td>${qty}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Descuento aplicado</strong></td><td>${discountPct}%</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Total hardware (único pago)</strong></td><td>USD ${hardwareTotal}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Total mensual</strong></td><td>USD ${monthlyTotal}/mes</td></tr>
+                </table>
+                <hr style="margin:16px 0;">
+                <p style="font-family: sans-serif;"><strong>Nombre / Empresa:</strong> ${billingName}</p>
+                <p style="font-family: sans-serif;"><strong>CUIT/DNI:</strong> ${billingTaxId || '(no informado)'}</p>
+                <p style="font-family: sans-serif;"><strong>Email:</strong> ${billingEmail}</p>
+                <p style="font-family: sans-serif;"><strong>Teléfono:</strong> ${billingPhone || '(no informado)'}</p>
+                <p style="font-family: sans-serif; color: #64748b; font-size: 12px; margin-top: 16px;">
+                    Todavía no se procesó ningún pago — esto es una solicitud de cotización desde el carrito, pendiente de que se contacte para coordinar el pago recurrente.
+                </p>
+            `
+        });
+        res.status(200).json({
+            success: true, data,
+            summary: { plan: info.label, qty, discountPct, monthlyTotal, hardwareTotal }
+        });
+    } catch (error) {
+        console.error('[sendCartQuote] error:', error);
+        res.status(500).json({ error: 'No se pudo enviar la cotización.' });
+    }
+};
+
+module.exports = { sendContactEmail, sendQuoteEmail, sendCartQuote };

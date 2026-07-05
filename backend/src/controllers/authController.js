@@ -16,17 +16,19 @@ const login = async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        // 🚀 Fabricamos el Token de seguridad
+        // 🚀 Fabricamos el Token de seguridad — incluye owner_id para
+        // que cualquier ruta pueda saber a qué flota pertenece este
+        // usuario sin tener que consultar la DB de nuevo en cada request.
         const token = jwt.sign(
-            { id: user.id, role: user.role }, 
-            process.env.JWT_SECRET, 
+            { id: user.id, role: user.role, owner_id: user.owner_id },
+            process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        res.json({ 
-            message: 'Login exitoso', 
+        res.json({
+            message: 'Login exitoso',
             token, // Se lo enviamos al frontend
-            user: { id: user.id, name: user.name, role: user.role } 
+            user: { id: user.id, name: user.name, role: user.role, owner_id: user.owner_id }
         });
     } catch (error) {
         res.status(500).json({ error: 'Error en el servidor' });

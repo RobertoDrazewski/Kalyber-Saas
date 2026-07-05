@@ -37,7 +37,11 @@ export default function Login() {
       if (!response.ok) throw new Error(data.error || 'Error al iniciar sesión');
 
       localStorage.setItem('kyber_token', data.token);
-      navigate('/dashboard');
+      localStorage.setItem('kyber_user', JSON.stringify(data.user));
+      // Los choferes van a su vista reducida (mapa + elegir auto);
+      // el resto va al dashboard completo.
+      navigate(data.user.role === 'driver' ? '/driver' : '/dashboard');
+      return;
     } catch (err) {
       setError(err.message);
     } finally {

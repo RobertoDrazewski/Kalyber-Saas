@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import Hero from '../components/Hero';
 import Footer from '../components/Footer';
 import QuoteChatWidget from '../components/QuoteChatWidget';
+import CartCalculator from '../components/CartCalculator';
 
 // Subcomponente: Características
 function Features() {
@@ -477,6 +478,7 @@ export default function Home() {
         <Features />
         <Hardware />
         <Pricing />
+        <CartCalculator />
         <CorporateBanner onOpenContact={scrollToContact} />
         <Contact />
       </main>
