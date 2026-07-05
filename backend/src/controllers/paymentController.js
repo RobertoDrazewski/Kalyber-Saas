@@ -24,8 +24,8 @@ const createSubscription = async (req, res) => {
             },
             // URL a la que vuelve el usuario tras asociar la tarjeta
             back_url: "https://kalyber.com.ar/gracias", 
-            payer_email: email_cliente,
-            status: "pending"
+            payer_email: email_cliente || "test_user_3515683533@testuser.com"
+            // ELIMINADO: status: "pending" (causante del Internal Server Error)
         };
 
         const suscripcion = await preApproval.create({ body });
