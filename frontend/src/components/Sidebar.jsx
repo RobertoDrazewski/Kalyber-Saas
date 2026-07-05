@@ -1,6 +1,9 @@
-import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio, UserCog } from 'lucide-react';
+import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio, UserCog, ArrowLeftCircle, Receipt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// visibleFor: si no está, el tab se ve para cualquier rol logueado en
+// /dashboard (super_admin o admin — los choferes ni siquiera entran
+// acá, tienen su propia vista en /driver).
 const menuItems = [
   { id: 'telemetria', label: 'Telemetría', icon: Activity },
   { id: 'posicion', label: 'Mapa en Vivo', icon: MapPin },
@@ -10,15 +13,22 @@ const menuItems = [
   { id: 'conductores', label: 'Conductores', icon: Users },
   { id: 'viajes', label: 'KPIs Viajes', icon: Navigation },
   { id: 'flota', label: 'Gestión de Flota', icon: Car },
-  { id: 'equipos', label: 'Equipos GPS', icon: Radio },
+  { id: 'equipos', label: 'Equipos GPS', icon: Radio }, // admin la ve para PAREAR, no para dar de alta (eso se filtra dentro de TabEquipos)
   { id: 'usuarios', label: 'Usuarios', icon: UserCog },
+  { id: 'facturador', label: 'Facturador', icon: Receipt, visibleFor: ['super_admin'] },
 ];
+
+const roleLabel = { super_admin: 'Super Admin', admin: 'Admin de flota', driver: 'Chofer' };
 
 export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
   const navigate = useNavigate();
+  const currentUser = JSON.parse(localStorage.getItem('kyber_user') || '{}');
+
+  const visibleItems = menuItems.filter(item => !item.visibleFor || item.visibleFor.includes(currentUser.role));
 
   const handleLogout = () => {
     localStorage.removeItem('kyber_token');
+    localStorage.removeItem('kyber_user');
     navigate('/login');
   };
 
@@ -52,8 +62,16 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
           </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
-          {menuItems.map((item) => {
+        {/* Quién está logueado — para que nunca sea confuso qué vista es */}
+        <div className="px-6 pb-2">
+          <span className="inline-block text-[11px] font-semibold px-2 py-1 rounded-full bg-[#6366F1]/15 text-[#818CF8]">
+            {roleLabel[currentUser.role] || currentUser.role}
+          </span>
+          {currentUser.name && <p className="text-xs text-slate-500 mt-1 truncate">{currentUser.name}</p>}
+        </div>
+
+        <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto">
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -73,7 +91,14 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-1">
+          <a
+            href="/"
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-[#1E293B]"
+          >
+            <ArrowLeftCircle size={18} />
+            Volver a la web
+          </a>
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-400 hover:text-[#EF4444] transition-colors rounded-xl hover:bg-[#EF4444]/10">
             <LogOut size={18} />
             Cerrar Sesión

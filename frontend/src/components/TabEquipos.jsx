@@ -9,13 +9,19 @@ const MODEL_INFO = {
 };
 
 export default function TabEquipos() {
+  const currentUser = JSON.parse(localStorage.getItem('kyber_user') || '{}');
+  const isSuperAdmin = currentUser.role === 'super_admin';
+
   const [devices, setDevices] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [form, setForm] = useState({ imei: '', label: '', model: 'VL502' });
+  const [claimForm, setClaimForm] = useState({ imei: '', vehicle_id: '' });
   const [pairTarget, setPairTarget] = useState({});
   const [loadError, setLoadError] = useState('');
   const [formError, setFormError] = useState('');
+  const [claimError, setClaimError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [claiming, setClaiming] = useState(false);
 
   const load = () => Promise.all([
     fetchAPI('/devices').then(setDevices),
@@ -24,6 +30,9 @@ export default function TabEquipos() {
 
   useEffect(() => { load(); }, []);
 
+  // Alta de equipo por IMEI — SOLO super_admin (Puma Code programa
+  // los equipos y les da el ID). El admin cliente nunca da de alta,
+  // solo vincula (ver handleClaim más abajo).
   const handleAdd = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -40,6 +49,28 @@ export default function TabEquipos() {
       setFormError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Vinculación por IMEI para el admin cliente: no necesita ver la
+  // lista de stock, solo ingresa el IMEI que le dimos y elige el
+  // auto. El backend reclama el equipo para su flota automáticamente.
+  const handleClaim = async (e) => {
+    e.preventDefault();
+    setClaimError('');
+    if (!claimForm.imei.trim() || !claimForm.vehicle_id) {
+      setClaimError('Ingresá el IMEI y elegí el vehículo');
+      return;
+    }
+    setClaiming(true);
+    try {
+      await fetchAPI('/devices/pair', { method: 'POST', body: JSON.stringify(claimForm) });
+      setClaimForm({ imei: '', vehicle_id: '' });
+      load();
+    } catch (err) {
+      setClaimError(err.message);
+    } finally {
+      setClaiming(false);
     }
   };
 
@@ -72,55 +103,104 @@ export default function TabEquipos() {
         <Radio className="text-[#10B981]" /> Equipos GPS / OBD2
       </h2>
       <ErrorBanner message={loadError} />
-      <p className="text-slate-400 text-sm max-w-2xl">
-        Acá das de alta cada equipo apenas te llegue (por IMEI), antes de instalarlo. Una vez programado y probado con la prestadora, lo vinculás al vehículo del cliente.
-      </p>
 
-      {/* Alta de equipo */}
-      <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
-        {formError && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{formError}</div>}
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-xs text-slate-400 mb-1">IMEI</label>
-            <input
-              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
-              placeholder="15 dígitos"
-              value={form.imei}
-              onChange={e => setForm({ ...form, imei: e.target.value })}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Modelo</label>
-            <select
-              className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-56"
-              value={form.model}
-              onChange={e => setForm({ ...form, model: e.target.value })}
-            >
-              <option value="VL04">JM-VL04 (Básico)</option>
-              <option value="VL502">JM-VL502 (Avanzado)</option>
-            </select>
-          </div>
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-xs text-slate-400 mb-1">Etiqueta (opcional)</label>
-            <input
-              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
-              placeholder="ej. Lote julio 2026"
-              value={form.label}
-              onChange={e => setForm({ ...form, label: e.target.value })}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center justify-center gap-2 hover:bg-[#4F46E5] h-[42px] disabled:opacity-60"
-          >
-            <Plus size={18} /> {saving ? 'Agregando...' : 'Dar de alta'}
-          </button>
-        </form>
-      </div>
+      {isSuperAdmin ? (
+        <>
+          <p className="text-slate-400 text-sm max-w-2xl">
+            Acá das de alta cada equipo apenas te llegue (por IMEI), antes de enviárselo al cliente. Queda "en stock" hasta que el cliente lo vincula a su auto desde su propia cuenta.
+          </p>
 
-      {/* Lista de equipos */}
+          {/* Alta de equipo — solo super_admin */}
+          <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
+            {formError && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{formError}</div>}
+            <form onSubmit={handleAdd} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs text-slate-400 mb-1">IMEI</label>
+                <input
+                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
+                  placeholder="15 dígitos"
+                  value={form.imei}
+                  onChange={e => setForm({ ...form, imei: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Modelo</label>
+                <select
+                  className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-56"
+                  value={form.model}
+                  onChange={e => setForm({ ...form, model: e.target.value })}
+                >
+                  <option value="VL04">JM-VL04 (Básico)</option>
+                  <option value="VL502">JM-VL502 (Avanzado)</option>
+                </select>
+              </div>
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs text-slate-400 mb-1">Etiqueta (opcional)</label>
+                <input
+                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
+                  placeholder="ej. Lote julio 2026"
+                  value={form.label}
+                  onChange={e => setForm({ ...form, label: e.target.value })}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center justify-center gap-2 hover:bg-[#4F46E5] h-[42px] disabled:opacity-60"
+              >
+                <Plus size={18} /> {saving ? 'Agregando...' : 'Dar de alta'}
+              </button>
+            </form>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-400 text-sm max-w-2xl">
+            Ingresá el IMEI del equipo que te enviamos y elegí a qué auto lo vas a conectar. Una vez vinculado, es tuyo — nadie más lo puede tomar.
+          </p>
+
+          {/* Vinculación por IMEI — el admin cliente NO ve stock ajeno, solo pega el código */}
+          <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
+            {claimError && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{claimError}</div>}
+            <form onSubmit={handleClaim} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs text-slate-400 mb-1">IMEI del equipo</label>
+                <input
+                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
+                  placeholder="El código que te dio Kalyber"
+                  value={claimForm.imei}
+                  onChange={e => setClaimForm({ ...claimForm, imei: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs text-slate-400 mb-1">Vehículo</label>
+                <select
+                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
+                  value={claimForm.vehicle_id}
+                  onChange={e => setClaimForm({ ...claimForm, vehicle_id: e.target.value })}
+                  required
+                >
+                  <option value="">Elegir vehículo...</option>
+                  {availableVehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={claiming}
+                className="bg-[#10B981] px-6 py-2 rounded-lg text-white font-bold flex items-center justify-center gap-2 hover:bg-[#0d9668] h-[42px] disabled:opacity-60"
+              >
+                <Link2 size={18} /> {claiming ? 'Vinculando...' : 'Vincular equipo'}
+              </button>
+            </form>
+          </div>
+        </>
+      )}
+
+      {/* Lista de equipos ya vinculados/en stock */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {devices.map(d => {
           const info = MODEL_INFO[d.model] || MODEL_INFO.VL502;
@@ -147,7 +227,8 @@ export default function TabEquipos() {
                 >
                   <Unlink size={14} /> Desparear
                 </button>
-              ) : (
+              ) : isSuperAdmin ? (
+                // super_admin puede parear también, pero solo tiene sentido si ya sabe a qué flota va (uso interno / soporte)
                 <div className="flex gap-2">
                   <select
                     className="flex-1 bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
@@ -167,12 +248,16 @@ export default function TabEquipos() {
                     <Link2 size={16} />
                   </button>
                 </div>
+              ) : (
+                <p className="text-[11px] text-slate-500">Sin parear todavía.</p>
               )}
             </div>
           );
         })}
         {devices.length === 0 && !loadError && (
-          <p className="text-slate-500 text-sm md:col-span-2">Todavía no diste de alta ningún equipo.</p>
+          <p className="text-slate-500 text-sm md:col-span-2">
+            {isSuperAdmin ? 'Todavía no diste de alta ningún equipo.' : 'Todavía no tenés equipos vinculados a tu flota.'}
+          </p>
         )}
       </div>
     </div>

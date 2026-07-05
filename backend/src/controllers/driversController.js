@@ -4,6 +4,13 @@ const { effectiveOwnerId } = require('../middlewares/requireRole');
 // Nota: los conductores NO están atados a un auto fijo — cualquiera
 // puede manejar cualquier vehículo DE SU MISMA FLOTA. El avg_score se
 // calcula sobre todos los autos que manejó, no sobre uno solo.
+//
+// IMPORTANTE: el alta de choferes ya NO se hace acá (se sacó
+// addDriver). Ahora hay un único camino para crear choferes: la tab
+// de Usuarios (usersController.createUser con role='driver'), que
+// además les da login, DNI, vencimiento de carnet y dispara el mail
+// / whatsapp con las credenciales. Esta tab solo lista, edita y
+// elimina — así no quedan dos herramientas de alta pisándose.
 const getDrivers = async (req, res) => {
     try {
         const ownerId = effectiveOwnerId(req);
@@ -27,27 +34,9 @@ const getDrivers = async (req, res) => {
     }
 };
 
-// Alta de conductor SIN login (solo perfil, para llevar sus stats).
-// Si el admin además quiere darle acceso a la app, eso se hace desde
-// Usuarios (crear un usuario con rol "driver"), que ya crea el
-// perfil en Drivers automáticamente vinculado.
-const addDriver = async (req, res) => {
-    const { full_name, phone_number, license_number } = req.body;
-    if (!full_name) return res.status(400).json({ error: 'Falta el nombre del conductor' });
-    try {
-        const [result] = await pool.query(
-            `INSERT INTO Drivers (full_name, phone_number, license_number, status, owner_id) VALUES (?, ?, ?, 'active', ?)`,
-            [full_name, phone_number || null, license_number || null, req.user.id]
-        );
-        res.json({ id: result.insertId, full_name, phone_number, license_number, status: 'active' });
-    } catch (error) {
-        res.status(500).json({ error: 'Error agregando conductor' });
-    }
-};
-
 const updateDriver = async (req, res) => {
     const { id } = req.params;
-    const { full_name, phone_number, license_number, status } = req.body;
+    const { full_name, phone_number, license_number, dni, license_expiry, status } = req.body;
     try {
         const ownerId = effectiveOwnerId(req);
         if (ownerId) {
@@ -58,8 +47,9 @@ const updateDriver = async (req, res) => {
         }
         await pool.query(
             `UPDATE Drivers SET full_name = COALESCE(?, full_name), phone_number = COALESCE(?, phone_number),
-             license_number = COALESCE(?, license_number), status = COALESCE(?, status) WHERE id = ?`,
-            [full_name, phone_number, license_number, status, id]
+             license_number = COALESCE(?, license_number), dni = COALESCE(?, dni),
+             license_expiry = COALESCE(?, license_expiry), status = COALESCE(?, status) WHERE id = ?`,
+            [full_name, phone_number, license_number, dni, license_expiry, status, id]
         );
         res.json({ message: 'Conductor actualizado' });
     } catch (error) {
@@ -88,4 +78,4 @@ const deleteDriver = async (req, res) => {
     }
 };
 
-module.exports = { getDrivers, addDriver, updateDriver, deleteDriver };
+module.exports = { getDrivers, updateDriver, deleteDriver };

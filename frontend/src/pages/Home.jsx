@@ -478,12 +478,14 @@ export default function Home() {
         <Features />
         <Hardware />
         <Pricing />
-        <CartCalculator />
         <CorporateBanner onOpenContact={scrollToContact} />
         <Contact />
       </main>
 
       <Footer />
+
+      {/* Carrito flotante — se maneja solo (botón + panel), no ocupa lugar en el flujo */}
+      <CartCalculator />
 
       <QuoteChatWidget isOpen={chatOpen} onClose={() => setChatOpen(false)} />
 

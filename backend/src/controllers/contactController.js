@@ -65,38 +65,21 @@ const sendQuoteEmail = async (req, res) => {
     }
 };
 
-const PLAN_INFO = {
-    basico: { label: 'Plan Básico (JM-VL04)', monthly: 30, hardware: 110 },
-    avanzado: { label: 'Plan Avanzado (JM-VL502)', monthly: 60, hardware: 130 },
-};
-
-// Recalculamos el descuento y los totales server-side — nunca
-// confiamos en los números que manda el navegador, el cliente podría
-// mandar cualquier cosa (ej. "descuento: 90%") y no nos damos cuenta.
-function calcDiscount(vehicleCount) {
-    if (vehicleCount >= 50) return 20;
-    if (vehicleCount >= 10) return 10;
-    return 0;
-}
+const { calcQuote } = require('../utils/pricing');
 
 const sendCartQuote = async (req, res) => {
     const { plan, vehicleCount, billingName, billingTaxId, billingEmail, billingPhone } = req.body;
 
-    if (!PLAN_INFO[plan]) {
-        return res.status(400).json({ error: 'Plan inválido' });
-    }
-    const qty = parseInt(vehicleCount, 10);
-    if (!qty || qty < 1 || qty > 10000) {
-        return res.status(400).json({ error: 'Cantidad de vehículos inválida' });
-    }
     if (!billingName || !billingEmail) {
         return res.status(400).json({ error: 'Faltan datos de contacto (nombre y email)' });
     }
 
-    const info = PLAN_INFO[plan];
-    const discountPct = calcDiscount(qty);
-    const monthlyTotal = (info.monthly * qty * (1 - discountPct / 100)).toFixed(2);
-    const hardwareTotal = (info.hardware * qty).toFixed(2);
+    let info, qty, discountPct, monthlyTotal, hardwareTotal;
+    try {
+        ({ info, qty, discountPct, monthlyTotal, hardwareTotal } = calcQuote(plan, vehicleCount));
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
 
     try {
         const data = await resend.emails.send({

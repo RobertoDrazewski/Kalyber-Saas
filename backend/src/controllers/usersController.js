@@ -1,10 +1,20 @@
 const pool = require('../config/database');
+const crypto = require('crypto');
+const { Resend } = require('resend');
+const { sendAlert } = require('../services/whatsappService');
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Jerarquía de creación:
 //   super_admin puede crear -> admin (y otro super_admin si hace falta)
 //   admin puede crear       -> driver
 // Cada usuario nuevo queda con owner_id = quien lo creó, así se arma
 // la cadena de pertenencia sin tener que duplicar tablas de tenants.
+//
+// ESTA es ahora la ÚNICA herramienta para crear admins y choferes con
+// login (antes existía también un alta de chofer "sin login" en
+// TabConductores/driversController — se sacó de ahí para no tener dos
+// caminos distintos que terminan pisándose).
 const CREATION_RULES = {
     super_admin: ['admin', 'super_admin'],
     admin: ['driver'],
@@ -12,11 +22,12 @@ const CREATION_RULES = {
 
 const getUsers = async (req, res) => {
     try {
-        let query = 'SELECT id, name, email, role, owner_id, created_at FROM Users';
+        let query = `SELECT id, name, email, role, owner_id, entity_type, first_name, last_name,
+                             dni, company_name, cuit, phone_number, license_expiry, created_at
+                      FROM Users`;
         const params = [];
 
         if (req.user.role === 'admin') {
-            // Un admin solo ve a los usuarios que él mismo creó (sus choferes)
             query += ' WHERE owner_id = ?';
             params.push(req.user.id);
         } else if (req.user.role === 'driver') {
@@ -28,54 +39,163 @@ const getUsers = async (req, res) => {
         const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
+        console.error('[getUsers] error:', error);
         res.status(500).json({ error: 'Error obteniendo usuarios' });
     }
 };
 
+// Trae los admins existentes — lo usa el selector del super_admin
+// cuando quiere ver rápido a quién le pertenece cada flota.
+const getAdmins = async (req, res) => {
+    if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'No tenés permiso' });
+    }
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, name, email, entity_type, company_name, cuit FROM Users WHERE role = 'admin' ORDER BY name ASC`
+        );
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Error obteniendo admins' });
+    }
+};
+
+function genTempPassword() {
+    // 8 caracteres legibles (sin 0/O/1/l para que no se confundan al
+    // transcribirla desde un mail o un whatsapp).
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 8 }, () => chars[crypto.randomInt(chars.length)]).join('');
+}
+
+async function sendCredentialsEmail({ to, name, role, email, password }) {
+    const roleLabel = { admin: 'Administrador de flota', driver: 'Chofer', super_admin: 'Super Admin' }[role] || role;
+    try {
+        await resend.emails.send({
+            from: 'Kalyber <accesos@kalyber.com.ar>',
+            to: [to],
+            subject: `Tu acceso a Kalyber (${roleLabel})`,
+            html: `
+                <h2 style="font-family: sans-serif;">Bienvenido a Kalyber, ${name}</h2>
+                <p style="font-family: sans-serif;">Ya tenés tu cuenta como <strong>${roleLabel}</strong>. Estos son tus datos de acceso:</p>
+                <table style="font-family: sans-serif; border-collapse: collapse; margin: 12px 0;">
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Usuario (email)</strong></td><td>${email}</td></tr>
+                    <tr><td style="padding:4px 12px 4px 0;"><strong>Contraseña</strong></td><td>${password}</td></tr>
+                </table>
+                <p style="font-family: sans-serif; color:#64748b; font-size:12px;">Por seguridad, te recomendamos cambiar la contraseña la primera vez que entres.</p>
+            `
+        });
+        return { sent: true };
+    } catch (err) {
+        console.error('[sendCredentialsEmail] error:', err);
+        return { sent: false, error: err.message };
+    }
+}
+
 const createUser = async (req, res) => {
-    const { name, email, password, role, phone_number, license_number } = req.body;
+    const {
+        role, email, password: providedPassword, phone_number,
+        entity_type,          // 'persona' | 'empresa' (solo aplica a role === 'admin')
+        first_name, last_name, dni,          // persona
+        company_name, cuit,                  // empresa
+        license_expiry,                      // solo choferes
+    } = req.body;
     const creatorRole = req.user.role;
 
-    if (!name || !email || !password || !role) {
-        return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, email, password, rol)' });
+    const allowedRoles = CREATION_RULES[creatorRole] || [];
+    if (!role || !allowedRoles.includes(role)) {
+        return res.status(403).json({ error: `Con tu rol (${creatorRole}) no podés crear usuarios de tipo "${role || '(sin especificar)'}"` });
+    }
+    if (!email) {
+        return res.status(400).json({ error: 'Falta el email' });
     }
 
-    const allowedRoles = CREATION_RULES[creatorRole] || [];
-    if (!allowedRoles.includes(role)) {
-        return res.status(403).json({ error: `Con tu rol (${creatorRole}) no podés crear usuarios de tipo "${role}"` });
+    // Armamos el "name" para mostrar en listados, y validamos los
+    // campos obligatorios según el tipo de alta.
+    let displayName;
+    if (role === 'admin') {
+        if (!entity_type || !['persona', 'empresa'].includes(entity_type)) {
+            return res.status(400).json({ error: 'Indicá si el admin es persona física o empresa' });
+        }
+        if (entity_type === 'persona') {
+            if (!first_name || !last_name || !dni) {
+                return res.status(400).json({ error: 'Para persona física: nombre, apellido y DNI son obligatorios' });
+            }
+            displayName = `${first_name} ${last_name}`;
+        } else {
+            if (!company_name || !cuit) {
+                return res.status(400).json({ error: 'Para empresa: razón social y CUIT son obligatorios' });
+            }
+            displayName = company_name;
+        }
+    } else if (role === 'driver') {
+        if (!first_name || !last_name || !dni || !phone_number) {
+            return res.status(400).json({ error: 'Para chofer: nombre, apellido, DNI y teléfono son obligatorios (el teléfono es para las alertas de manejo)' });
+        }
+        displayName = `${first_name} ${last_name}`;
+    } else {
+        // super_admin creado por otro super_admin: caso raro, pedimos lo mínimo.
+        if (!first_name || !last_name) {
+            return res.status(400).json({ error: 'Nombre y apellido son obligatorios' });
+        }
+        displayName = `${first_name} ${last_name}`;
     }
+
+    // La password la puede fijar quien crea el usuario, o si no la
+    // generamos nosotros y se la mandamos por mail/whatsapp — así el
+    // super_admin no tiene que inventarle una clave a cada chofer.
+    const password = providedPassword || genTempPassword();
 
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
         // NOTA DE SEGURIDAD: la password se guarda en texto plano
-        // porque así está el resto del sistema hoy (login.js compara
-        // texto plano). Migrar a bcrypt es una tarea pendiente aparte
-        // — no lo hacemos acá solo para no romper el login existente.
+        // porque así compara authController.login hoy. Migrar a
+        // bcrypt es tarea pendiente aparte — no se hace acá para no
+        // romper el login existente, pero es importante priorizarla
+        // ahora que hay pagos/datos fiscales de por medio.
         const [result] = await connection.query(
-            `INSERT INTO Users (name, email, password_hash, role, owner_id) VALUES (?, ?, ?, ?, ?)`,
-            [name, email, password, role, req.user.id]
+            `INSERT INTO Users
+                (name, email, password_hash, role, owner_id, entity_type, first_name, last_name, dni, company_name, cuit, phone_number, license_expiry)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                displayName, email, password, role, req.user.id,
+                role === 'admin' ? entity_type : null,
+                first_name || null, last_name || null, dni || null,
+                company_name || null, cuit || null,
+                phone_number || null,
+                role === 'driver' ? (license_expiry || null) : null,
+            ]
         );
         const newUserId = result.insertId;
 
-        // Si es un driver, además le creamos (o vinculamos) su perfil
-        // de conductor en Drivers, para que sus datos de manejo/score
-        // sigan funcionando igual que antes.
+        // Si es chofer, además creamos su perfil en Drivers (así el
+        // resto del sistema —trips, telemetry, score— sigue igual).
         if (role === 'driver') {
             await connection.query(
-                `INSERT INTO Drivers (full_name, phone_number, license_number, status, user_id, owner_id) VALUES (?, ?, ?, 'active', ?, ?)`,
-                [name, phone_number || null, license_number || null, newUserId, req.user.id]
+                `INSERT INTO Drivers (full_name, phone_number, license_number, dni, license_expiry, status, user_id, owner_id)
+                 VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+                [displayName, phone_number, null, dni, license_expiry || null, newUserId, req.user.id]
             );
         }
 
         await connection.commit();
-        res.json({ id: newUserId, name, email, role });
+
+        // Notificaciones best-effort: si fallan, el usuario ya quedó
+        // creado igual — se lo avisamos al que lo creó en la respuesta.
+        const notif = { email: null, whatsapp: null };
+        notif.email = await sendCredentialsEmail({ to: email, name: displayName, role, email, password });
+        if (role === 'driver' && phone_number) {
+            notif.whatsapp = await sendAlert(phone_number, `Hola ${displayName}, tu acceso a Kalyber: usuario ${email} / clave ${password}`);
+        }
+
+        res.json({ id: newUserId, name: displayName, email, role, notif });
     } catch (error) {
         await connection.rollback();
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Ese email ya está registrado' });
         }
+        console.error('[createUser] error:', error);
         res.status(500).json({ error: 'Error creando el usuario' });
     } finally {
         connection.release();
@@ -84,9 +204,8 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
     const { id } = req.params;
-    const { name, password, status } = req.body;
+    const { name, password, status, phone_number, license_expiry } = req.body;
 
-    // Un admin solo puede tocar usuarios que él creó; super_admin, cualquiera
     if (req.user.role === 'admin') {
         const [[target]] = await pool.query('SELECT owner_id FROM Users WHERE id = ?', [id]);
         if (!target || target.owner_id !== req.user.id) {
@@ -98,8 +217,9 @@ const updateUser = async (req, res) => {
 
     try {
         await pool.query(
-            `UPDATE Users SET name = COALESCE(?, name), password_hash = COALESCE(?, password_hash) WHERE id = ?`,
-            [name, password, id]
+            `UPDATE Users SET name = COALESCE(?, name), password_hash = COALESCE(?, password_hash),
+             phone_number = COALESCE(?, phone_number), license_expiry = COALESCE(?, license_expiry) WHERE id = ?`,
+            [name, password, phone_number, license_expiry, id]
         );
         res.json({ message: 'Usuario actualizado' });
     } catch (error) {
@@ -129,4 +249,4 @@ const deleteUser = async (req, res) => {
     }
 };
 
-module.exports = { getUsers, createUser, updateUser, deleteUser };
+module.exports = { getUsers, getAdmins, createUser, updateUser, deleteUser };

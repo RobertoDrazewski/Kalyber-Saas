@@ -1,36 +1,24 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
-import { Plus, Trash2, Phone, IdCard, Users } from 'lucide-react';
+import { Trash2, Phone, IdCard, Users, UserCog, AlertTriangle } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
+// El alta de choferes se sacó de acá — ahora se crean desde la tab
+// "Usuarios" (les da login, DNI, vencimiento de carnet y les manda
+// las credenciales por mail/WhatsApp). Esta tab queda solo para
+// listar, ver el score y dar de baja.
 export default function TabConductores() {
   const [drivers, setDrivers] = useState([]);
-  const [form, setForm] = useState({ full_name: '', phone_number: '', license_number: '' });
   const [loadError, setLoadError] = useState('');
-  const [formError, setFormError] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const load = () => fetchAPI('/drivers').then(setDrivers).catch(err => setLoadError(err.message));
 
   useEffect(() => { load(); }, []);
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    setFormError('');
-    if (!form.full_name.trim()) {
-      setFormError('El nombre es obligatorio');
-      return;
-    }
-    setSaving(true);
-    try {
-      await fetchAPI('/drivers', { method: 'POST', body: JSON.stringify(form) });
-      setForm({ full_name: '', phone_number: '', license_number: '' });
-      load();
-    } catch (err) {
-      setFormError(err.message);
-    } finally {
-      setSaving(false);
-    }
+  const isExpiringSoon = (dateStr) => {
+    if (!dateStr) return false;
+    const days = (new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24);
+    return days < 30; // vencido o vence en menos de 30 días
   };
 
   const handleDelete = async (id) => {
@@ -63,46 +51,9 @@ export default function TabConductores() {
         Cualquier conductor puede manejar cualquier auto de la flota — no quedan atados a un vehículo fijo.
       </p>
 
-      {/* Alta de conductor */}
-      <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
-        {formError && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{formError}</div>}
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-xs text-slate-400 mb-1">Nombre completo</label>
-            <input
-              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
-              placeholder="Juan Pérez"
-              value={form.full_name}
-              onChange={e => setForm({ ...form, full_name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-xs text-slate-400 mb-1">Teléfono</label>
-            <input
-              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
-              placeholder="+54 9 261 000-0000"
-              value={form.phone_number}
-              onChange={e => setForm({ ...form, phone_number: e.target.value })}
-            />
-          </div>
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-xs text-slate-400 mb-1">Licencia (opcional)</label>
-            <input
-              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
-              placeholder="N° de licencia"
-              value={form.license_number}
-              onChange={e => setForm({ ...form, license_number: e.target.value })}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-[#6366F1] px-6 py-2 rounded-lg text-white font-bold flex items-center justify-center gap-2 hover:bg-[#4F46E5] h-[42px] disabled:opacity-60"
-          >
-            <Plus size={18} /> {saving ? 'Agregando...' : 'Agregar'}
-          </button>
-        </form>
+      {/* El alta ahora se hace desde Usuarios (les da login + manda credenciales) */}
+      <div className="flex items-center gap-2 text-sm text-[#818CF8] bg-[#6366F1]/10 border border-[#6366F1]/30 rounded-xl px-4 py-3 w-fit">
+        <UserCog size={16} /> Para agregar un chofer nuevo (con login, DNI y vencimiento de carnet), andá a la tab "Usuarios"
       </div>
 
       {/* Lista de conductores — tarjetas, ya son app-friendly en mobile */}
@@ -130,8 +81,14 @@ export default function TabConductores() {
               {d.phone_number && (
                 <p className="flex items-center gap-2"><Phone size={14} className="text-slate-500" /> {d.phone_number}</p>
               )}
-              {d.license_number && (
-                <p className="flex items-center gap-2"><IdCard size={14} className="text-slate-500" /> Licencia: {d.license_number}</p>
+              {d.dni && (
+                <p className="flex items-center gap-2"><IdCard size={14} className="text-slate-500" /> DNI: {d.dni}</p>
+              )}
+              {d.license_expiry && (
+                <p className={`flex items-center gap-2 ${isExpiringSoon(d.license_expiry) ? 'text-[#F59E0B]' : ''}`}>
+                  {isExpiringSoon(d.license_expiry) ? <AlertTriangle size={14} /> : <IdCard size={14} className="text-slate-500" />}
+                  Carnet vence: {new Date(d.license_expiry).toLocaleDateString('es-AR')}
+                </p>
               )}
             </div>
 
