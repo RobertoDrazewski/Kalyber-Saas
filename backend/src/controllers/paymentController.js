@@ -18,7 +18,8 @@ const createSubscription = async (req, res) => {
             auto_recurring: {
                 frequency: 1,
                 frequency_type: "months",
-                transaction_amount: monto_mensual,
+                // FIX: Forzamos un número limpio con máximo 2 decimales para evitar el error 500 de la API
+                transaction_amount: Number(Number(monto_mensual).toFixed(2)), 
                 currency_id: "ARS" 
             },
             // URL a la que vuelve el usuario tras asociar la tarjeta
