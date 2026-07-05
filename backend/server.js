@@ -11,7 +11,8 @@ const driverRoutes = require('./src/routes/driverRoutes');
 const maintenanceRoutes = require('./src/routes/maintenanceRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
-const contactRoutes = require('./src/routes/contactRoutes'); 
+const contactRoutes = require('./src/routes/contactRoutes');
+const paymentRoutes = require('./src/routes/paymentRoutes'); // NUEVA RUTA MP
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
 app.use('/api/contact', contactRoutes); 
+app.use('/api/payments', paymentRoutes); // NUEVO ENDPOINT MP
 
 // Ruta de estado / Health check
 app.get('/api/status', (req, res) => {
