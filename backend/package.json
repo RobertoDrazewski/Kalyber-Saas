@@ -15,7 +15,9 @@
     "jsonwebtoken": "^9.0.3",
     "mercadopago": "^3.2.0",
     "mysql2": "^3.6.1",
-    "resend": "^6.16.0"
+    "qrcode": "^1.5.4",
+    "resend": "^6.16.0",
+    "whatsapp-web.js": "^1.34.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
