@@ -64,6 +64,10 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API de Kyber corriendo en el puerto ${PORT}`);
 
+    // El servidor TCP de los trackers (GT06) corre en un servicio de
+    // Railway APARTE (ver gt06-standalone.js) — no acá, para no pisar
+    // este puerto HTTP con el puerto del TCP Proxy.
+
     // Inicialización del simulador
     if (process.env.SIMULATOR_ENABLED !== 'false') {
         const simulator = require('./src/services/simulator');
