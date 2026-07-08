@@ -1,5 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { ShoppingCart, Check, Send, CreditCard, X } from 'lucide-react';
+
+const CART_BTN_POS_KEY = 'kalyber_cart_btn_pos';
+const BTN_SIZE = 64; // ancho/alto aprox del botón flotante (padding + icono), para no dejarlo salir de la pantalla
+const DRAG_THRESHOLD = 4; // px de movimiento antes de considerarlo "arrastre" y no un click
+
+function getDefaultBtnPos() {
+  if (typeof window === 'undefined') return { x: 24, y: 24 };
+  return { x: 24, y: window.innerHeight - BTN_SIZE - 24 }; // equivalente a bottom-6 left-6
+}
+
+function clampToViewport(x, y) {
+  const maxX = window.innerWidth - BTN_SIZE;
+  const maxY = window.innerHeight - BTN_SIZE;
+  return { x: Math.min(Math.max(x, 0), maxX), y: Math.min(Math.max(y, 0), maxY) };
+}
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -25,6 +40,74 @@ export default function CartCalculator() {
   const [status, setStatus] = useState('idle'); // idle | sending | success | error
   const [error, setError] = useState('');
   const [initPoint, setInitPoint] = useState('');
+
+  // Posición del botón flotante — se puede arrastrar con mouse o dedo.
+  // Arranca en la esquina inferior izquierda (o donde el usuario lo
+  // haya dejado la última vez, guardado en localStorage).
+  const [btnPos, setBtnPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CART_BTN_POS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return getDefaultBtnPos();
+  });
+  const [dragging, setDragging] = useState(false);
+  const btnRef = useRef(null);
+  const dragInfo = useRef({ offsetX: 0, offsetY: 0, moved: false });
+
+  // Si el usuario rota el celular o cambia el tamaño de la ventana,
+  // reacomodamos el botón para que no quede fuera de la pantalla.
+  useEffect(() => {
+    const onResize = () => setBtnPos(pos => clampToViewport(pos.x, pos.y));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const handlePointerDown = (e) => {
+    const rect = btnRef.current.getBoundingClientRect();
+    dragInfo.current = {
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      moved: false,
+    };
+    btnRef.current.setPointerCapture(e.pointerId);
+    setDragging(true);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - (btnRef.current.getBoundingClientRect().left + dragInfo.current.offsetX);
+    const dy = e.clientY - (btnRef.current.getBoundingClientRect().top + dragInfo.current.offsetY);
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      dragInfo.current.moved = true;
+    }
+    if (!dragInfo.current.moved) return;
+    const newX = e.clientX - dragInfo.current.offsetX;
+    const newY = e.clientY - dragInfo.current.offsetY;
+    setBtnPos(clampToViewport(newX, newY));
+  };
+
+  const handlePointerUp = (e) => {
+    if (!dragging) return;
+    setDragging(false);
+    try {
+      btnRef.current.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    if (dragInfo.current.moved) {
+      // Fue un arrastre: guardamos la nueva posición y NO abrimos el carrito.
+      setBtnPos(pos => {
+        try {
+          localStorage.setItem(CART_BTN_POS_KEY, JSON.stringify(pos));
+        } catch {}
+        return pos;
+      });
+    } else {
+      // No se movió: fue un click/tap normal, abrimos el carrito.
+      setOpen(true);
+    }
+    dragInfo.current.moved = false;
+  };
 
   const discountPct = calcDiscount(qty);
   const info = PLANS[plan];
@@ -66,12 +149,22 @@ export default function CartCalculator() {
 
   return (
     <>
-      {/* Botón flotante — bottom-left, para no pisar el botón de chat (bottom-right) */}
+      {/* Botón flotante — arrancra abajo a la izquierda (para no pisar el
+          botón de chat, que está a la derecha), pero se puede arrastrar
+          con mouse o con el dedo a cualquier parte de la pantalla. La
+          posición queda guardada para la próxima visita. */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 left-6 z-40 bg-[#10B981] hover:bg-[#0d9668] text-white p-4 rounded-full shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-transform hover:scale-105 flex items-center gap-2"
-          aria-label="Armar tu plan"
+          ref={btnRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{ left: btnPos.x, top: btnPos.y, touchAction: 'none' }}
+          className={`fixed z-40 bg-[#10B981] hover:bg-[#0d9668] text-white p-4 rounded-full shadow-[0_0_25px_rgba(16,185,129,0.5)] flex items-center gap-2 select-none ${
+            dragging ? 'cursor-grabbing scale-105' : 'cursor-grab transition-transform hover:scale-105'
+          }`}
+          aria-label="Armar tu plan (arrastrable)"
         >
           <ShoppingCart size={22} />
           {qty > 0 && status !== 'idle-empty' && (
