@@ -9,8 +9,12 @@ const LANGUAGES = [
   { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
   { code: 'it', label: 'Italiano', flag: '🇮🇹' },
   { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { 
+    code: 'ca', 
+    label: 'Català', 
+    flag: <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACQElEQVR4nGNgGAWjYBSMglEwCoYDyLaO+H9Hh/H/XR2GIYEZ0AGv+8L/STbx/2/rMg5dD/C6L/wfb5M0JDzBgMsDIBxml/H/lg7z0PUALygmCnL//9rH9f//QfZBiRkIeQAcEzlF/3/s4x66HuB1X/g/OKvk//e9PEPXA7zuC/+7O5T8v6rP9v+uHsOgwQykeACEHRyr/l/W4xg6mZgXigW9FsHZto41/y/pcQ4dDwh4LvpfOu0UiphVcNP/BzX8/z80sAwoZiDGA95lO/9fuf8OQ9w6rvn/mx3Cgz8TT1t/7T8IGCStx5Azie74/3yr2ODzQFzLgf/vPv34jw2cuPrqv27COrgnDAI6/9+oEf3/sYmF7pgBXwxoRK/+f+TSC7jD//z9979y5un//B6IDA1X69Lz/5C+6ODLxFPXQZIPDOghhTwyFnab+3+xie7g8gCfx8L/j15++b9ox21wRn7w/PP/6tlnMBwv6jb7/xJjncFXjBomrf+f2H4IzpcOWv6/fAZqcSrtN+P/8SVagy8T8xKB5QKm/T+zXGPwF6O8WLBK0OT/V9YoDajj/5PrATWX3v8HjMSHZmNO17nj/zF9oQFvA90lpS0Er7Cc2v6f0BcYcEffJccDNsGN/+9XCwx44+0DOY05z9Tq/5938w94hv1PTiYOyS75/20v74A79D85HoiKzvn/poF9QBppHyltzEXYpg/6MaG7uDJxinXckBiVu4vNA0VWwQPuqLuUeGAUjIJRMApGwShgGIIAAIkb1fOHPW+vAAAAAElFTkSuQmCC" alt="Catalunya" className="w-5 h-5 object-contain inline-block" /> 
+  },
 ];
-
 export default function Navbar() {
   const [langOpen, setLangOpen] = useState(false);
   const [activeLang, setActiveLang] = useState(LANGUAGES[0]);
