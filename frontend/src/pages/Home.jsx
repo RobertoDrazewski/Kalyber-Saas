@@ -121,11 +121,11 @@ function Hardware() {
               <div className="absolute top-4 left-4 bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
               </div>
-              <img src="/Jimi_Vl04l.png" alt="Hardware VL04" className="h-48 w-auto object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-transform duration-500" />
+              <img src="/Jimi_Vl04l.png" alt="Hardware Básico" className="h-48 w-auto object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-transform duration-500" />
             </div>
             <div className="p-8 pt-6 flex-1 flex flex-col">
               <h3 className="text-2xl font-bold text-white mb-1">Rastreador Inercial 4G</h3>
-              <p className="text-sm font-mono text-slate-500 mb-6 tracking-widest">MODELO: JM-VL04</p>
+              <p className="text-sm font-semibold text-[#10B981] mb-6 uppercase tracking-widest">Kalyber Tracking Core</p>
               
               <ul className="space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
@@ -154,11 +154,11 @@ function Hardware() {
               <div className="absolute top-4 left-4 bg-[#6366F1] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
               </div>
-              <img src="/Jimi_Vl502.png" alt="Hardware VL502" className="h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
+              <img src="/Jimi_Vl502.png" alt="Hardware Avanzado" className="h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
             </div>
             <div className="p-8 pt-6 flex-1 flex flex-col">
               <h3 className="text-2xl font-bold text-white mb-1">Escáner Telemétrico OBD2</h3>
-              <p className="text-sm font-mono text-slate-500 mb-6 tracking-widest">MODELO: JM-VL502</p>
+              <p className="text-sm font-semibold text-[#6366F1] mb-6 uppercase tracking-widest">Kalyber OBD-Telemetry Engine</p>
               
               <ul className="space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
@@ -183,12 +183,11 @@ function Hardware() {
 
         </div>
 
-        {/* Accesorios: Cable y Chip M2M (Bloques Paralelos) */}
+        {/* Accesorios: Cable y Chip M2M (Bloques Paralelos PRO) */}
         <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
           
           {/* Bloque Cable Extensor */}
           <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-slate-500 transition-colors">
-            {/* Fondo claro para que resalte el cable */}
             <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
               <img 
                 src="/cable-extensor.png" 
@@ -199,14 +198,13 @@ function Hardware() {
             <div className="flex-1 relative z-10 text-center xl:text-left">
               <h4 className="text-white font-bold text-xl mb-2">Solución Oculta (Cable)</h4>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Si el puerto OBD2 presenta problemas de espacio, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Facilita el montaje interno garantizando estética y seguridad.
+                Si el puerto OBD2 presenta problemas de espacio o riesgo de impacto accidental, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Facilita el montaje interno garantizando estética y seguridad.
               </p>
             </div>
           </div>
 
           {/* Bloque Chip M2M */}
           <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-[#6366F1]/50 transition-colors">
-            {/* Fondo claro para la imagen transparente del chip */}
             <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
               <img 
                 src="/m2m.png" 
@@ -224,10 +222,17 @@ function Hardware() {
 
         </div>
 
-        {/* Resumen de Conectividad (Mantenemos los iconos estéticos abajo) */}
+        {/* Resumen de Conectividad (Bloque PRO entero con iconos) */}
         <div className="bg-[#1E293B]/40 rounded-3xl border border-slate-700 p-8 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-1/4 w-64 h-64 bg-[#6366F1] blur-[120px] opacity-10 pointer-events-none"></div>
           
+          <div className="text-center mb-10 relative z-10">
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">Conectividad M2M Ininterrumpida</h3>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Equipamos su flota con tecnología de red de misión crítica para garantizar la transmisión de telemetría sin puntos ciegos.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#6366F1]/50 transition-colors">
               <div className="w-14 h-14 bg-[#6366F1]/10 text-[#6366F1] rounded-full flex items-center justify-center mb-4">
