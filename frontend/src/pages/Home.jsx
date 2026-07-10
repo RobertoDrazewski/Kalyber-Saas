@@ -116,7 +116,7 @@ function Hardware() {
         <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
           
           {/* Hardware Básico */}
-          <div className="bg-[#1E293B]/30 rounded-3xl border border-slate-700 overflow-hidden flex flex-col relative hover:border-slate-500 transition-colors">
+          <div className="kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
             <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-4 left-4 bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
@@ -325,7 +325,7 @@ function Pricing() {
 
         <div className="grid md:grid-cols-2 gap-8 w-full">
           
-          <div className="bg-[#1E293B]/30 p-8 rounded-3xl border border-slate-700 flex flex-col hover:border-slate-500 transition-colors">
+          <div className="kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
             <p className="text-slate-400 mb-8 h-12">Herramientas de auditoría digital para la gestión y evaluación del comportamiento de los operadores.</p>
             

@@ -50,7 +50,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050B14] flex items-center justify-center p-6 relative overflow-hidden">
+    // notranslate + translate="no": si el usuario tradujo la página con
+    // Google Translate antes de llegar acá, esto evita que el widget le
+    // toque el DOM al formulario mientras hace login — es lo que estaba
+    // chocando con React justo en el momento del navigate() y cortando
+    // el redirect.
+    <div className="min-h-screen bg-[#050B14] flex items-center justify-center p-6 relative overflow-hidden notranslate" translate="no">
       {/* Fondo decorativo sutil */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#6366F1]/10 rounded-full blur-[120px]" />
 

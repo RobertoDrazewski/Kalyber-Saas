@@ -42,7 +42,20 @@ const createSubscription = async (req, res) => {
     } catch (err) {
         return res.status(400).json({ error: err.message });
     }
-    const { info, qty, discountPct, monthlyTotal } = quote;
+    const { info, qty, discountPct, monthlyTotal } = quote; // monthlyTotal está en USD
+
+    // Mercado Pago Argentina cobra en ARS — tus precios están en USD,
+    // así que hay que convertir ANTES de mandarlo. El tipo de cambio
+    // sale de una variable de entorno que vos mantenés actualizada
+    // (por ahora a mano; se puede automatizar después con una API de
+    // cotización). Si no está seteada, rechazamos el pago en vez de
+    // cobrar un monto potencialmente 1000x equivocado.
+    const usdArsRate = Number(process.env.MP_USD_ARS_RATE);
+    if (!usdArsRate || usdArsRate <= 0) {
+        console.error('❌ Falta MP_USD_ARS_RATE en el .env — no se puede calcular el monto en ARS de forma segura.');
+        return res.status(503).json({ error: 'No se pudo calcular el monto a cobrar. Contactanos directamente.' });
+    }
+    const monthlyTotalArs = Math.round(monthlyTotal * usdArsRate * 100) / 100;
 
     try {
         const preApproval = new PreApproval(client);
@@ -52,7 +65,7 @@ const createSubscription = async (req, res) => {
             auto_recurring: {
                 frequency: 1,
                 frequency_type: 'months',
-                transaction_amount: monthlyTotal,
+                transaction_amount: monthlyTotalArs,
                 currency_id: 'ARS'
             },
             back_url: 'https://kalyber.com.ar/gracias',
@@ -62,7 +75,10 @@ const createSubscription = async (req, res) => {
 
         // Insertamos primero en 'pending' para tener el ID interno como
         // external_reference — así el webhook puede encontrar la fila
-        // sin depender de emails que pueden repetirse.
+        // sin depender de emails que pueden repetirse. Guardamos el
+        // total en USD (billing_amount de referencia) y en ARS (lo
+        // que realmente se le cobra al cliente ese mes, según el tipo
+        // de cambio vigente al momento de la suscripción).
         const [insertResult] = await pool.query(
             `INSERT INTO Subscriptions
                 (plan, vehicle_count, discount_pct, monthly_total, billing_name, billing_tax_id, billing_email, billing_phone, status)

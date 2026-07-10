@@ -32,7 +32,7 @@ export default function TabFacturador() {
         <iframe
           src="/facturador.html"
           title="Facturador Puma Code"
-          className="w-full h-full border-0 bg-white"
+          className="w-full h-full border-0 bg-[#0B1120]"
         />
       </div>
 
