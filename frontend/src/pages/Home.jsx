@@ -154,7 +154,7 @@ function Hardware() {
               <div className="absolute top-4 left-4 bg-[#6366F1] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
               </div>
-              <img src="/Jimi_Vl502.png" alt="Hardware Avanzado" className="h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
+              <img src="/Kalyber_OBD_Pro.png" alt="Hardware Avanzado" className="h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
             </div>
             <div className="p-8 pt-6 flex-1 flex flex-col">
               <h3 className="text-2xl font-bold text-white mb-1">Escáner Telemétrico OBD2</h3>
