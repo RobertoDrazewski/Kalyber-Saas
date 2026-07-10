@@ -84,7 +84,7 @@ function Features() {
             </p>
           </div>
 
-          {/* Tarjeta 6 (NUEVA): Business Intelligence & Ventas */}
+          {/* Tarjeta 6: Business Intelligence & Ventas */}
           <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#A855F7]/50 transition-all hover:-translate-y-1 shadow-lg">
             <div className="w-12 h-12 bg-[#A855F7]/20 rounded-xl flex items-center justify-center mb-6">
               <svg className="w-6 h-6 text-[#A855F7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,7 +183,7 @@ function Hardware() {
 
         </div>
 
-        {/* Accesorios: Cable y Chip M2M (Bloques Paralelos PRO) */}
+        {/* Accesorios: Cable y Chip M2M */}
         <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
           
           {/* Bloque Cable Extensor */}
@@ -222,8 +222,8 @@ function Hardware() {
 
         </div>
 
-        {/* Resumen de Conectividad (Bloque PRO entero con iconos) */}
-        <div className="bg-[#1E293B]/40 rounded-3xl border border-slate-700 p-8 shadow-lg relative overflow-hidden">
+        {/* Resumen de Conectividad (Bloque PRO) */}
+        <div className="bg-[#1E293B]/40 rounded-3xl border border-slate-700 p-8 shadow-lg relative overflow-hidden mb-12">
           <div className="absolute top-0 right-1/4 w-64 h-64 bg-[#6366F1] blur-[120px] opacity-10 pointer-events-none"></div>
           
           <div className="text-center mb-10 relative z-10">
@@ -273,6 +273,36 @@ function Hardware() {
               <h4 className="text-white font-bold text-lg mb-1">SIM 100%</h4>
               <p className="text-xs text-[#EF4444] font-bold uppercase tracking-wide">Bonificadas</p>
             </div>
+          </div>
+        </div>
+
+        {/* NUEVO BLOQUE: Video de Instalación Plug & Play */}
+        <div className="bg-gradient-to-b from-[#1E293B]/60 to-[#0B1120] rounded-3xl border border-slate-700 p-8 md:p-12 shadow-2xl relative overflow-hidden text-center">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-[#10B981] blur-[150px] opacity-10 pointer-events-none"></div>
+
+          <div className="mb-8 relative z-10">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] mb-6">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-[#10B981] animate-pulse"></span>
+              <span className="text-xs font-bold tracking-widest uppercase">100% Plug & Play</span>
+            </div>
+            <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">No requiere instalación</h3>
+            <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+              Olvídese de los mecánicos, los cables cortados y el lucro cesante. Conecte el dispositivo en segundos y proteja la garantía original de su vehículo.
+            </p>
+          </div>
+
+          <div className="relative z-10 max-w-4xl mx-auto rounded-2xl overflow-hidden border border-slate-700 shadow-[0_0_30px_rgba(0,0,0,0.5)] bg-black">
+            <video 
+              className="w-full h-auto object-cover"
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+            >
+              <source src="/como-funciona.mp4" type="video/mp4" />
+              Tu navegador no soporta la reproducción de videos.
+            </video>
           </div>
         </div>
 
