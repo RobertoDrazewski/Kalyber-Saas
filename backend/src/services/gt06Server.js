@@ -127,6 +127,7 @@ function startGt06Server() {
 
         socket.on('data', async (data) => {
             buffer = Buffer.concat([buffer, data]);
+            console.log(`[GT06] Datos crudos recibidos de ${remote} (${data.length} bytes): ${data.toString('hex')}`);
 
             let result;
             while ((result = extractFrame(buffer)) !== null) {
