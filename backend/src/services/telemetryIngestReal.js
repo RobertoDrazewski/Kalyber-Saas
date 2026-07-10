@@ -75,10 +75,20 @@ async function ingestReading(imei, reading) {
          reading.coolant_temp, reading.battery_voltage, reading.harsh_brake ? 1 : 0, reading.dtc_codes || null]
     );
 
-    await pool.query(
-        `UPDATE Vehicles SET lat = ?, lng = ?, last_ping_at = NOW() WHERE id = ?`,
-        [reading.lat, reading.lng, device.vehicle_id]
-    );
+    // Protección crítica: Solo actualizar lat/lng en la tabla Vehicles si el paquete trae coordenadas.
+    // Evita que los paquetes OBD (0x37) borren la última posición conocida del vehículo poniéndola en NULL.
+    if (reading.lat !== null && reading.lng !== null && reading.lat !== undefined && reading.lng !== undefined) {
+        await pool.query(
+            `UPDATE Vehicles SET lat = ?, lng = ?, last_ping_at = NOW() WHERE id = ?`,
+            [reading.lat, reading.lng, device.vehicle_id]
+        );
+    } else {
+        await pool.query(
+            `UPDATE Vehicles SET last_ping_at = NOW() WHERE id = ?`,
+            [device.vehicle_id]
+        );
+    }
+
     await pool.query(`UPDATE Devices SET last_seen_at = NOW() WHERE id = ?`, [device.id]);
 
     return mlService.processReading(device.vehicle_id, reading, 'real');

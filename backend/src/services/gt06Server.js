@@ -165,10 +165,6 @@ function startGt06Server() {
                             lat: gps.lat,
                             lng: gps.lon,
                             speed_kmh: gps.speed_kmh,
-                            // Estos campos de motor (RPM, temp, batería, DTC) solo
-                            // los manda el VL502 vía paquetes extendidos que todavía
-                            // no parseamos (ver nota arriba) — quedan null hasta
-                            // completar ese parser contra bytes reales.
                             engine_rpm: null,
                             engine_load: null,
                             coolant_temp: null,
@@ -176,10 +172,41 @@ function startGt06Server() {
                             harsh_brake: false,
                         });
                         console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
+                        
+                    } else if (protocolNumber === 0x37) {
+                        // --- PAQUETE DE TELEMETRÍA EXTENDIDA (OBD) ---
+                        socket.write(buildAck(protocolNumber, serial));
+                        
+                        if (!currentImei) {
+                            console.warn('[GT06] Paquete 0x37 (OBD) sin login previo, se descarta');
+                            continue;
+                        }
+
+                        const vehicleId = await findVehicleIdByImei(currentImei);
+                        if (!vehicleId) {
+                            console.warn(`[GT06] IMEI ${currentImei} no está pareado a ningún vehículo — se descarta el paquete`);
+                            continue;
+                        }
+
+                        // Extraer el remanente de datos (Sensores/OBD en crudo)
+                        const obdHex = content.slice(6).toString('hex');
+                        
+                        console.log(`[GT06] OBD IMEI=${currentImei} procesado. Inyectando Hex crudo a BD.`);
+
+                        // Inyectamos el payload hexadecimal en la columna dtc_codes para visualización inmediata en BD
+                        await telemetryIngestReal.ingestReading(currentImei, {
+                            lat: null, 
+                            lng: null,
+                            speed_kmh: null,
+                            engine_rpm: null,
+                            engine_load: null,
+                            coolant_temp: null,
+                            battery_voltage: null,
+                            harsh_brake: false,
+                            dtc_codes: `RAW_OBD:${obdHex}`
+                        });
+                        
                     } else {
-                        // Protocolo no reconocido todavía (probablemente el paquete
-                        // extendido de OBD del VL502) — lo logueamos en crudo para
-                        // poder mirarlo juntos y completar el parser real.
                         socket.write(buildAck(protocolNumber, serial));
                         console.log(`[GT06] Paquete no reconocido, protocolo=0x${protocolNumber.toString(16)} contenido=${content.toString('hex')}`);
                     }
