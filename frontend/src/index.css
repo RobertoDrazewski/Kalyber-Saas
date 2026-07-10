@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Sistema de tipografÃ­a Kalyber.
-   - Sora: tÃ­tulos â€” geomÃ©trica, con carÃ¡cter tÃ©cnico.
-   - Inter: cuerpo de texto â€” limpia, alta legibilidad.
-   - JetBrains Mono: datos (patentes, RPM, coordenadas, precios) â€”
-     refuerza que es telemetrÃ­a real, no decoraciÃ³n.
-   No se toca ningÃºn texto, solo la fuente con la que se renderiza.
+   Sistema de tipografía Kalyber.
+   - Sora: títulos — geométrica, con carácter técnico.
+   - Inter: cuerpo de texto — limpia, alta legibilidad.
+   - JetBrains Mono: datos (patentes, RPM, coordenadas, precios) —
+     refuerza que es telemetría real, no decoración.
+   No se toca ningún texto, solo la fuente con la que se renderiza.
    ============================================================ */
 @theme {
   --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
@@ -27,17 +27,17 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-/* Cualquier dato numÃ©rico/tÃ©cnico ya usa font-mono en las clases de
-   Tailwind (patentes, RPM, coordenadas) â€” acÃ¡ lo mapeamos a
-   JetBrains Mono en vez del monoespaciado genÃ©rico del sistema. */
+/* Cualquier dato numérico/técnico ya usa font-mono en las clases de
+   Tailwind (patentes, RPM, coordenadas) — acá lo mapeamos a
+   JetBrains Mono en vez del monoespaciado genérico del sistema. */
 .font-mono {
   font-family: var(--font-data) !important;
 }
 
 /* ============================================================
-   Textura de fondo â€” grilla + barrido tipo radar, muy sutil.
-   Es el Ãºnico elemento "de firma": un guiÃ±o discreto a telemetrÃ­a
-   GPS que no compite con el contenido. Fijo detrÃ¡s de todo,
+   Textura de fondo — grilla + barrido tipo radar, muy sutil.
+   Es el único elemento "de firma": un guiño discreto a telemetría
+   GPS que no compite con el contenido. Fijo detrás de todo,
    pointer-events:none para no interferir con clicks.
    ============================================================ */
 body::before {
@@ -82,8 +82,8 @@ body::after {
 }
 
 /* ============================================================
-   Cards con borde-gradiente sutil en vez de borde plano â€” el
-   detalle que mÃ¡s separa "profesional" de "template". Se aplica
+   Cards con borde-gradiente sutil en vez de borde plano — el
+   detalle que más separa "profesional" de "template". Se aplica
    opcionalmente con la clase .kb-card donde se use.
    ============================================================ */
 .kb-card {
@@ -107,7 +107,7 @@ body::after {
 }
 
 /* ============================================================
-   Detalles de pulido: scrollbar, selecciÃ³n, foco de teclado.
+   Detalles de pulido: scrollbar, selección, foco de teclado.
    ============================================================ */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #0B1120; }
@@ -120,10 +120,10 @@ body::after {
   border-radius: 4px;
 }
 
-/* Bloque anti-Google Translate â€” global, tapa la ventana nativa de
-   Google en TODAS las pÃ¡ginas (home y panel), sea cual sea el
-   componente montado. El widget en sÃ­ (script + <div>) se inicializa
-   una sola vez en App.jsx para que sobreviva a la navegaciÃ³n entre
+/* Bloque anti-Google Translate — global, tapa la ventana nativa de
+   Google en TODAS las páginas (home y panel), sea cual sea el
+   componente montado. El widget en sí (script + <div>) se inicializa
+   una sola vez en App.jsx para que sobreviva a la navegación entre
    rutas. */
 .goog-te-banner-frame.skiptranslate,
 .goog-te-banner-frame {
@@ -142,3 +142,36 @@ body {
 #google_translate_element { display: none !important; }
 iframe.goog-te-menu-frame { display: none !important; }
 .skiptranslate { display: none !important; }
+
+/* ============================================================
+   Carrusel horizontal para mobile — subcomponentes con muchas
+   tarjetas (Features, Hardware, Pricing) dejan de apilarse en un
+   scroll vertical larguísimo y pasan a deslizarse de costado.
+   Solo actúa por debajo de 768px — a partir de md: no hace nada,
+   el grid de desktop queda exactamente como estaba.
+   ============================================================ */
+@media (max-width: 767px) {
+  .mobile-carousel {
+    display: flex !important;
+    gap: 1.25rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: 1.5rem;
+    padding-bottom: 0.75rem;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-carousel::-webkit-scrollbar { display: none; }
+  .mobile-carousel { scrollbar-width: none; }
+  .mobile-carousel-item {
+    scroll-snap-align: center;
+    flex-shrink: 0;
+    width: 85%;
+  }
+  .mobile-carousel-item.wide {
+    width: 92%;
+  }
+}
