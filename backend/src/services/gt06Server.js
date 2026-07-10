@@ -174,9 +174,16 @@ function startGt06Server() {
                         console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
                         
                     } else if (protocolNumber === 0x37) {
-                        // --- PAQUETE DE TELEMETRÍA EXTENDIDA (OBD) ---
+                        // --- PAQUETE COMBINADO GPS + OBD (confirmado contra bytes
+                        // reales del VL502 el 10/07/2026) ---
+                        // Contra lo que se había asumido antes, este paquete
+                        // "extendido" en realidad envuelve el MISMO bloque de
+                        // posición estándar de GT06 (fecha + lat + lon + velocidad
+                        // en los offsets 0, 7, 11, 15 del content) y le agrega datos
+                        // de OBD a continuación. Antes se descartaba la posición acá
+                        // (lat/lng se mandaban en null) — ya no.
                         socket.write(buildAck(protocolNumber, serial));
-                        
+
                         if (!currentImei) {
                             console.warn('[GT06] Paquete 0x37 (OBD) sin login previo, se descarta');
                             continue;
@@ -188,16 +195,26 @@ function startGt06Server() {
                             continue;
                         }
 
-                        // Extraer el remanente de datos (Sensores/OBD en crudo)
-                        const obdHex = content.slice(6).toString('hex');
-                        
-                        console.log(`[GT06] OBD IMEI=${currentImei} procesado. Inyectando Hex crudo a BD.`);
+                        let gps = null;
+                        if (content.length >= 16) {
+                            const latRaw = content.readUInt32BE(7);
+                            const lonRaw = content.readUInt32BE(11);
+                            gps = {
+                                lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
+                                lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
+                                speed_kmh: content[15] ?? 0,
+                            };
+                        }
 
-                        // Inyectamos el payload hexadecimal en la columna dtc_codes para visualización inmediata en BD
+                        // El resto de los bytes (después del bloque de posición) son
+                        // los datos de OBD — todavía no confirmados byte a byte, se
+                        // guardan crudos para seguir decodificando con más muestras.
+                        const obdHex = content.slice(16).toString('hex');
+
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: null, 
-                            lng: null,
-                            speed_kmh: null,
+                            lat: gps?.lat ?? null,
+                            lng: gps?.lon ?? null,
+                            speed_kmh: gps?.speed_kmh ?? null,
                             engine_rpm: null,
                             engine_load: null,
                             coolant_temp: null,
@@ -205,7 +222,13 @@ function startGt06Server() {
                             harsh_brake: false,
                             dtc_codes: `RAW_OBD:${obdHex}`
                         });
-                        
+
+                        if (gps) {
+                            console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
+                        } else {
+                            console.log(`[GT06] OBD IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
+                        }
+
                     } else {
                         socket.write(buildAck(protocolNumber, serial));
                         console.log(`[GT06] Paquete no reconocido, protocolo=0x${protocolNumber.toString(16)} contenido=${content.toString('hex')}`);
