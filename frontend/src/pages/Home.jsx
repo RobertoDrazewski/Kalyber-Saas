@@ -16,10 +16,11 @@ function Features() {
             Inteligencia Operativa Integral
           </h2>
           <p className="text-lg text-slate-400 max-w-3xl mx-auto">
-            Un rastreador estándar solo proporciona coordenadas. <strong className="text-white">Kalyber diagnostica el estado del vehículo, evalúa los patrones de conducción y maximiza el retorno de inversión.</strong> Experimente el verdadero control de flotas.
+            Un rastreador estándar solo proporciona coordenadas a un servidor genérico. <strong className="text-white">Kalyber procesa la telemetría en infraestructura propia, evalúa los patrones de conducción y blinda su información logística.</strong> Experimente el verdadero control de flotas.
           </p>
         </div>
 
+        {/* Grilla perfecta de 3x2 con las 6 tarjetas */}
         <div className="grid md:grid-cols-3 gap-8">
           
           <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
@@ -50,6 +51,49 @@ function Features() {
             <h3 className="text-xl font-bold mb-3 text-white">Evaluación de Conductores</h3>
             <p className="text-slate-400 leading-relaxed">
               Reduzca el desgaste prematuro de los componentes y el consumo ineficiente de combustible. El sistema inercial audita a los operadores constantemente, detectando <strong className="text-slate-300">frenadas bruscas, aceleraciones agresivas y excesos de tiempo en ralentí</strong>.
+            </p>
+          </div>
+
+          {/* Tarjeta 4: Infraestructura Propietaria y API */}
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
+            <div className="w-12 h-12 bg-[#6366F1]/20 rounded-xl flex items-center justify-center mb-6">
+              <svg className="w-6 h-6 text-[#6366F1]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-4">Ecosistema 100% Propietario y API REST</h3>
+            <p className="text-slate-400 leading-relaxed">
+              No revendemos software enlatado ni dependemos de servidores compartidos en el extranjero. Al ser dueños de nuestra arquitectura de sockets, le ofrecemos una <strong className="text-slate-300">API RESTful abierta</strong> para integrar la telemetría directamente con su software ERP (SAP, Odoo).
+            </p>
+          </div>
+
+          {/* Tarjeta 5: El Sello de Ciberseguridad */}
+          <div className="bg-gradient-to-br from-[#1E293B]/80 to-[#0F172A] p-8 rounded-3xl border border-[#10B981]/30 hover:border-[#10B981] transition-all hover:-translate-y-1 shadow-[0_0_15px_rgba(16,185,129,0.1)] relative overflow-hidden">
+            <div className="absolute top-4 right-4 bg-[#10B981]/20 text-[#10B981] text-xs font-bold px-3 py-1 rounded-full border border-[#10B981]/50">
+              Auditoría Enterprise
+            </div>
+            
+            <div className="w-12 h-12 bg-[#10B981]/20 rounded-xl flex items-center justify-center mb-6">
+              <svg className="w-6 h-6 text-[#10B981]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-4">Datos Blindados de Ciberseguridad</h3>
+            <p className="text-slate-400 leading-relaxed mb-4">
+              La filtración de rutas y operaciones logísticas es un riesgo real. Nuestra plataforma está sometida a pruebas activas de vulnerabilidades y monitoreo continuo por expertos para garantizar que <strong className="text-white">la información de su flota sea impenetrable.</strong>
+            </p>
+          </div>
+
+          {/* Tarjeta 6 (NUEVA): Business Intelligence & Ventas */}
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#A855F7]/50 transition-all hover:-translate-y-1 shadow-lg">
+            <div className="w-12 h-12 bg-[#A855F7]/20 rounded-xl flex items-center justify-center mb-6">
+              <svg className="w-6 h-6 text-[#A855F7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-4">Business Intelligence y ROI</h3>
+            <p className="text-slate-400 leading-relaxed">
+              Convierta la información técnica en decisiones financieras. Genere reportes gerenciales automatizados que exponen la <strong className="text-slate-300">reducción de costos operativos y el ahorro real de combustible</strong>, permitiendo visualizar el Retorno de Inversión (ROI) instantáneo.
             </p>
           </div>
 
@@ -139,34 +183,51 @@ function Hardware() {
 
         </div>
 
-        {/* Cable Extensor Actualizado */}
-        <div className="max-w-3xl mx-auto mb-12 bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-8 rounded-2xl border border-slate-700 flex flex-col sm:flex-row items-center gap-8 text-left shadow-lg overflow-hidden relative">
-          <div className="w-40 h-40 shrink-0 flex items-center justify-center rounded-xl bg-gradient-to-br from-[#050B14] to-[#1E293B] border border-slate-600 relative z-10 p-4">
-            <img 
-              src="/cable-extensor.png" 
-              alt="Cable Extensor OBD2" 
-              className="w-full h-full object-contain drop-shadow-[0_5px_10px_rgba(0,0,0,0.6)]" 
-            />
+        {/* Accesorios: Cable y Chip M2M (Bloques Paralelos) */}
+        <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left">
+          
+          {/* Bloque Cable Extensor */}
+          <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-slate-500 transition-colors">
+            {/* Fondo claro para que resalte el cable */}
+            <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
+              <img 
+                src="/cable-extensor.png" 
+                alt="Cable Extensor OBD2" 
+                className="w-full h-full object-contain drop-shadow-[0_5px_10px_rgba(0,0,0,0.3)]" 
+              />
+            </div>
+            <div className="flex-1 relative z-10 text-center xl:text-left">
+              <h4 className="text-white font-bold text-xl mb-2">Solución Oculta (Cable)</h4>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Si el puerto OBD2 presenta problemas de espacio, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Facilita el montaje interno garantizando estética y seguridad.
+              </p>
+            </div>
           </div>
-          <div className="flex-1 relative z-10">
-            <h4 className="text-white font-bold text-xl mb-2">Solución de Instalación Oculta (Cable Extensor)</h4>
-            <p className="text-sm md:text-base text-slate-400 leading-relaxed">
-              Si el puerto OBD2 de la unidad presenta problemas de espacio o riesgo de impacto accidental, disponemos de un cable extensor plano por <strong className="text-white">$20 USD adicionales</strong>. Esta opción facilita el montaje interno detrás del panel, garantizando la seguridad del dispositivo y una terminación estética impecable.
-            </p>
+
+          {/* Bloque Chip M2M */}
+          <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-[#6366F1]/50 transition-colors">
+            {/* Fondo claro para la imagen transparente del chip */}
+            <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
+              <img 
+                src="/m2m.png" 
+                alt="Chip Telemetría M2M" 
+                className="w-full h-full object-contain drop-shadow-[0_5px_10px_rgba(0,0,0,0.3)]" 
+              />
+            </div>
+            <div className="flex-1 relative z-10 text-center xl:text-left">
+              <h4 className="text-white font-bold text-xl mb-2">Conectividad M2M Ininterrumpida</h4>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Incluimos tecnología de red de misión crítica. Nuestro chip M2M Multi-Carrier conmuta automáticamente entre <strong className="text-white">3 redes móviles</strong> para evitar puntos ciegos en su operación.
+              </p>
+            </div>
           </div>
+
         </div>
 
-        {/* Conectividad M2M */}
+        {/* Resumen de Conectividad (Mantenemos los iconos estéticos abajo) */}
         <div className="bg-[#1E293B]/40 rounded-3xl border border-slate-700 p-8 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-1/4 w-64 h-64 bg-[#6366F1] blur-[120px] opacity-10 pointer-events-none"></div>
           
-          <div className="text-center mb-10 relative z-10">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">Conectividad M2M Ininterrumpida</h3>
-            <p className="text-slate-400 max-w-2xl mx-auto">
-              Equipamos su flota con tecnología de red de misión crítica para garantizar la transmisión de telemetría sin puntos ciegos.
-            </p>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#6366F1]/50 transition-colors">
               <div className="w-14 h-14 bg-[#6366F1]/10 text-[#6366F1] rounded-full flex items-center justify-center mb-4">
@@ -215,7 +276,7 @@ function Hardware() {
   );
 }
 
-// Subcomponente: Pricing (¡TUS TARJETAS RESTAURADAS!)
+// Subcomponente: Pricing
 function Pricing() {
   return (
     <section id="pricing" className="pt-24 pb-12 bg-[#0B1120] scroll-mt-20">
@@ -253,6 +314,10 @@ function Pricing() {
             <hr className="border-slate-800 mb-8" />
 
             <ul className="text-slate-300 space-y-5 flex-1">
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Soberanía de Datos (Zero Third-Parties):</strong> Su información se procesa en infraestructura privada. Sin intermediarios ni licencias genéricas. Usted es el dueño absoluto de su información.</div>
+              </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
                 <div><strong className="text-white font-semibold">Análisis de Operadores (Machine Learning):</strong> Evaluación algorítmica de los patrones de conducción para identificar áreas de mejora.</div>
@@ -318,7 +383,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Funcionalidad Completa:</strong> Incluye absolutamente todas las características operativas del Plan Básico.</div>
+                <div><strong className="text-white font-semibold">Funcionalidad Completa:</strong> Incluye absolutamente todas las características operativas del Plan Básico (incluyendo Soberanía de Datos).</div>
               </li>
             </ul>
           </div>
@@ -366,7 +431,7 @@ function CorporateBanner({ onOpenContact }) {
 
           <div className="space-y-4">
             <FeatureItem text="Escala de precios mayorista por volumen" />
-            <FeatureItem text="API abierta para integración con su software de gestión (ERP)" />
+            <FeatureItem text="API RESTful propia (Zero Third-Parties) para integración bidireccional con SAP, Odoo o su ERP actual." />
             <FeatureItem text="Soporte técnico dedicado nivel ingeniería" />
             <FeatureItem text="Opciones de IP fija y VPN privada" />
           </div>

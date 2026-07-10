@@ -23,12 +23,12 @@ export default function Hero({ onOpenChat, onOpenContact }) {
           </span>
         </h1>
 
-        {/* Descripción clara y directa */}
+        {/* Descripción clara y directa con el NUEVO ENFOQUE PROPIETARIO */}
         <p className="mt-4 text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-          Kalyber es la herramienta perfecta para <strong>autos de Uber, Cabify, taxis y utilitarios de reparto</strong>. Somos compatibles 100% con puerto <strong>OBD2</strong>. Usted es dueño del equipo desde el primer día: simplemente conéctelo y muévalo libremente entre los vehículos de su flota.
+          A diferencia de los rastreadores tradicionales que dependen de software genérico de terceros, Kalyber es una plataforma de inteligencia operativa <strong className="text-white">100% propietaria e independiente</strong>. Obtenga telemetría avanzada, diagnósticos OBD2 Plug & Play y la tranquilidad de una infraestructura de datos blindada y auditable mediante API.
         </p>
 
-        {/* BOTONES DE CALL TO ACTION (NUEVO) */}
+        {/* BOTONES DE CALL TO ACTION */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12 w-full max-w-2xl mx-auto">
           
           {/* Botón Asesor IA */}
@@ -68,7 +68,7 @@ export default function Hero({ onOpenChat, onOpenContact }) {
 
         {/* Nota de instalación */}
         <p className="text-slate-500 text-sm italic">
-          * Tecnología Plug & Play: No requiere instalación técnica. Autogestión total de su flota.
+          * Tecnología Plug & Play: Sin instalaciones invasivas que anulan garantías. Cero lucro cesante.
         </p>
 
       </div>
