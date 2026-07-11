@@ -37,8 +37,6 @@ const addFuelLog = async (req, res) => {
 
 // Historial de cargas de un vehículo + consumo calculado entre cada
 // carga y la anterior: litros cargados / (km recorridos / 100).
-// Asume que cada carga llena el tanque (el método estándar de
-// cálculo de consumo real que usan la mayoría de las apps de flota).
 const getFuelLogs = async (req, res) => {
     const { vehicleId } = req.params;
     try {
@@ -64,7 +62,6 @@ const getFuelLogs = async (req, res) => {
             return { ...log, km_since_last: kmSinceLast, consumption_l_100km: consumption };
         });
 
-        // Orden más reciente primero para mostrar en pantalla
         res.json(withConsumption.reverse());
     } catch (error) {
         res.status(500).json({ error: 'Error obteniendo el historial de combustible' });

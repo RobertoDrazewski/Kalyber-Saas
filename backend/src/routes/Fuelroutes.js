@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addFuelLog, getFuelLogs } = require('../controllers/fuelController');
+const { addFuelLog, getFuelLogs } = require('../controllers/fuelcontroller');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 

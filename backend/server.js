@@ -13,7 +13,7 @@ const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const paymentRoutes = require('./src/routes/paymentRoutes');
-const fuelRoutes = require('./src/routes/fuelroutes');
+const fuelroutes = require('./src/routes/fuelroutes');
 
 const app = express();
 
@@ -27,10 +27,6 @@ const corsOptions = {
         'http://localhost:5173',
         'http://localhost:3000'
     ],
-    // PATCH agregado — lo usan assign-driver, updateVehicle, updateDriver,
-    // updateUser. Sin esto, el navegador bloquea el preflight y el fetch
-    // ni siquiera llega a intentarse (por eso el error "no se pudo conectar",
-    // no era problema de red real).
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
@@ -50,7 +46,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/fuel', fuelRoutes);
+app.use('/api/fuel', fuelroutes);
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });
@@ -58,9 +54,6 @@ app.get('/api/status', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-// El simulador de 6 autos de demo ya NO se inicializa acá. Todo el
-// sistema corre solo con datos reales — GPS real (servicio aparte,
-// ver gt06Server.js) y ML sobre esos datos reales.
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API de Kyber corriendo en el puerto ${PORT}`);
 });
