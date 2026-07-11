@@ -258,6 +258,17 @@ function startGt06Server() {
                                 });
                             }
                         }
+                    } else if (header.msgId === 0x0900) {
+                        // "Transmisión transparente de datos" — un mensaje
+                        // propio del fabricante, aparece cada ~30s. Todavía
+                        // no identificado con certeza (parece traer fecha/
+                        // hora + posiblemente señal/GNSS), lo confirmamos
+                        // en cuanto tengamos tiempo de sentarnos con esto.
+                        // Lo ACKeamos igual para que el equipo no reintente
+                        // en loop pensando que no llegó.
+                        socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
+                        console.log(`[JT808] Transmisión transparente (0x0900) ID=${terminalIdHex} body=${header.body.toString('hex')}`);
+
                     } else {
                         console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);
                     }

@@ -33,6 +33,8 @@ const ADDITIONAL_INFO = {
     MILEAGE: 0x01,       // DWORD, en unidades de 1/10 km (odómetro del propio equipo)
     FUEL: 0x02,          // WORD, en unidades de 1/10 L (nivel de combustible)
     SPEED_SENSOR: 0x03,  // WORD, velocidad del sensor físico, 1/10 km/h
+    GSM_SIGNAL: 0x30,    // BYTE, intensidad de señal GSM
+    GNSS_SATELLITES: 0x31, // BYTE, cantidad de satélites GNSS visibles
 };
 
 function unescapeJT808(buf) {
@@ -144,8 +146,13 @@ function parseLocationReport(body) {
 
     const latRaw = body.readUInt32BE(8);
     const lonRaw = body.readUInt32BE(12);
-    const lat = latRaw / 1_000_000;   // grados, escala 10^-6 según spec — SIGNO según hemisferio (ver más abajo)
-    const lon = lonRaw / 1_000_000;
+    // Mendoza = hemisferio sur/oeste. El campo de statusFlag debería
+    // traer los bits de hemisferio según el estándar, pero no está
+    // confirmado en qué posición exacta para este firmware — igual
+    // que hicimos con el GT06, forzamos el signo conocido en vez de
+    // arriesgar una lectura mal interpretada del bit.
+    const lat = -(latRaw / 1_000_000);
+    const lon = -(lonRaw / 1_000_000);
 
     const altitude = body.readUInt16BE(16);
     const speedRaw = body.readUInt16BE(18);
@@ -166,25 +173,34 @@ function parseLocationReport(body) {
         offset += 2 + len;
     }
 
-    let mileageKm = null, fuelLiters = null;
+    let mileageKm = null, fuelLiters = null, gsmSignal = null, satellites = null;
     if (additional[ADDITIONAL_INFO.MILEAGE] && additional[ADDITIONAL_INFO.MILEAGE].length === 4) {
         mileageKm = additional[ADDITIONAL_INFO.MILEAGE].readUInt32BE(0) / 10;
     }
     if (additional[ADDITIONAL_INFO.FUEL] && additional[ADDITIONAL_INFO.FUEL].length === 2) {
         fuelLiters = additional[ADDITIONAL_INFO.FUEL].readUInt16BE(0) / 10;
     }
+    if (additional[ADDITIONAL_INFO.GSM_SIGNAL] && additional[ADDITIONAL_INFO.GSM_SIGNAL].length === 1) {
+        gsmSignal = additional[ADDITIONAL_INFO.GSM_SIGNAL][0];
+    }
+    if (additional[ADDITIONAL_INFO.GNSS_SATELLITES] && additional[ADDITIONAL_INFO.GNSS_SATELLITES].length === 1) {
+        satellites = additional[ADDITIONAL_INFO.GNSS_SATELLITES][0];
+    }
 
-    // Cualquier ID de información adicional que NO sea 0x01/0x02/0x03
-    // (mileage/fuel/speed-sensor, los únicos confirmados por spec) lo
-    // dejamos aparte para loguearlo crudo — ahí es donde probablemente
-    // viva el RPM si este equipo lo manda, con un ID propietario del
-    // fabricante que hay que confirmar contra un valor real.
-    const idsConocidos = [ADDITIONAL_INFO.MILEAGE, ADDITIONAL_INFO.FUEL, ADDITIONAL_INFO.SPEED_SENSOR];
+    // Cualquier ID de información adicional que NO sea uno de los ya
+    // confirmados por el estándar lo dejamos aparte para loguearlo
+    // crudo — ahí es donde probablemente viva el RPM/datos de motor,
+    // si este equipo los manda, con un ID propietario del fabricante
+    // que hay que confirmar contra un valor real.
+    const idsConocidos = [
+        ADDITIONAL_INFO.MILEAGE, ADDITIONAL_INFO.FUEL, ADDITIONAL_INFO.SPEED_SENSOR,
+        ADDITIONAL_INFO.GSM_SIGNAL, ADDITIONAL_INFO.GNSS_SATELLITES,
+    ];
     const sinIdentificar = Object.entries(additional)
         .filter(([id]) => !idsConocidos.includes(Number(id)))
         .map(([id, value]) => `ID=0x${Number(id).toString(16)} valor=${value.toString('hex')}`);
 
-    return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, sinIdentificar };
+    return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
 }
 
 // El "ID de terminal" de JT808 (6 bytes) es el IMEI real del equipo,
