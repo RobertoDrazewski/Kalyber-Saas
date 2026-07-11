@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,25 @@ function vehicleIcon(photoUrl, isMine) {
   });
 }
 
+// MySQL devuelve las columnas DECIMAL (lat/lng) como texto, no como
+// número — sin este parseo, Leaflet recibe un string y el marcador
+// no se dibuja, sin tirar ningún error visible en consola.
+function toNum(value) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Fuerza el recálculo del tamaño del mapa tras montarse (mismo fix
+// que ya usamos en TabPosicion para que ande bien en mobile).
+function MapResizer() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => map.invalidateSize(), 300);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
 export default function DriverView() {
   const [vehicles, setVehicles] = useState([]);
   const [loadError, setLoadError] = useState('');
@@ -39,6 +58,12 @@ export default function DriverView() {
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Vehículos con coordenadas VÁLIDAS y ya convertidas a número —
+  // esto es lo que realmente se le pasa al mapa.
+  const vehiclesWithCoords = vehicles
+    .map(v => ({ ...v, latNum: toNum(v.lat), lngNum: toNum(v.lng) }))
+    .filter(v => v.latNum !== null && v.lngNum !== null);
 
   const myVehicle = vehicles.find(v => v.current_driver_name === user.name);
 
@@ -66,7 +91,6 @@ export default function DriverView() {
 
   return (
     <div className="min-h-screen bg-[#0B1120] flex flex-col">
-      {/* Header simple */}
       <div className="bg-[#050B14] border-b border-slate-800 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-white font-bold">{user.name || 'Chofer'}</p>
@@ -84,23 +108,27 @@ export default function DriverView() {
         {selectError && (
           <div className="bg-red-500/10 border border-red-500/40 text-red-400 text-sm p-3 rounded-xl">{selectError}</div>
         )}
+        {vehicles.length > 0 && vehiclesWithCoords.length === 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/40 text-amber-400 text-sm p-3 rounded-xl">
+            Tenés {vehicles.length} auto(s) en tu flota, pero ninguno mandó posición GPS todavía.
+          </div>
+        )}
 
-        {/* Mapa */}
         <div className="flex-1 min-h-[280px] rounded-2xl overflow-hidden border border-slate-700">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
+            <MapResizer />
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
-            {vehicles.map(v => v.lat && v.lng && (
-              <Marker key={v.id} position={[v.lat, v.lng]} icon={vehicleIcon(v.photo_url, v.id === myVehicle?.id)}>
+            {vehiclesWithCoords.map(v => (
+              <Marker key={v.id} position={[v.latNum, v.lngNum]} icon={vehicleIcon(v.photo_url, v.id === myVehicle?.id)}>
                 <Popup><div className="text-black font-bold">{v.plate}</div></Popup>
               </Marker>
             ))}
           </MapContainer>
         </div>
 
-        {/* Selector de auto */}
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4">
           <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2"><Car size={16} /> Elegí tu auto</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
