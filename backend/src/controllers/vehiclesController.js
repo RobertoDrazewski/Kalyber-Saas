@@ -158,16 +158,24 @@ const assignDriverAsAdmin = async (req, res) => {
             return res.json({ message: 'Conductor desasignado del vehículo' });
         }
 
-        const [[driver]] = await pool.query('SELECT id, owner_id FROM Drivers WHERE id = ?', [driver_id]);
+        const [[driver]] = await pool.query('SELECT id, owner_id, user_id FROM Drivers WHERE id = ?', [driver_id]);
         if (!driver) return res.status(404).json({ error: 'Conductor no encontrado' });
 
         // La restricción de "misma flota" solo aplica a admins de flota
-        // regulares — un super_admin ve y gestiona todo, puede cruzar
-        // conductores y vehículos de distintos clientes si hace falta
-        // (útil para pruebas, o para reasignar antes de que un cliente
-        // tenga todo bien cargado de su lado).
+        // regulares — un super_admin ve y gestiona todo. Si un
+        // super_admin asigna un chofer de OTRA flota, lo "mudamos" a
+        // la flota del vehículo (en Drivers y en Users, que es lo que
+        // define qué ve ese chofer al loguearse) — si no, queda un
+        // estado inconsistente donde el auto tiene chofer asignado
+        // pero el chofer no lo ve en su propia vista.
         if (req.user.role !== 'super_admin' && driver.owner_id !== vehicle.owner_id) {
             return res.status(400).json({ error: 'Ese conductor no pertenece a la misma flota que el vehículo' });
+        }
+        if (driver.owner_id !== vehicle.owner_id) {
+            await pool.query('UPDATE Drivers SET owner_id = ? WHERE id = ?', [vehicle.owner_id, driver.id]);
+            if (driver.user_id) {
+                await pool.query('UPDATE Users SET owner_id = ? WHERE id = ?', [vehicle.owner_id, driver.user_id]);
+            }
         }
 
         await pool.query('UPDATE Vehicles SET current_driver_id = NULL WHERE current_driver_id = ?', [driver_id]);
