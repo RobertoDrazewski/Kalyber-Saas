@@ -12,22 +12,17 @@ const maintenanceRoutes = require('./src/routes/maintenanceRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
-const paymentRoutes = require('./src/routes/paymentRoutes'); // NUEVA RUTA MP
+const paymentRoutes = require('./src/routes/paymentRoutes');
 
 const app = express();
 
-// =========================================================
-// FIX: Configuración para el Rate Limit y el Proxy
-// =========================================================
-// Esto soluciona el error ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
-// al decirle a Express que confíe en el primer proxy (ej. Nginx)
+// Confía en el primer proxy (Railway) — necesario para el rate limit
 app.set('trust proxy', 1);
 
-// Configuración de CORS
 const corsOptions = {
     origin: [
         'https://kalyber.com.ar',
-        'https://www.kalyber.com.ar', 
+        'https://www.kalyber.com.ar',
         'http://localhost:5173',
         'http://localhost:3000'
     ],
@@ -37,10 +32,8 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Middlewares
 app.use(express.json({ limit: '5mb' }));
 
-// Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/vehicles', vehicleRoutes);
@@ -50,27 +43,18 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
-app.use('/api/contact', contactRoutes); 
-app.use('/api/payments', paymentRoutes); // NUEVO ENDPOINT MP
+app.use('/api/contact', contactRoutes);
+app.use('/api/payments', paymentRoutes);
 
-// Ruta de estado / Health check
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });
 });
 
-// Inicialización del servidor
 const PORT = process.env.PORT || 3001;
 
+// NOTA: el simulador de 6 autos de demo ya NO se inicializa acá.
+// Todo el sistema corre solo con datos reales — GPS real (servicio
+// aparte, ver gt06Server.js) y ML sobre esos datos reales.
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API de Kyber corriendo en el puerto ${PORT}`);
-
-    // El servidor TCP de los trackers (GT06) corre en un servicio de
-    // Railway APARTE (ver gt06-standalone.js) — no acá, para no pisar
-    // este puerto HTTP con el puerto del TCP Proxy.
-
-    // Inicialización del simulador
-    if (process.env.SIMULATOR_ENABLED !== 'false') {
-        const simulator = require('./src/services/simulator');
-        simulator.start().catch(err => console.error('❌ Error iniciando simulador:', err.message));
-    }
 });

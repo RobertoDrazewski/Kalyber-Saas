@@ -11,13 +11,11 @@ const getVehicles = async (req, res) => {
             LEFT JOIN Devices dev ON v.device_id = dev.id
         `;
         const params = [];
-        // El simulador (source='simulated') siempre se ve, es la demo
-        // compartida — el resto se filtra por dueño de flota.
         if (ownerId) {
-            query += ` WHERE (v.owner_id = ? OR v.source = 'simulated')`;
+            query += ` WHERE v.owner_id = ?`;
             params.push(ownerId);
         }
-        query += ` ORDER BY v.source ASC, v.plate ASC`;
+        query += ` ORDER BY v.plate ASC`;
         const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
@@ -37,7 +35,11 @@ const addVehicle = async (req, res) => {
             const [[device]] = await connection.query('SELECT id, vehicle_id, owner_id FROM Devices WHERE imei = ?', [device_imei]);
             if (!device) {
                 await connection.rollback();
-                return res.status(400).json({ error: 'Ese ID de equipo no existe. Dalo de alta primero en Equipos.' });
+                return res.status(400).json({ error: 'Ese ID de equipo no existe. Revisá que esté bien escrito, o consultá a Kalyber.' });
+            }
+            if (device.owner_id && device.owner_id !== ownerId) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'Ese equipo ya pertenece a otra flota.' });
             }
             if (device.vehicle_id) {
                 await connection.rollback();
@@ -53,7 +55,7 @@ const addVehicle = async (req, res) => {
         );
 
         if (deviceId) {
-            await connection.query(`UPDATE Devices SET vehicle_id = ?, status = 'paired' WHERE id = ?`, [result.insertId, deviceId]);
+            await connection.query(`UPDATE Devices SET vehicle_id = ?, status = 'paired', owner_id = ? WHERE id = ?`, [result.insertId, ownerId, deviceId]);
         }
 
         await connection.commit();
@@ -76,7 +78,7 @@ const updateVehicle = async (req, res) => {
         const ownerId = effectiveOwnerId(req);
         if (ownerId) {
             const [[vehicle]] = await pool.query('SELECT owner_id FROM Vehicles WHERE id = ?', [id]);
-            if (!vehicle || (vehicle.owner_id !== ownerId && vehicle.owner_id !== null)) {
+            if (!vehicle || vehicle.owner_id !== ownerId) {
                 return res.status(403).json({ error: 'No tenés permiso sobre este vehículo' });
             }
         }
@@ -110,9 +112,7 @@ const deleteVehicle = async (req, res) => {
     }
 };
 
-// Endpoint para el chofer: elegir qué auto va a manejar ahora. Como
-// "cualquier chofer puede manejar cualquier auto", esto solo mueve
-// el puntero current_driver_id — no hay una asignación fija.
+// El chofer elige su propio auto (autoservicio) — ya existía.
 const selectVehicleAsDriver = async (req, res) => {
     const { vehicle_id } = req.body;
     if (req.user.role !== 'driver') {
@@ -122,12 +122,11 @@ const selectVehicleAsDriver = async (req, res) => {
         const [[driver]] = await pool.query('SELECT id FROM Drivers WHERE user_id = ?', [req.user.id]);
         if (!driver) return res.status(404).json({ error: 'No se encontró tu perfil de conductor' });
 
-        const [[vehicle]] = await pool.query('SELECT id, owner_id, source FROM Vehicles WHERE id = ?', [vehicle_id]);
-        if (!vehicle || (vehicle.owner_id !== req.user.owner_id && vehicle.source !== 'simulated')) {
+        const [[vehicle]] = await pool.query('SELECT id, owner_id FROM Vehicles WHERE id = ?', [vehicle_id]);
+        if (!vehicle || vehicle.owner_id !== req.user.owner_id) {
             return res.status(403).json({ error: 'Ese vehículo no pertenece a tu flota' });
         }
 
-        // Libera al chofer de cualquier auto anterior (un chofer maneja un auto a la vez)
         await pool.query('UPDATE Vehicles SET current_driver_id = NULL WHERE current_driver_id = ?', [driver.id]);
         await pool.query('UPDATE Vehicles SET current_driver_id = ? WHERE id = ?', [driver.id, vehicle_id]);
 
@@ -137,4 +136,42 @@ const selectVehicleAsDriver = async (req, res) => {
     }
 };
 
-module.exports = { getVehicles, addVehicle, updateVehicle, deleteVehicle, selectVehicleAsDriver };
+// NUEVO: el admin/super_admin vincula (o desvincula) un chofer a un
+// vehículo directamente, sin depender de que el chofer lo elija él
+// mismo. Igual que con el autoservicio, un chofer maneja un auto a
+// la vez — si ya estaba en otro, se lo saca de ahí antes.
+const assignDriverAsAdmin = async (req, res) => {
+    const { id } = req.params; // id del vehículo
+    const { driver_id } = req.body; // null o ausente para desasignar
+
+    try {
+        const [[vehicle]] = await pool.query('SELECT id, owner_id FROM Vehicles WHERE id = ?', [id]);
+        if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
+
+        const ownerId = effectiveOwnerId(req);
+        if (ownerId && vehicle.owner_id !== ownerId) {
+            return res.status(403).json({ error: 'Ese vehículo no pertenece a tu flota' });
+        }
+
+        if (!driver_id) {
+            await pool.query('UPDATE Vehicles SET current_driver_id = NULL WHERE id = ?', [id]);
+            return res.json({ message: 'Conductor desasignado del vehículo' });
+        }
+
+        const [[driver]] = await pool.query('SELECT id, owner_id FROM Drivers WHERE id = ?', [driver_id]);
+        if (!driver) return res.status(404).json({ error: 'Conductor no encontrado' });
+
+        if (driver.owner_id !== vehicle.owner_id) {
+            return res.status(400).json({ error: 'Ese conductor no pertenece a la misma flota que el vehículo' });
+        }
+
+        await pool.query('UPDATE Vehicles SET current_driver_id = NULL WHERE current_driver_id = ?', [driver_id]);
+        await pool.query('UPDATE Vehicles SET current_driver_id = ? WHERE id = ?', [driver_id, id]);
+
+        res.json({ message: 'Conductor asignado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error asignando el conductor' });
+    }
+};
+
+module.exports = { getVehicles, addVehicle, updateVehicle, deleteVehicle, selectVehicleAsDriver, assignDriverAsAdmin };
