@@ -31,6 +31,16 @@ function toNum(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function FlyToVehicle({ vehicle }) {
+  const map = useMap();
+  useEffect(() => {
+    if (vehicle && vehicle.latNum !== null && vehicle.lngNum !== null) {
+      map.flyTo([vehicle.latNum, vehicle.lngNum], 15, { duration: 0.8 });
+    }
+  }, [vehicle, map]);
+  return null;
+}
+
 // Fuerza el recálculo del tamaño del mapa tras montarse (mismo fix
 // que ya usamos en TabPosicion para que ande bien en mobile).
 function MapResizer() {
@@ -65,7 +75,7 @@ export default function DriverView() {
     .map(v => ({ ...v, latNum: toNum(v.lat), lngNum: toNum(v.lng) }))
     .filter(v => v.latNum !== null && v.lngNum !== null);
 
-  const myVehicle = vehicles.find(v => v.current_driver_name === user.name);
+  const myVehicle = vehiclesWithCoords.find(v => v.current_driver_name === user.name);
 
   const handleSelect = async (vehicleId) => {
     setSelecting(true);
@@ -114,16 +124,22 @@ export default function DriverView() {
           </div>
         )}
 
-        <div className="flex-1 min-h-[280px] rounded-2xl overflow-hidden border border-slate-700">
+        <div className="w-full bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
             <TileLayer
               url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
+            {myVehicle && <FlyToVehicle vehicle={myVehicle} />}
             {vehiclesWithCoords.map(v => (
               <Marker key={v.id} position={[v.latNum, v.lngNum]} icon={vehicleIcon(v.photo_url, v.id === myVehicle?.id)}>
-                <Popup><div className="text-black font-bold">{v.plate}</div></Popup>
+                <Popup>
+                  <div className="text-black">
+                    <p className="font-bold">{v.plate}</p>
+                    <p>{v.brand} {v.model}</p>
+                  </div>
+                </Popup>
               </Marker>
             ))}
           </MapContainer>
