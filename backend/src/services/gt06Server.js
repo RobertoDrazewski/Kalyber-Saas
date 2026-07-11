@@ -229,10 +229,34 @@ function startGt06Server() {
                             if (loc.sinIdentificar.length) {
                                 console.log(`[JT808] Info adicional sin identificar: ${loc.sinIdentificar.join(' | ')}`);
                             }
-                            // OJO: todavía no conectado a telemetryIngestReal
-                            // a propósito — el ID de terminal JT808 no es
-                            // directamente el IMEI de 15 dígitos, hay que
-                            // confirmar la relación antes de guardarlo.
+
+                            // El ID de terminal = IMEI real sin el último dígito
+                            // (confirmado). Buscamos el equipo con LIKE para no
+                            // tener que reconstruir el dígito verificador, pero
+                            // le pasamos a ingestReading el IMEI REAL completo
+                            // que encontramos en la base (no el prefijo), para
+                            // no tocar la firma de esa función.
+                            const imeiPrefix = jt808.terminalIdToImeiPrefix(header.terminalId);
+                            const [[device]] = await pool.query(
+                                `SELECT imei, vehicle_id FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
+                                [`${imeiPrefix}%`]
+                            );
+                            if (!device) {
+                                console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefix}`);
+                            } else {
+                                await telemetryIngestReal.ingestReading(device.imei, {
+                                    lat: loc.lat,
+                                    lng: loc.lon,
+                                    speed_kmh: loc.speedKmh,
+                                    heading: loc.direction,
+                                    engine_rpm: null,
+                                    engine_load: null,
+                                    coolant_temp: null,
+                                    battery_voltage: null,
+                                    harsh_brake: false,
+                                    dtc_codes: loc.sinIdentificar.length ? `JT808_TLV:${loc.sinIdentificar.join('|')}` : null,
+                                });
+                            }
                         }
                     } else {
                         console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);

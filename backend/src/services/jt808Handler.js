@@ -187,6 +187,22 @@ function parseLocationReport(body) {
     return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, sinIdentificar };
 }
 
+// El "ID de terminal" de JT808 (6 bytes) es el IMEI real del equipo,
+// pero codificado como número puro (no texto) y SIN el último dígito
+// (el IMEI completo de 15 dígitos no entra en 6 bytes = 48 bits, pero
+// sin el dígito verificador sí entra). Confirmado contra el IMEI real
+// impreso en la etiqueta del VL502 (868935060187604).
+//
+// OJO: el dígito verificador del IMEI (el último) se calcula con el
+// algoritmo de Luhn — technically se podría reconstruir, pero como
+// nunca lo vamos a necesitar para nada (alcanza con los primeros 14
+// dígitos para buscar el equipo en la base de forma inequívoca),
+// hacemos el match completando con LIKE en vez de intentar adivinar
+// el dígito que falta.
+function terminalIdToImeiPrefix(terminalIdBuffer) {
+    return terminalIdBuffer.readUIntBE(0, 6).toString();
+}
+
 module.exports = {
     MSG_ID,
     extractJT808Frame,
@@ -194,4 +210,5 @@ module.exports = {
     buildRegisterResponse,
     buildGeneralResponse,
     parseLocationReport,
+    terminalIdToImeiPrefix,
 };
