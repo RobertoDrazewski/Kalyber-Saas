@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
@@ -9,14 +9,21 @@ import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
-// Ícono circular con la foto del auto en vez del pin genérico de Leaflet.
-function vehicleIcon(photoUrl, isSimulated) {
+// MySQL devuelve las columnas DECIMAL (lat/lng) como texto — sin
+// convertir a número, Leaflet no dibuja bien ni el marcador ni la
+// polilínea, y el mapa "salta" en vez de mostrar un trazo continuo.
+function toNum(value) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function vehicleIcon(photoUrl) {
   return L.divIcon({
     className: '',
     html: `
       <div style="
         width:44px;height:44px;border-radius:9999px;
-        border:3px solid ${isSimulated ? '#F59E0B' : '#10B981'};
+        border:3px solid #10B981;
         box-shadow:0 0 12px rgba(0,0,0,0.5);
         background:#0B1120 url('${photoUrl || FALLBACK_PHOTO}') center/cover no-repeat;
       "></div>`,
@@ -29,20 +36,17 @@ function vehicleIcon(photoUrl, isSimulated) {
 function FlyToVehicle({ vehicle }) {
   const map = useMap();
   useEffect(() => {
-    if (vehicle && vehicle.lat && vehicle.lng) {
-      map.flyTo([vehicle.lat, vehicle.lng], 15, { duration: 0.8 });
+    if (vehicle && vehicle.latNum !== null && vehicle.lngNum !== null) {
+      map.flyTo([vehicle.latNum, vehicle.lngNum], 15, { duration: 0.8 });
     }
   }, [vehicle, map]);
   return null;
 }
 
-// NUEVO COMPONENTE: Fuerza el recálculo del mapa tras el montaje en el DOM móvil
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 300);
+    const timer = setTimeout(() => map.invalidateSize(), 300);
     return () => clearTimeout(timer);
   }, [map]);
   return null;
@@ -56,16 +60,40 @@ export default function TabPosicion() {
 
   const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
+  // Refresco de posición cada 5s (antes 10s) — con la trayectoria
+  // dibujándose de verdad, un refresco más ágil se nota mucho más.
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10000); // refresco cada 10s
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
+  const loadSeries = () => {
     if (!selected) return;
-    fetchAPI(`/telemetry/vehicle/${selected.id}?limit=30`).then(setSeries).catch(console.error);
+    fetchAPI(`/telemetry/vehicle/${selected.id}?limit=120`).then(setSeries).catch(console.error);
+  };
+
+  useEffect(() => {
+    loadSeries();
+    if (!selected) return;
+    // El trazo se sigue extendiendo solo mientras el auto seleccionado
+    // siga mandando posiciones nuevas, sin tener que volver a elegirlo.
+    const interval = setInterval(loadSeries, 5000);
+    return () => clearInterval(interval);
   }, [selected]);
+
+  const vehiclesWithCoords = vehicles
+    .map(v => ({ ...v, latNum: toNum(v.lat), lngNum: toNum(v.lng) }))
+    .filter(v => v.latNum !== null && v.lngNum !== null);
+
+  const selectedVehicleCoord = vehiclesWithCoords.find(v => v.id === selected?.id);
+
+  // Trazo de la trayectoria: solo los puntos de la serie que tienen
+  // coordenadas reales, convertidas a número, en orden cronológico.
+  const trail = series
+    .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng) }))
+    .filter(p => p.lat !== null && p.lng !== null)
+    .map(p => [p.lat, p.lng]);
 
   return (
     <div className="space-y-6">
@@ -86,7 +114,7 @@ export default function TabPosicion() {
               <img src={v.photo_url || FALLBACK_PHOTO} className="w-10 h-10 rounded-full object-cover border border-slate-700" />
               <div>
                 <p className="font-mono text-sm text-white font-bold">{v.plate}</p>
-                <p className="text-[11px] text-slate-400">{v.source === 'simulated' ? 'Demo' : 'Real'} · {v.brand}</p>
+                <p className="text-[11px] text-slate-400">{v.brand}</p>
               </div>
             </button>
           ))}
@@ -94,7 +122,6 @@ export default function TabPosicion() {
         </div>
 
         {/* Mapa */}
-        {/* CORRECCIÓN: Se cambió flex-1 por w-full md:flex-1 y se agregó z-0 */}
         <div className="w-full md:flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
@@ -102,19 +129,24 @@ export default function TabPosicion() {
               url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
-            {selected && <FlyToVehicle vehicle={selected} />}
-            {vehicles.map(v => v.lat && v.lng && (
+            {selected && <FlyToVehicle vehicle={selectedVehicleCoord} />}
+
+            {/* Trazo de la trayectoria del auto seleccionado */}
+            {selected && trail.length > 1 && (
+              <Polyline positions={trail} pathOptions={{ color: '#6366F1', weight: 4, opacity: 0.8 }} />
+            )}
+
+            {vehiclesWithCoords.map(v => (
               <Marker
                 key={v.id}
-                position={[v.lat, v.lng]}
-                icon={vehicleIcon(v.photo_url, v.source === 'simulated')}
+                position={[v.latNum, v.lngNum]}
+                icon={vehicleIcon(v.photo_url)}
                 eventHandlers={{ click: () => setSelected(v) }}
               >
                 <Popup>
                   <div className="text-black">
                     <p className="font-bold">{v.plate}</p>
                     <p>{v.brand} {v.model}</p>
-                    <p className="text-xs text-slate-500">{v.source === 'simulated' ? 'Auto de demo' : 'Auto real'}</p>
                   </div>
                 </Popup>
               </Marker>

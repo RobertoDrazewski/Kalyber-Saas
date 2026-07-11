@@ -18,14 +18,15 @@ const getLiveTelemetry = async (req, res) => {
     }
 };
 
-// Serie histórica de un vehículo puntual, para graficar en el mapa
-// y en la tab de telemetría (RPM/velocidad/carga en el tiempo).
+// Serie histórica de un vehículo puntual — se usa para el gráfico de
+// RPM/velocidad Y para dibujar la trayectoria en el mapa (por eso
+// suma lat/lng/heading, que antes no traía).
 const getVehicleSeries = async (req, res) => {
     const { id } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 40, 200);
     try {
         const [rows] = await pool.query(
-            `SELECT recorded_at, speed_kmh, engine_rpm, engine_load, coolant_temp, battery_voltage
+            `SELECT recorded_at, speed_kmh, engine_rpm, engine_load, coolant_temp, battery_voltage, lat, lng, heading
              FROM Telemetry_Raw WHERE vehicle_id = ? ORDER BY recorded_at DESC LIMIT ?`,
             [id, limit]
         );

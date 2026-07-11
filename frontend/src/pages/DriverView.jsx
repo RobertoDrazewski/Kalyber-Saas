@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
@@ -54,6 +54,7 @@ function MapResizer() {
 
 export default function DriverView() {
   const [vehicles, setVehicles] = useState([]);
+  const [trail, setTrail] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [selecting, setSelecting] = useState(false);
   const [selectError, setSelectError] = useState('');
@@ -65,7 +66,7 @@ export default function DriverView() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10000);
+    const interval = setInterval(load, 5000); // antes 10s
     return () => clearInterval(interval);
   }, []);
 
@@ -76,6 +77,28 @@ export default function DriverView() {
     .filter(v => v.latNum !== null && v.lngNum !== null);
 
   const myVehicle = vehiclesWithCoords.find(v => v.current_driver_name === user.name);
+
+  // Trazo de la trayectoria del propio auto — se sigue extendiendo
+  // solo mientras el equipo siga mandando posiciones.
+  const loadTrail = () => {
+    if (!myVehicle) return;
+    fetchAPI(`/telemetry/vehicle/${myVehicle.id}?limit=120`)
+      .then(rows => {
+        const points = rows
+          .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng) }))
+          .filter(p => p.lat !== null && p.lng !== null)
+          .map(p => [p.lat, p.lng]);
+        setTrail(points);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadTrail();
+    if (!myVehicle) return;
+    const interval = setInterval(loadTrail, 5000);
+    return () => clearInterval(interval);
+  }, [myVehicle?.id]);
 
   const handleSelect = async (vehicleId) => {
     setSelecting(true);
@@ -132,6 +155,9 @@ export default function DriverView() {
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
             {myVehicle && <FlyToVehicle vehicle={myVehicle} />}
+            {trail.length > 1 && (
+              <Polyline positions={trail} pathOptions={{ color: '#10B981', weight: 4, opacity: 0.8 }} />
+            )}
             {vehiclesWithCoords.map(v => (
               <Marker key={v.id} position={[v.latNum, v.lngNum]} icon={vehicleIcon(v.photo_url, v.id === myVehicle?.id)}>
                 <Popup>

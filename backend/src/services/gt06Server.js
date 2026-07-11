@@ -51,7 +51,7 @@ const PROTOCOL = {
     STATUS_HEARTBEAT: 0x13,
     GPS_LOCATION_ALT: 0x22,
     ALARM: 0x16,
-    GPS_COMBO_OBD: 0x37,   // combinado GPS+OBD, confirmado 10/07/2026
+    GPS_LBS_EXTENDED: 0x37, // = MSG_GPS_LBS_3 en la nomenclatura de Traccar: GPS + antena celular, SIN datos de motor
     GPS_COMBO_LIGHT: 0x26, // versión liviana del mismo bloque de posición, más frecuente
 };
 
@@ -191,11 +191,20 @@ function startGt06Server() {
                     } else if (protocolNumber === PROTOCOL.STATUS_HEARTBEAT) {
                         socket.write(buildAck(protocolNumber, serial));
                         
-                        // Extraemos el bit de ACC del primer byte del Heartbeat
+                        // Extraemos el bit de ACC del primer byte del Heartbeat.
+                        // OJO: revisando fuentes externas (Traccar, la plataforma
+                        // open source), encontré que esto NO está 100% estandarizado
+                        // entre variantes de firmware — hay documentación real que
+                        // dice que es el bit 1, y otra que dice que es el bit 7. Por
+                        // eso logueamos el byte crudo en hex al lado de la
+                        // interpretación: comparando estos logs contra encendidas/
+                        // apagadas reales del motor, confirmamos cuál es la correcta
+                        // para ESTE equipo puntual, en vez de asumir.
                         if (content.length >= 1 && currentImei) {
                             const terminalInfo = content[0];
-                            const accOn = ((terminalInfo & 0x02) >> 1) === 1;
-                            console.log(`[GT06] Heartbeat IMEI=${currentImei} - Estado de Motor (ACC): ${accOn ? 'ENCENDIDO' : 'APAGADO'}`);
+                            const accBit1 = ((terminalInfo & 0x02) >> 1) === 1;
+                            const accBit7 = ((terminalInfo & 0x80) >> 7) === 1;
+                            console.log(`[GT06] Heartbeat IMEI=${currentImei} - byte crudo=0x${terminalInfo.toString(16).padStart(2, '0')} - hipótesis bit1(ACC)=${accBit1 ? 'ENCENDIDO' : 'APAGADO'} - hipótesis bit7=${accBit7 ? 'ENCENDIDO' : 'APAGADO'}`);
                         }
                     } else if (protocolNumber === PROTOCOL.GPS_LOCATION || protocolNumber === PROTOCOL.GPS_LOCATION_ALT) {
                         socket.write(buildAck(protocolNumber, serial));
@@ -225,9 +234,13 @@ function startGt06Server() {
                         });
                         console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
                         
-                    } else if (protocolNumber === PROTOCOL.GPS_COMBO_OBD) {
-                        // --- PAQUETE COMBINADO GPS + OBD (confirmado contra bytes
-                        // reales del VL502 el 10/07/2026) ---
+                    } else if (protocolNumber === PROTOCOL.GPS_LBS_EXTENDED) {
+                        // --- GPS + LBS extendido (0x37 = MSG_GPS_LBS_3 en Traccar).
+                        // Confirmado con fuente externa (decoder open-source de Traccar,
+                        // usado en producción por miles de instalaciones reales): este
+                        // protocolo NO es un paquete de motor/OBD — es GPS combinado con
+                        // datos de la antena celular (torre, señal). Nunca iba a traer
+                        // RPM/temperatura/combustible, por eso nunca los encontramos. ---
                         socket.write(buildAck(protocolNumber, serial));
 
                         if (!currentImei) {
