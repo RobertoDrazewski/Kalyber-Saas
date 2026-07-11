@@ -44,6 +44,7 @@ const PORT = process.env.GT06_TCP_PORT || 9000;
 
 const START = Buffer.from([0x78, 0x78]);
 const STOP = Buffer.from([0x0D, 0x0A]);
+const START_LONG = Buffer.from([0x79, 0x79]); // formato "trama larga" — length de 2 bytes en vez de 1
 
 const PROTOCOL = {
     LOGIN: 0x01,
@@ -121,6 +122,33 @@ function extractFrame(buf) {
     return { frame: buf.slice(startIdx, frameEnd), rest: buf.slice(frameEnd) };
 }
 
+// Trama LARGA (0x7979) — mismo esquema pero con 2 bytes de longitud
+// en vez de 1. Es donde viaja, entre otras cosas, la configuración
+// de geocercas en texto legible (protocolo 0x94).
+function extractLongFrame(buf) {
+    const startIdx = buf.indexOf(START_LONG);
+    if (startIdx === -1) return null;
+    if (buf.length < startIdx + 5) return null;
+
+    const length = buf.readUInt16BE(startIdx + 2);
+    const frameEnd = startIdx + 4 + length + 2; // start(2) + lenBytes(2) + length + stop(2)
+    if (buf.length < frameEnd) return null;
+
+    return { frame: buf.slice(startIdx, frameEnd), rest: buf.slice(frameEnd), isLong: true };
+}
+
+// Busca el frame (corto o largo) que empiece más cerca del principio
+// del buffer, para no perderse ninguno cuando vienen mezclados.
+function extractAnyFrame(buf) {
+    const shortIdx = buf.indexOf(START);
+    const longIdx = buf.indexOf(START_LONG);
+    if (shortIdx === -1 && longIdx === -1) return null;
+    if (longIdx === -1 || (shortIdx !== -1 && shortIdx <= longIdx)) {
+        return extractFrame(buf);
+    }
+    return extractLongFrame(buf);
+}
+
 // Parseo del paquete de posición GPS estándar GT06 (protocolo 0x12/0x22).
 // OJO: el signo de latitud/longitud (norte/sur, este/oeste) depende de
 // bits del campo "course/status" cuya posición exacta varía un poco
@@ -174,9 +202,24 @@ function startGt06Server() {
             console.log(`[GT06] Datos crudos recibidos de ${remote} (${data.length} bytes): ${data.toString('hex')}`);
 
             let result;
-            while ((result = extractFrame(buffer)) !== null) {
-                const { frame, rest } = result;
+            while ((result = extractAnyFrame(buffer)) !== null) {
+                const { frame, rest, isLong } = result;
                 buffer = rest;
+
+                if (isLong) {
+                    // Trama larga (0x7979) — length de 2 bytes, protocolo en
+                    // offset 4, contenido desde offset 5. Acá viaja, entre
+                    // otras cosas, la config de geocercas en texto (0x94).
+                    // No le mandamos ACK: el equipo sigue funcionando bien
+                    // sin uno, y no está confirmado el formato de ACK para
+                    // este tipo de trama — mejor no inventarlo.
+                    const longLength = frame.readUInt16BE(2);
+                    const longProtocol = frame[4];
+                    const longContent = frame.slice(5, longLength);
+                    const asAscii = longContent.toString('ascii').replace(/[^\x20-\x7E]/g, '.');
+                    console.log(`[GT06] Trama larga IMEI=${currentImei || '?'} protocolo=0x${longProtocol.toString(16)} contenido_hex=${longContent.toString('hex')} contenido_ascii=${asAscii}`);
+                    continue;
+                }
 
                 const length = frame[2];
                 const protocolNumber = frame[3];
