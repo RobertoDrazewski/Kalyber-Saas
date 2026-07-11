@@ -70,19 +70,19 @@ export default function TabTelemetria() {
           >
             <div className="flex justify-between items-center mb-2">
               <span className="font-mono text-[#10B981] font-bold">{t.plate}</span>
-              <span className="text-[11px] text-slate-500">{t.vehicle_source === 'simulated' ? 'Demo' : 'Real'}</span>
+              <span className="text-[11px] text-slate-500">Real</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-white font-bold text-sm">{t.engine_rpm}</p>
+                <p className="text-white font-bold text-sm">{t.engine_rpm ?? '—'}</p>
                 <p className="text-[11px] text-slate-500">RPM</p>
               </div>
               <div>
-                <p className="text-white font-bold text-sm">{t.speed_kmh}</p>
+                <p className="text-white font-bold text-sm">{t.speed_kmh ?? '—'}</p>
                 <p className="text-[11px] text-slate-500">km/h</p>
               </div>
               <div>
-                <p className="text-white font-bold text-sm">{t.engine_load}%</p>
+                <p className="text-white font-bold text-sm">{t.engine_load != null ? `${t.engine_load}%` : '—'}</p>
                 <p className="text-[11px] text-slate-500">Carga</p>
               </div>
             </div>
@@ -107,10 +107,10 @@ export default function TabTelemetria() {
             {data.map(t => (
               <tr key={t.vehicle_id} onClick={() => setSelectedId(t.vehicle_id)} className={`hover:bg-[#1E293B] transition-colors cursor-pointer ${selectedId === t.vehicle_id ? 'bg-[#1E293B]' : ''}`}>
                 <td className="px-6 py-4 font-mono text-[#10B981]">{t.plate}</td>
-                <td className="px-6 py-4">{t.engine_rpm} RPM</td>
-                <td className="px-6 py-4">{t.speed_kmh} km/h</td>
-                <td className="px-6 py-4">{t.engine_load}%</td>
-                <td className="px-6 py-4 text-xs">{t.vehicle_source === 'simulated' ? 'Demo' : 'Real'}</td>
+                <td className="px-6 py-4">{t.engine_rpm != null ? `${t.engine_rpm} RPM` : <span className="text-slate-600">Sin dato (equipo Básico)</span>}</td>
+                <td className="px-6 py-4">{t.speed_kmh ?? 0} km/h</td>
+                <td className="px-6 py-4">{t.engine_load != null ? `${t.engine_load}%` : <span className="text-slate-600">—</span>}</td>
+                <td className="px-6 py-4 text-xs">Real</td>
               </tr>
             ))}
           </tbody>

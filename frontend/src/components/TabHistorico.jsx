@@ -43,7 +43,7 @@ export default function TabHistorico() {
                 </div>
                 <div>
                   <p className="font-mono text-white font-bold">{log.plate}</p>
-                  <p className="text-xs text-slate-400">{log.driver_name || 'Piloto Automático / IA'}</p>
+                  <p className="text-xs text-slate-400">{log.driver_name || 'Sin conductor asignado'}</p>
                 </div>
               </div>
 
