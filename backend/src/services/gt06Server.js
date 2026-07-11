@@ -39,6 +39,7 @@
 const net = require('net');
 const pool = require('../config/database');
 const telemetryIngestReal = require('./telemetryIngestReal');
+const jt808 = require('./jt808Handler');
 
 const PORT = process.env.GT06_TCP_PORT || 9000;
 
@@ -200,6 +201,46 @@ function startGt06Server() {
         socket.on('data', async (data) => {
             buffer = Buffer.concat([buffer, data]);
             console.log(`[GT06] Datos crudos recibidos de ${remote} (${data.length} bytes): ${data.toString('hex')}`);
+
+            // ---- JT808 (equipos VL502/"Avanzado") — protocolo distinto,
+            // delimitado por 0x7e en vez de 0x7878/0x7979. Se procesa
+            // aparte, antes del loop de GT06 existente.
+            let jt808Result;
+            while ((jt808Result = jt808.extractJT808Frame(buffer)) !== null) {
+                buffer = jt808Result.rest;
+                try {
+                    const header = jt808.parseHeader(jt808Result.unescaped);
+                    const terminalIdHex = header.terminalId.toString('hex');
+
+                    if (header.msgId === jt808.MSG_ID.TERMINAL_REGISTER) {
+                        console.log(`[JT808] Registro de terminal, ID crudo=${terminalIdHex} desde ${remote}`);
+                        socket.write(jt808.buildRegisterResponse(header.terminalId, 1, header.serialNo));
+                        console.log(`[JT808] Respondido 0x8100 (registro OK)`);
+
+                    } else if (header.msgId === jt808.MSG_ID.TERMINAL_AUTH || header.msgId === jt808.MSG_ID.TERMINAL_HEARTBEAT) {
+                        socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
+                        console.log(`[JT808] ${header.msgId === jt808.MSG_ID.TERMINAL_AUTH ? 'Autenticación' : 'Heartbeat'} confirmado, ID=${terminalIdHex}`);
+
+                    } else if (header.msgId === jt808.MSG_ID.LOCATION_REPORT) {
+                        socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
+                        const loc = jt808.parseLocationReport(header.body);
+                        if (loc) {
+                            console.log(`[JT808] Posición ID=${terminalIdHex} lat=${loc.lat} lon=${loc.lon} v=${loc.speedKmh}km/h rumbo=${loc.direction}° ACC=${loc.accOn ? 'ON' : 'OFF'} km=${loc.mileageKm} combustible=${loc.fuelLiters}L`);
+                            if (loc.sinIdentificar.length) {
+                                console.log(`[JT808] Info adicional sin identificar: ${loc.sinIdentificar.join(' | ')}`);
+                            }
+                            // OJO: todavía no conectado a telemetryIngestReal
+                            // a propósito — el ID de terminal JT808 no es
+                            // directamente el IMEI de 15 dígitos, hay que
+                            // confirmar la relación antes de guardarlo.
+                        }
+                    } else {
+                        console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);
+                    }
+                } catch (err) {
+                    console.error('[JT808] Error procesando trama:', err.message);
+                }
+            }
 
             let result;
             while ((result = extractAnyFrame(buffer)) !== null) {
