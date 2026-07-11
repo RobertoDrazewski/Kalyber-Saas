@@ -13,6 +13,7 @@ const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const paymentRoutes = require('./src/routes/paymentRoutes');
+const fuelRoutes = require('./src/routes/fuelRoutes');
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/quote-chat', quoteChatRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/fuel', fuelRoutes);
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });

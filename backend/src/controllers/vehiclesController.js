@@ -24,7 +24,7 @@ const getVehicles = async (req, res) => {
 };
 
 const addVehicle = async (req, res) => {
-    const { plate, brand, model, year, photo_url, device_imei } = req.body;
+    const { plate, brand, model, year, photo_url, device_imei, odometer_km } = req.body;
     const ownerId = req.user.role === 'super_admin' ? (req.body.owner_id || req.user.id) : req.user.id;
     const connection = await pool.getConnection();
     try {
@@ -49,9 +49,9 @@ const addVehicle = async (req, res) => {
         }
 
         const [result] = await connection.query(
-            `INSERT INTO Vehicles (plate, brand, model, year, photo_url, device_id, status, source, owner_id)
-             VALUES (?, ?, ?, ?, ?, ?, 'active', 'real', ?)`,
-            [plate, brand, model, year || null, photo_url || null, deviceId, ownerId]
+            `INSERT INTO Vehicles (plate, brand, model, year, photo_url, device_id, status, source, owner_id, odometer_km)
+             VALUES (?, ?, ?, ?, ?, ?, 'active', 'real', ?, ?)`,
+            [plate, brand, model, year || null, photo_url || null, deviceId, ownerId, odometer_km || 0]
         );
 
         if (deviceId) {
@@ -73,7 +73,7 @@ const addVehicle = async (req, res) => {
 
 const updateVehicle = async (req, res) => {
     const { id } = req.params;
-    const { brand, model, year, photo_url, status } = req.body;
+    const { brand, model, year, photo_url, status, odometer_km } = req.body;
     try {
         const ownerId = effectiveOwnerId(req);
         if (ownerId) {
@@ -84,9 +84,10 @@ const updateVehicle = async (req, res) => {
         }
         await pool.query(
             `UPDATE Vehicles SET brand = COALESCE(?, brand), model = COALESCE(?, model),
-             year = COALESCE(?, year), photo_url = COALESCE(?, photo_url), status = COALESCE(?, status)
+             year = COALESCE(?, year), photo_url = COALESCE(?, photo_url), status = COALESCE(?, status),
+             odometer_km = COALESCE(?, odometer_km)
              WHERE id = ?`,
-            [brand, model, year, photo_url, status, id]
+            [brand, model, year, photo_url, status, odometer_km, id]
         );
         res.json({ message: 'Vehículo actualizado' });
     } catch (error) {

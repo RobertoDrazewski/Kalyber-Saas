@@ -53,6 +53,17 @@
 const pool = require('../config/database');
 const mlService = require('./mlService');
 
+// Distancia entre dos coordenadas (fórmula haversine), en km.
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 /**
  * Punto de entrada único para telemetría real ya parseada.
  * @param {string} imei - IMEI del equipo (JM-VL04 o JM-VL502)
@@ -78,9 +89,38 @@ async function ingestReading(imei, reading) {
     // Protección crítica: Solo actualizar lat/lng en la tabla Vehicles si el paquete trae coordenadas.
     // Evita que los paquetes OBD (0x37) borren la última posición conocida del vehículo poniéndola en NULL.
     if (reading.lat !== null && reading.lng !== null && reading.lat !== undefined && reading.lng !== undefined) {
+        // Incremento automático del odómetro por distancia GPS real.
+        // Guardas para no ensuciar el dato:
+        //   - Solo suma si veníamos con una posición previa (no en el
+        //     primer ping).
+        //   - Solo suma si speed_kmh > 2 — con el auto detenido, el GPS
+        //     "tiembla" unos metros entre lectura y lectura (lo vimos
+        //     en los logs reales), y sin este filtro esos metros se
+        //     irían acumulando de forma falsa aunque el auto no se
+        //     mueva nunca.
+        //   - Techo de 3km por lectura, por si un salto de GPS raro
+        //     (falla de señal momentánea) reporta una distancia absurda
+        //     de golpe — no debería pasar en operación normal dado el
+        //     intervalo de reporte, pero mejor no confiar ciegamente.
+        const [[prevState]] = await pool.query(
+            'SELECT lat, lng, odometer_km FROM Vehicles WHERE id = ?',
+            [device.vehicle_id]
+        );
+
+        let newOdometer = prevState?.odometer_km ?? 0;
+        if (prevState?.lat != null && prevState?.lng != null && (reading.speed_kmh ?? 0) > 2) {
+            const distanceKm = haversineKm(
+                parseFloat(prevState.lat), parseFloat(prevState.lng),
+                reading.lat, reading.lng
+            );
+            if (distanceKm > 0 && distanceKm < 3) {
+                newOdometer = parseFloat(newOdometer) + distanceKm;
+            }
+        }
+
         await pool.query(
-            `UPDATE Vehicles SET lat = ?, lng = ?, heading = ?, last_ping_at = NOW() WHERE id = ?`,
-            [reading.lat, reading.lng, reading.heading, device.vehicle_id]
+            `UPDATE Vehicles SET lat = ?, lng = ?, heading = ?, odometer_km = ?, last_ping_at = NOW() WHERE id = ?`,
+            [reading.lat, reading.lng, reading.heading, newOdometer, device.vehicle_id]
         );
     } else {
         await pool.query(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
-import { Plus, Trash2, Car, Upload, UserCheck } from 'lucide-react';
+import { Plus, Trash2, Car, Upload, UserCheck, Pencil, X } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
@@ -32,14 +32,97 @@ function DriverAssign({ vehicle, drivers, onAssign }) {
   );
 }
 
+// Modal de edición — reutiliza el mismo endpoint PATCH que ya existe,
+// solo faltaba la pantalla para llamarlo desde un auto ya cargado.
+function EditVehicleModal({ vehicle, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    brand: vehicle.brand || '',
+    model: vehicle.model || '',
+    year: vehicle.year || '',
+    odometer_km: vehicle.odometer_km || 0,
+    status: vehicle.status || 'active',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      await fetchAPI(`/vehicles/${vehicle.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          brand: form.brand,
+          model: form.model,
+          year: form.year ? parseInt(form.year) : null,
+          odometer_km: form.odometer_km !== '' ? parseFloat(form.odometer_km) : null,
+          status: form.status,
+        }),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-[#0B1120] border border-slate-700 rounded-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-white font-mono">Editar {vehicle.plate}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20} /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-6 space-y-4">
+          {error && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{error}</div>}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Marca</label>
+              <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} required />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Modelo</label>
+              <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Año</label>
+              <input type="number" className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Estado</label>
+              <select className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                <option value="active">Activo</option>
+                <option value="inactive">Inactivo</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Odómetro (km)</label>
+            <input type="number" min="0" step="0.1" className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={form.odometer_km} onChange={e => setForm({ ...form, odometer_km: e.target.value })} />
+            <p className="text-[11px] text-slate-500 mt-1">Se sigue sumando solo con el GPS después de guardar acá — esto solo corrige el punto de partida.</p>
+          </div>
+          <button type="submit" disabled={saving} className="w-full bg-[#6366F1] py-2.5 rounded-lg text-white font-bold hover:bg-[#4F46E5] disabled:opacity-60">
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function TabFlota() {
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
-  const [newVehicle, setNewVehicle] = useState({ plate: '', brand: '', model: '', device_imei: '' });
+  const [newVehicle, setNewVehicle] = useState({ plate: '', brand: '', model: '', device_imei: '', odometer_km: '' });
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoBase64, setPhotoBase64] = useState(null);
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [editingVehicle, setEditingVehicle] = useState(null);
 
   const loadVehicles = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
   const loadDrivers = () => fetchAPI('/drivers').then(setDrivers).catch(() => {}); // si el rol no tiene acceso, no rompe la tab
@@ -66,9 +149,10 @@ export default function TabFlota() {
           model: newVehicle.model,
           photo_url: photoBase64,
           device_imei: newVehicle.device_imei || null,
+          odometer_km: newVehicle.odometer_km ? parseFloat(newVehicle.odometer_km) : 0,
         }),
       });
-      setNewVehicle({ plate: '', brand: '', model: '', device_imei: '' });
+      setNewVehicle({ plate: '', brand: '', model: '', device_imei: '', odometer_km: '' });
       setPhotoBase64(null);
       setPhotoPreview(null);
       loadVehicles();
@@ -126,6 +210,10 @@ export default function TabFlota() {
             <input placeholder="Modelo" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-32" value={newVehicle.model} onChange={e => setNewVehicle({ ...newVehicle, model: e.target.value })} required />
           </div>
           <div>
+            <label className="block text-xs text-slate-400 mb-1">Odómetro actual (km)</label>
+            <input type="number" min="0" step="0.1" placeholder="Del tablero del auto" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-40" value={newVehicle.odometer_km} onChange={e => setNewVehicle({ ...newVehicle, odometer_km: e.target.value })} />
+          </div>
+          <div>
             <label className="block text-xs text-slate-400 mb-1">ID de equipo (IMEI)</label>
             <input placeholder="Opcional — se parea después" className="bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white w-full sm:w-48" value={newVehicle.device_imei} onChange={e => setNewVehicle({ ...newVehicle, device_imei: e.target.value })} />
           </div>
@@ -148,7 +236,11 @@ export default function TabFlota() {
                 <p className="text-xs mt-1">
                   {v.device_imei ? <span className="text-[#10B981]">Pareado ({v.device_imei})</span> : <span className="text-slate-500">Sin equipo</span>}
                 </p>
+                <p className="text-xs text-slate-400 mt-0.5">{Math.round(v.odometer_km || 0).toLocaleString('es-AR')} km</p>
               </div>
+              <button onClick={() => setEditingVehicle(v)} className="text-slate-400 hover:text-white shrink-0">
+                <Pencil size={18} />
+              </button>
               <button onClick={() => handleDelete(v.id)} className="text-red-500 hover:text-red-400 shrink-0">
                 <Trash2 size={18} />
               </button>
@@ -174,6 +266,7 @@ export default function TabFlota() {
               <th className="px-6 py-4">Patente</th>
               <th className="px-6 py-4">Marca/Modelo</th>
               <th className="px-6 py-4">Equipo GPS</th>
+              <th className="px-6 py-4">Odómetro</th>
               <th className="px-6 py-4">Chofer asignado</th>
               <th className="px-6 py-4 text-right">Acciones</th>
             </tr>
@@ -185,20 +278,30 @@ export default function TabFlota() {
                 <td className="px-6 py-3 font-mono text-[#10B981] font-bold">{v.plate}</td>
                 <td className="px-6 py-3">{v.brand} {v.model}</td>
                 <td className="px-6 py-3 text-xs">{v.device_imei ? <span className="text-[#10B981]">Pareado ({v.device_imei})</span> : <span className="text-slate-500">Sin equipo</span>}</td>
+                <td className="px-6 py-3">{Math.round(v.odometer_km || 0).toLocaleString('es-AR')} km</td>
                 <td className="px-6 py-3">
                   <DriverAssign vehicle={v} drivers={drivers} onAssign={handleAssignDriver} />
                 </td>
                 <td className="px-6 py-3 text-right">
+                  <button onClick={() => setEditingVehicle(v)} className="text-slate-400 hover:text-white mr-3"><Pencil size={16} /></button>
                   <button onClick={() => handleDelete(v.id)} className="text-red-500 hover:text-red-400"><Trash2 size={18} /></button>
                 </td>
               </tr>
             ))}
             {vehicles.length === 0 && (
-              <tr><td colSpan="6" className="px-6 py-8 text-center text-slate-500">Todavía no cargaste ningún auto.</td></tr>
+              <tr><td colSpan="7" className="px-6 py-8 text-center text-slate-500">Todavía no cargaste ningún auto.</td></tr>
             )}
           </tbody>
         </table></div>
       </div>
+
+      {editingVehicle && (
+        <EditVehicleModal
+          vehicle={editingVehicle}
+          onClose={() => setEditingVehicle(null)}
+          onSaved={() => { setEditingVehicle(null); loadVehicles(); }}
+        />
+      )}
     </div>
   );
 }
