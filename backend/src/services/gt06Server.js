@@ -1,22 +1,39 @@
 // ============================================================
 // Servidor TCP crudo para los trackers Jimi IoT (JM-VL04 / JM-VL502).
-// Escucha en el puerto 9000 (el mismo que configuraste en el TCP
-// Proxy de Railway) y habla el protocolo GT06 — el más común en la
-// familia Concox/Jimi IoT para este tipo de equipo.
+// Escucha en el puerto que apunta el TCP Proxy de Railway y habla el
+// protocolo GT06 — el más común en la familia Concox/Jimi IoT.
 //
-// HONESTIDAD TÉCNICA: lo que está acá abajo cubre con confianza alta
-// el ENVOLTORIO del protocolo (framing, CRC, login, ACKs) y el
-// paquete de posición GPS estándar — eso es prácticamente idéntico
-// en toda la familia GT06 y es lo que necesitás para que el equipo
-// "salga reportando" mañana (posición + velocidad).
+// ESTADO CONFIRMADO (10/07/2026, contra bytes reales del IMEI
+// 861652050142625, equipo VL502 en un Renault Kangoo en Maipú):
 //
-// Lo que NO está confirmado todavía es el layout exacto de los
-// paquetes EXTENDIDOS de OBD (RPM, temperatura, combustible, DTC)
-// que debería mandar el VL502 — eso varía más entre firmwares y no
-// lo voy a inventar. Cualquier paquete que no reconozcamos se
-// imprime en crudo (hex) en la consola para poder mirarlo juntos
-// apenas el equipo esté transmitiendo de verdad, y ahí completamos
-// ese parser contra bytes reales en vez de a ciegas.
+//   ✅ Login (0x01) — extracción de IMEI, funcionando.
+//   ✅ Heartbeat (0x13) — se ACKea, no trae datos usables.
+//   ✅ Posición GPS (0x37 y 0x26) — CONFIRMADA. Los dos protocolos
+//      comparten el mismo bloque de posición: fecha en offset 0-4,
+//      lat en offset 7 (4 bytes BE, /30000/60), lon en offset 11
+//      (igual), velocidad en offset 15. El 0x26 es una versión
+//      liviana del mismo bloque, más frecuente, sin el resto de la
+//      cola; el 0x37 le agrega ~32 bytes más después.
+//   ✅ Offset 16-17 del 0x37/0x26 — es el campo estándar GT06 de
+//      "curso + banderas de estado" (rumbo 0-360° en los 10 bits
+//      bajos). Confirmado por eliminación al descartarlo como RPM.
+//
+//   ❌ RPM/temperatura/combustible/batería del motor — NO
+//      confirmado. Se probó exhaustivamente contra dos lecturas
+//      reales de RPM (900 y 2100) tomadas con 1 minuto de diferencia
+//      y NINGÚN byte de la cola se mueve de forma proporcional a ese
+//      cambio. Los "candidatos" que parecían prometedores resultaron
+//      ser: el bloque de antena celular (MCC/LAC, constante siempre)
+//      o un contador que sube solo, sin relación con el motor.
+//      Conclusión: el 0x37, tal como lo manda este equipo/firmware,
+//      probablemente NO incluye los PIDs de OBD todavía — puede
+//      hacer falta un comando aparte para activarlos (consultar a
+//      Conecty/Jimi IoT), o vienen en un tipo de paquete que todavía
+//      no vimos pasar. El resto de la cola queda logueado crudo
+//      (RAW_OBD:...) para seguir mirando si aparece algo nuevo, pero
+//      ya NO se le atribuye ningún significado — antes de este
+//      análisis se guardaba con ese nombre asumiendo que eran datos
+//      de motor, y no está confirmado que lo sean.
 // ============================================================
 
 const net = require('net');
@@ -28,13 +45,31 @@ const PORT = process.env.GT06_TCP_PORT || 9000;
 const START = Buffer.from([0x78, 0x78]);
 const STOP = Buffer.from([0x0D, 0x0A]);
 
+
 const PROTOCOL = {
     LOGIN: 0x01,
     GPS_LOCATION: 0x12,
     STATUS_HEARTBEAT: 0x13,
     GPS_LOCATION_ALT: 0x22,
     ALARM: 0x16,
+    GPS_COMBO_OBD: 0x37,   // combinado GPS+OBD, confirmado 10/07/2026
+    GPS_COMBO_LIGHT: 0x26, // versión liviana del mismo bloque de posición, más frecuente
 };
+
+// Bloque de posición estándar GT06, confirmado contra bytes reales del
+// VL502: fecha en offset 0-4, lat en offset 7 (4 bytes BE), lon en
+// offset 11 (4 bytes BE), velocidad en offset 15. Lo usan tanto el
+// 0x37 (combinado con OBD) como el 0x26 (versión liviana, sin OBD).
+function parseComboGpsBlock(content) {
+    if (content.length < 16) return null;
+    const latRaw = content.readUInt32BE(7);
+    const lonRaw = content.readUInt32BE(11);
+    return {
+        lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
+        lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
+        speed_kmh: content[15] ?? 0,
+    };
+}
 
 // CRC-16/X-25 (CRC-ITU) — el checksum estándar de GT06.
 function crcX25(buffer) {
@@ -173,15 +208,9 @@ function startGt06Server() {
                         });
                         console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
                         
-                    } else if (protocolNumber === 0x37) {
+                    } else if (protocolNumber === PROTOCOL.GPS_COMBO_OBD) {
                         // --- PAQUETE COMBINADO GPS + OBD (confirmado contra bytes
                         // reales del VL502 el 10/07/2026) ---
-                        // Contra lo que se había asumido antes, este paquete
-                        // "extendido" en realidad envuelve el MISMO bloque de
-                        // posición estándar de GT06 (fecha + lat + lon + velocidad
-                        // en los offsets 0, 7, 11, 15 del content) y le agrega datos
-                        // de OBD a continuación. Antes se descartaba la posición acá
-                        // (lat/lng se mandaban en null) — ya no.
                         socket.write(buildAck(protocolNumber, serial));
 
                         if (!currentImei) {
@@ -195,21 +224,15 @@ function startGt06Server() {
                             continue;
                         }
 
-                        let gps = null;
-                        if (content.length >= 16) {
-                            const latRaw = content.readUInt32BE(7);
-                            const lonRaw = content.readUInt32BE(11);
-                            gps = {
-                                lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
-                                lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
-                                speed_kmh: content[15] ?? 0,
-                            };
-                        }
+                        const gps = parseComboGpsBlock(content);
 
-                        // El resto de los bytes (después del bloque de posición) son
-                        // los datos de OBD — todavía no confirmados byte a byte, se
-                        // guardan crudos para seguir decodificando con más muestras.
-                        const obdHex = content.slice(16).toString('hex');
+                        // El resto de los bytes (después del bloque de posición) NO
+                        // están identificados todavía — se probó exhaustivamente
+                        // contra 900 y 2100 RPM reales y ningún campo coincidió, así
+                        // que NO es seguro asumir que esto es "OBD". Se guarda crudo
+                        // por si sirve para seguir investigando, sin atribuirle
+                        // significado.
+                        const tailHex = content.slice(16).toString('hex');
 
                         await telemetryIngestReal.ingestReading(currentImei, {
                             lat: gps?.lat ?? null,
@@ -220,13 +243,44 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
-                            dtc_codes: `RAW_OBD:${obdHex}`
+                            dtc_codes: `RAW_TAIL:${tailHex}`
                         });
 
                         if (gps) {
                             console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
                         } else {
-                            console.log(`[GT06] OBD IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
+                            console.log(`[GT06] Paquete 0x37 IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
+                        }
+
+                    } else if (protocolNumber === PROTOCOL.GPS_COMBO_LIGHT) {
+                        // --- Versión liviana del mismo bloque de posición, sin OBD
+                        // (confirmado 10/07/2026 — mismo offset que el 0x37) ---
+                        socket.write(buildAck(protocolNumber, serial));
+
+                        if (!currentImei) {
+                            console.warn('[GT06] Paquete 0x26 sin login previo, se descarta');
+                            continue;
+                        }
+
+                        const vehicleId = await findVehicleIdByImei(currentImei);
+                        if (!vehicleId) {
+                            console.warn(`[GT06] IMEI ${currentImei} no está pareado a ningún vehículo — se descarta el paquete`);
+                            continue;
+                        }
+
+                        const gps = parseComboGpsBlock(content);
+                        if (gps) {
+                            await telemetryIngestReal.ingestReading(currentImei, {
+                                lat: gps.lat,
+                                lng: gps.lon,
+                                speed_kmh: gps.speed_kmh,
+                                engine_rpm: null,
+                                engine_load: null,
+                                coolant_temp: null,
+                                battery_voltage: null,
+                                harsh_brake: false,
+                            });
+                            console.log(`[GT06] Posición (0x26) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
                         }
 
                     } else {
