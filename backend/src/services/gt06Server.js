@@ -45,7 +45,6 @@ const PORT = process.env.GT06_TCP_PORT || 9000;
 const START = Buffer.from([0x78, 0x78]);
 const STOP = Buffer.from([0x0D, 0x0A]);
 
-
 const PROTOCOL = {
     LOGIN: 0x01,
     GPS_LOCATION: 0x12,
@@ -61,13 +60,19 @@ const PROTOCOL = {
 // offset 11 (4 bytes BE), velocidad en offset 15. Lo usan tanto el
 // 0x37 (combinado con OBD) como el 0x26 (versión liviana, sin OBD).
 function parseComboGpsBlock(content) {
-    if (content.length < 16) return null;
+    if (content.length < 18) return null;
     const latRaw = content.readUInt32BE(7);
     const lonRaw = content.readUInt32BE(11);
+    
+    // Offset 16-17 del 0x37/0x26 — es el campo estándar GT06 de "curso + banderas de estado" (rumbo 0-360° en los 10 bits bajos)
+    const courseStatusInt = content.readUInt16BE(16);
+    const course = courseStatusInt & 0x03FF;
+    
     return {
         lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
         lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
         speed_kmh: content[15] ?? 0,
+        course: course,
     };
 }
 
@@ -123,7 +128,7 @@ function extractFrame(buf) {
 // como default razonable, y lo confirmamos contra la posición real
 // del equipo apenas transmita mañana.
 function parseGpsContent(content) {
-    if (content.length < 12) return null;
+    if (content.length < 18) return null;
 
     const year = 2000 + content[0];
     const month = content[1];
@@ -138,10 +143,14 @@ function parseGpsContent(content) {
     const lon = (lonRaw / 30000 / 60) * -1;  // Mendoza = hemisferio oeste → negativo
 
     const speed = content.length > 15 ? content[15] : 0;
+    
+    // Offset 16-17 del paquete estándar GT06
+    const courseStatusInt = content.readUInt16BE(16);
+    const course = courseStatusInt & 0x03FF;
 
     return {
         recordedAt: new Date(Date.UTC(year, month - 1, day, hour, minute, second)),
-        lat, lon, speed_kmh: speed,
+        lat, lon, speed_kmh: speed, course: course
     };
 }
 
@@ -181,6 +190,13 @@ function startGt06Server() {
                         socket.write(buildAck(protocolNumber, serial));
                     } else if (protocolNumber === PROTOCOL.STATUS_HEARTBEAT) {
                         socket.write(buildAck(protocolNumber, serial));
+                        
+                        // Extraemos el bit de ACC del primer byte del Heartbeat
+                        if (content.length >= 1 && currentImei) {
+                            const terminalInfo = content[0];
+                            const accOn = ((terminalInfo & 0x02) >> 1) === 1;
+                            console.log(`[GT06] Heartbeat IMEI=${currentImei} - Estado de Motor (ACC): ${accOn ? 'ENCENDIDO' : 'APAGADO'}`);
+                        }
                     } else if (protocolNumber === PROTOCOL.GPS_LOCATION || protocolNumber === PROTOCOL.GPS_LOCATION_ALT) {
                         socket.write(buildAck(protocolNumber, serial));
                         if (!currentImei) {
@@ -200,13 +216,14 @@ function startGt06Server() {
                             lat: gps.lat,
                             lng: gps.lon,
                             speed_kmh: gps.speed_kmh,
+                            heading: gps.course,
                             engine_rpm: null,
                             engine_load: null,
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
                         });
-                        console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
+                        console.log(`[GT06] Posición IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
                         
                     } else if (protocolNumber === PROTOCOL.GPS_COMBO_OBD) {
                         // --- PAQUETE COMBINADO GPS + OBD (confirmado contra bytes
@@ -232,22 +249,23 @@ function startGt06Server() {
                         // que NO es seguro asumir que esto es "OBD". Se guarda crudo
                         // por si sirve para seguir investigando, sin atribuirle
                         // significado.
-                        const tailHex = content.slice(16).toString('hex');
+                        const tailHex = content.length > 16 ? content.slice(16).toString('hex') : null;
 
                         await telemetryIngestReal.ingestReading(currentImei, {
                             lat: gps?.lat ?? null,
                             lng: gps?.lon ?? null,
                             speed_kmh: gps?.speed_kmh ?? null,
+                            heading: gps?.course ?? null,
                             engine_rpm: null,
                             engine_load: null,
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
-                            dtc_codes: `RAW_TAIL:${tailHex}`
+                            dtc_codes: tailHex ? `RAW_TAIL:${tailHex}` : null
                         });
 
                         if (gps) {
-                            console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
+                            console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
                         } else {
                             console.log(`[GT06] Paquete 0x37 IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
                         }
@@ -274,13 +292,14 @@ function startGt06Server() {
                                 lat: gps.lat,
                                 lng: gps.lon,
                                 speed_kmh: gps.speed_kmh,
+                                heading: gps.course,
                                 engine_rpm: null,
                                 engine_load: null,
                                 coolant_temp: null,
                                 battery_voltage: null,
                                 harsh_brake: false,
                             });
-                            console.log(`[GT06] Posición (0x26) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h`);
+                            console.log(`[GT06] Posición (0x26) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
                         }
 
                     } else {

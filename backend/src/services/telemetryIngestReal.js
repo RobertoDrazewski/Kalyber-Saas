@@ -56,7 +56,7 @@ const mlService = require('./mlService');
 /**
  * Punto de entrada único para telemetría real ya parseada.
  * @param {string} imei - IMEI del equipo (JM-VL04 o JM-VL502)
- * @param {object} reading - { lat, lng, speed_kmh, engine_rpm, engine_load, coolant_temp, battery_voltage, harsh_brake, dtc_codes }
+ * @param {object} reading - { lat, lng, speed_kmh, heading, engine_rpm, engine_load, coolant_temp, battery_voltage, harsh_brake, dtc_codes }
  */
 async function ingestReading(imei, reading) {
     const [[device]] = await pool.query(
@@ -69,9 +69,9 @@ async function ingestReading(imei, reading) {
     }
 
     await pool.query(
-        `INSERT INTO Telemetry_Raw (vehicle_id, lat, lng, speed_kmh, engine_rpm, engine_load, coolant_temp, battery_voltage, harsh_brake, dtc_codes, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real')`,
-        [device.vehicle_id, reading.lat, reading.lng, reading.speed_kmh, reading.engine_rpm, reading.engine_load,
+        `INSERT INTO Telemetry_Raw (vehicle_id, lat, lng, speed_kmh, heading, engine_rpm, engine_load, coolant_temp, battery_voltage, harsh_brake, dtc_codes, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real')`,
+        [device.vehicle_id, reading.lat, reading.lng, reading.speed_kmh, reading.heading, reading.engine_rpm, reading.engine_load,
          reading.coolant_temp, reading.battery_voltage, reading.harsh_brake ? 1 : 0, reading.dtc_codes || null]
     );
 
@@ -79,8 +79,8 @@ async function ingestReading(imei, reading) {
     // Evita que los paquetes OBD (0x37) borren la última posición conocida del vehículo poniéndola en NULL.
     if (reading.lat !== null && reading.lng !== null && reading.lat !== undefined && reading.lng !== undefined) {
         await pool.query(
-            `UPDATE Vehicles SET lat = ?, lng = ?, last_ping_at = NOW() WHERE id = ?`,
-            [reading.lat, reading.lng, device.vehicle_id]
+            `UPDATE Vehicles SET lat = ?, lng = ?, heading = ?, last_ping_at = NOW() WHERE id = ?`,
+            [reading.lat, reading.lng, reading.heading, device.vehicle_id]
         );
     } else {
         await pool.query(
