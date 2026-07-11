@@ -13,7 +13,7 @@ const deviceRoutes = require('./src/routes/deviceRoutes');
 const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const paymentRoutes = require('./src/routes/paymentRoutes');
-const fuelRoutes = require('./src/routes/fuelRoutes');
+const fuelRoutes = require('./src/routes/fuelroutes');
 
 const app = express();
 
