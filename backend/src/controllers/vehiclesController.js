@@ -161,7 +161,12 @@ const assignDriverAsAdmin = async (req, res) => {
         const [[driver]] = await pool.query('SELECT id, owner_id FROM Drivers WHERE id = ?', [driver_id]);
         if (!driver) return res.status(404).json({ error: 'Conductor no encontrado' });
 
-        if (driver.owner_id !== vehicle.owner_id) {
+        // La restricción de "misma flota" solo aplica a admins de flota
+        // regulares — un super_admin ve y gestiona todo, puede cruzar
+        // conductores y vehículos de distintos clientes si hace falta
+        // (útil para pruebas, o para reasignar antes de que un cliente
+        // tenga todo bien cargado de su lado).
+        if (req.user.role !== 'super_admin' && driver.owner_id !== vehicle.owner_id) {
             return res.status(400).json({ error: 'Ese conductor no pertenece a la misma flota que el vehículo' });
         }
 
