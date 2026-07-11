@@ -26,7 +26,11 @@ const corsOptions = {
         'http://localhost:5173',
         'http://localhost:3000'
     ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    // PATCH agregado — lo usan assign-driver, updateVehicle, updateDriver,
+    // updateUser. Sin esto, el navegador bloquea el preflight y el fetch
+    // ni siquiera llega a intentarse (por eso el error "no se pudo conectar",
+    // no era problema de red real).
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 };
@@ -52,9 +56,9 @@ app.get('/api/status', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-// NOTA: el simulador de 6 autos de demo ya NO se inicializa acá.
-// Todo el sistema corre solo con datos reales — GPS real (servicio
-// aparte, ver gt06Server.js) y ML sobre esos datos reales.
+// El simulador de 6 autos de demo ya NO se inicializa acá. Todo el
+// sistema corre solo con datos reales — GPS real (servicio aparte,
+// ver gt06Server.js) y ML sobre esos datos reales.
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API de Kyber corriendo en el puerto ${PORT}`);
 });
