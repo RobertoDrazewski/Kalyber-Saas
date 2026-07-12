@@ -1,4 +1,4 @@
-import { Activity, MapPin, History, Wrench, Users, Navigation, Car, CalendarDays, Radio, UserCog, Receipt, Cpu, ClipboardCheck } from 'lucide-react';
+import { Activity, MapPin, History, Wrench, Users, Navigation, Car, CalendarDays, Radio, UserCog, Receipt, Cpu, ClipboardCheck, Key } from 'lucide-react';
 
 // Lista ÚNICA de herramientas del panel — la usan Sidebar (web) Y
 // BottomNav (mobile), así nunca más se desincronizan entre las dos
@@ -19,6 +19,7 @@ export const menuItems = [
   { id: 'flota', label: 'Gestión de Flota', icon: Car },
   { id: 'equipos', label: 'Equipos GPS', icon: Radio },
   { id: 'usuarios', label: 'Usuarios', icon: UserCog },
+  { id: 'apikeys', label: 'API Keys', icon: Key },
   { id: 'diagnostico', label: 'Diagnóstico de Equipos', icon: Cpu, visibleFor: ['super_admin'] },
   { id: 'facturador', label: 'Facturador', icon: Receipt, visibleFor: ['super_admin'] },
 ];

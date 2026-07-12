@@ -14,6 +14,8 @@ const quoteChatRoutes = require('./src/routes/quoteChatRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const paymentRoutes = require('./src/routes/paymentRoutes');
 const fuelroutes = require('./src/routes/fuelroutes');
+const apiKeysRoutes = require('./src/routes/apiKeysRoutes');
+const publicApiRoutes = require('./src/routes/publicApiRoutes');
 
 const app = express();
 
@@ -47,6 +49,8 @@ app.use('/api/quote-chat', quoteChatRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/fuel', fuelroutes);
+app.use('/api/apikeys', apiKeysRoutes);
+app.use('/api/v1', publicApiRoutes); // API pública para terceros, autenticada con API key (no JWT)
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });
@@ -55,5 +59,5 @@ app.get('/api/status', (req, res) => {
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 API de Kyber corriendo en el puerto ${PORT}`);
+    console.log(`🚀 API de Kalyber.com.ar corriendo en el puerto ${PORT}`);
 });

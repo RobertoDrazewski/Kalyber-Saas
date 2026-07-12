@@ -13,6 +13,7 @@ import TabUsuarios from '../components/TabUsuarios';
 import TabFacturador from '../components/TabFacturador';
 import TabDiagnostico from '../components/TabDiagnostico';
 import TabMantenimientoRealizado from '../components/TabMantenimientoRealizado';
+import TabApiKeys from '../components/TabApiKeys';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('telemetria');
@@ -32,6 +33,7 @@ export default function Dashboard() {
       case 'usuarios': return <TabUsuarios />;
       case 'facturador': return <TabFacturador />;
       case 'diagnostico': return <TabDiagnostico />;
+      case 'apikeys': return <TabApiKeys />;
       default: return <TabTelemetria />;
     }
   };

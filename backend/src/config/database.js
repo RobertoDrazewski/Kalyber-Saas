@@ -12,7 +12,7 @@ const pool = mysql.createPool({
 // Verificación de conexión inicial
 pool.getConnection()
     .then(connection => {
-        console.log('✅ Kyber Backend conectado a la BD de Railway');
+        console.log('✅ Kalyber Backend conectado a la BD de Railway');
         connection.release();
     })
     .catch(err => {
