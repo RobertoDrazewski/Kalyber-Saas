@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -27,29 +27,48 @@ function toNum(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Sin esto, cada refresco de posición (cada 5s) creaba un ícono
+// L.divIcon NUEVO para cada auto, aunque la foto fuera la misma —
+// React-Leaflet lo toma como "cambió el ícono" y lo vuelve a pintar,
+// generando el parpadeo. Cacheamos por foto: si ya existe, reusamos
+// el mismo objeto en vez de crear uno de nuevo.
+const iconCache = new Map();
 function vehicleIcon(photoUrl) {
-  return L.divIcon({
+  const key = photoUrl || FALLBACK_PHOTO;
+  if (iconCache.has(key)) return iconCache.get(key);
+
+  const icon = L.divIcon({
     className: '',
     html: `
       <div style="
         width:44px;height:44px;border-radius:9999px;
         border:3px solid #10B981;
         box-shadow:0 0 12px rgba(0,0,0,0.5);
-        background:#0B1120 url('${photoUrl || FALLBACK_PHOTO}') center/cover no-repeat;
+        background:#0B1120 url('${key}') center/cover no-repeat;
       "></div>`,
     iconSize: [44, 44],
     iconAnchor: [22, 22],
     popupAnchor: [0, -22],
   });
+  iconCache.set(key, icon);
+  return icon;
 }
 
 function FlyToVehicle({ vehicle }) {
   const map = useMap();
+  const lastFlownId = useRef(null);
   useEffect(() => {
-    if (vehicle && vehicle.latNum !== null && vehicle.lngNum !== null) {
-      map.flyTo([vehicle.latNum, vehicle.lngNum], 15, { duration: 0.8 });
-    }
-  }, [vehicle, map]);
+    // OJO: antes esto dependía del objeto "vehicle" completo, que se
+    // recrea con una referencia nueva CADA VEZ que refresca la
+    // posición (cada 5s) — aunque el auto no haya elegido otro, React
+    // volvía a disparar el flyTo, cancelando cualquier arrastre/zoom
+    // manual del usuario y generando el parpadeo. Ahora solo vuela
+    // cuando cambia el ID del auto seleccionado, no en cada refresco.
+    if (!vehicle || vehicle.latNum === null || vehicle.lngNum === null) return;
+    if (lastFlownId.current === vehicle.id) return;
+    lastFlownId.current = vehicle.id;
+    map.flyTo([vehicle.latNum, vehicle.lngNum], 15, { duration: 0.8 });
+  }, [vehicle?.id, vehicle?.latNum, vehicle?.lngNum, map]);
   return null;
 }
 
@@ -176,11 +195,13 @@ export default function TabPosicion() {
 
         {/* Mapa */}
         <div className="w-full md:flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
-          <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={[-32.8895, -68.8458]} zoom={12} maxZoom={19} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
             <TileLayer
               url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+              maxZoom={20}
+              maxNativeZoom={19}
             />
             {selected && <FlyToVehicle vehicle={selectedVehicleCoord} />}
 
@@ -202,8 +223,8 @@ export default function TabPosicion() {
                   icon={vehicleIcon(v.photo_url)}
                   eventHandlers={{ click: () => setSelected(v) }}
                 >
-                  <Popup minWidth={220}>
-                    <div className="text-black space-y-1.5">
+                  <Popup minWidth={220} maxWidth={260} maxHeight={260} autoPan={true}>
+                    <div className="text-black space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
                       <div className="flex items-center gap-2">
                         <img src={v.photo_url || FALLBACK_PHOTO} className="w-10 h-10 rounded-lg object-cover" />
                         <div>
