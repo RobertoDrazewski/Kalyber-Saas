@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
-import { Radio, Plus, Link2, Unlink, Pencil, Trash2, X, ScanLine } from 'lucide-react';
+import { Radio, Plus, Link2, Unlink, Pencil, Trash2, X, ScanLine, Barcode } from 'lucide-react';
 import QrScannerModal from './QrScannerModal';
+import BarcodeScannerModal from './BarcodeScannerModal';
 import ErrorBanner from './ErrorBanner';
 
 const MODEL_INFO = {
@@ -47,8 +48,8 @@ function EditDeviceModal({ device, onClose, onSaved }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Número de línea (SIM)</label>
-            <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" placeholder="Para saber cuál cortar después" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
+            <label className="block text-xs text-slate-400 mb-1">Número de ICC (SIM)</label>
+            <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono" placeholder="18-20 dígitos, del sobre de la SIM" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Etiqueta</label>
@@ -79,6 +80,16 @@ export default function TabEquipos() {
   const [claiming, setClaiming] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
   const [scanningFor, setScanningFor] = useState(null); // null | 'add' | 'claim'
+  const [scanningBarcodeFor, setScanningBarcodeFor] = useState(null); // null | 'add'
+
+  const handleScannedBarcode = (text) => {
+    // El ICC son puros dígitos (18-20 números) — nos quedamos con eso
+    // por si el lector agarra algo de texto extra alrededor.
+    const match = text.match(/\d{18,20}/);
+    const icc = match ? match[0] : text;
+    if (scanningBarcodeFor === 'add') setForm(f => ({ ...f, phone_number: icc }));
+    setScanningBarcodeFor(null);
+  };
 
   const handleScanned = (text) => {
     // El QR de la etiqueta trae el IMEI como texto — por las dudas
@@ -224,13 +235,23 @@ export default function TabEquipos() {
                 </select>
               </div>
               <div className="flex-1 min-w-[160px]">
-                <label className="block text-xs text-slate-400 mb-1">Número de línea (SIM)</label>
-                <input
-                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
-                  placeholder="Para saber cuál cortar después"
-                  value={form.phone_number}
-                  onChange={e => setForm({ ...form, phone_number: e.target.value })}
-                />
+                <label className="block text-xs text-slate-400 mb-1">Número de ICC (SIM)</label>
+                <div className="flex gap-2">
+                  <input
+                    className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
+                    placeholder="18-20 dígitos, del sobre de la SIM"
+                    value={form.phone_number}
+                    onChange={e => setForm({ ...form, phone_number: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setScanningBarcodeFor('add')}
+                    className="shrink-0 bg-[#10B981]/10 text-[#10B981] px-3 rounded-lg hover:bg-[#10B981]/20"
+                    title="Escanear el código de barras del ICC"
+                  >
+                    <Barcode size={18} />
+                  </button>
+                </div>
               </div>
               <div className="flex-1 min-w-[160px]">
                 <label className="block text-xs text-slate-400 mb-1">Etiqueta (opcional)</label>
@@ -319,7 +340,7 @@ export default function TabEquipos() {
                   <p className={`text-xs font-semibold ${info.color}`}>{info.label}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">{info.desc}</p>
                   {d.label && <p className="text-[11px] text-slate-500 mt-0.5">"{d.label}"</p>}
-                  {d.phone_number && <p className="text-[11px] text-slate-500 mt-0.5">📞 {d.phone_number}</p>}
+                  {d.phone_number && <p className="text-[11px] text-slate-500 mt-0.5 font-mono">ICC: {d.phone_number}</p>}
                 </div>
                 <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 ${
                   d.status === 'paired' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-slate-700/50 text-slate-400'
@@ -390,6 +411,10 @@ export default function TabEquipos() {
 
       {scanningFor && (
         <QrScannerModal onScan={handleScanned} onClose={() => setScanningFor(null)} />
+      )}
+
+      {scanningBarcodeFor && (
+        <BarcodeScannerModal onScan={handleScannedBarcode} onClose={() => setScanningBarcodeFor(null)} />
       )}
     </div>
   );
