@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
-import { Radio, Plus, Link2, Unlink, Pencil, Trash2, X } from 'lucide-react';
+import { Radio, Plus, Link2, Unlink, Pencil, Trash2, X, ScanLine } from 'lucide-react';
+import QrScannerModal from './QrScannerModal';
 import ErrorBanner from './ErrorBanner';
 
 const MODEL_INFO = {
@@ -77,6 +78,18 @@ export default function TabEquipos() {
   const [saving, setSaving] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
+  const [scanningFor, setScanningFor] = useState(null); // null | 'add' | 'claim'
+
+  const handleScanned = (text) => {
+    // El QR de la etiqueta trae el IMEI como texto — por las dudas
+    // de que venga con algo extra alrededor, nos quedamos con la
+    // primera racha de 14-16 dígitos que encontremos.
+    const match = text.match(/\d{14,16}/);
+    const imei = match ? match[0] : text;
+    if (scanningFor === 'add') setForm(f => ({ ...f, imei }));
+    if (scanningFor === 'claim') setClaimForm(f => ({ ...f, imei }));
+    setScanningFor(null);
+  };
 
   const handleDelete = async (device) => {
     if (!confirm(`¿Eliminar el equipo ${device.imei} por completo? El IMEI queda libre para volver a cargarlo si hace falta.`)) return;
@@ -181,13 +194,23 @@ export default function TabEquipos() {
             <form onSubmit={handleAdd} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
               <div className="flex-1 min-w-[180px]">
                 <label className="block text-xs text-slate-400 mb-1">IMEI</label>
-                <input
-                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
-                  placeholder="15 dígitos"
-                  value={form.imei}
-                  onChange={e => setForm({ ...form, imei: e.target.value })}
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
+                    placeholder="15 dígitos"
+                    value={form.imei}
+                    onChange={e => setForm({ ...form, imei: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setScanningFor('add')}
+                    className="shrink-0 bg-[#10B981]/10 text-[#10B981] px-3 rounded-lg hover:bg-[#10B981]/20"
+                    title="Escanear el QR del equipo"
+                  >
+                    <ScanLine size={18} />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Modelo</label>
@@ -240,13 +263,23 @@ export default function TabEquipos() {
             <form onSubmit={handleClaim} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
               <div className="flex-1 min-w-[180px]">
                 <label className="block text-xs text-slate-400 mb-1">IMEI del equipo</label>
-                <input
-                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
-                  placeholder="El código que te dio Kalyber"
-                  value={claimForm.imei}
-                  onChange={e => setClaimForm({ ...claimForm, imei: e.target.value })}
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
+                    placeholder="El código que te dio Kalyber"
+                    value={claimForm.imei}
+                    onChange={e => setClaimForm({ ...claimForm, imei: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setScanningFor('claim')}
+                    className="shrink-0 bg-[#10B981]/10 text-[#10B981] px-3 rounded-lg hover:bg-[#10B981]/20"
+                    title="Escanear el QR del equipo"
+                  >
+                    <ScanLine size={18} />
+                  </button>
+                </div>
               </div>
               <div className="flex-1 min-w-[180px]">
                 <label className="block text-xs text-slate-400 mb-1">Vehículo</label>
@@ -353,6 +386,10 @@ export default function TabEquipos() {
           onClose={() => setEditingDevice(null)}
           onSaved={() => { setEditingDevice(null); load(); }}
         />
+      )}
+
+      {scanningFor && (
+        <QrScannerModal onScan={handleScanned} onClose={() => setScanningFor(null)} />
       )}
     </div>
   );
