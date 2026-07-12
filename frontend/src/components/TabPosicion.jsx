@@ -3,11 +3,21 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { X } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { X, Gauge, Fuel, Wrench, Hash, Clock } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
+
+function haceCuanto(dateString) {
+  if (!dateString) return 'sin datos';
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'ahora mismo';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  return `hace ${h}h ${min % 60}min`;
+}
 
 // MySQL devuelve las columnas DECIMAL (lat/lng) como texto — sin
 // convertir a número, Leaflet no dibuja bien ni el marcador ni la
@@ -57,6 +67,7 @@ export default function TabPosicion() {
   const [selected, setSelected] = useState(null);
   const [series, setSeries] = useState([]);
   const [loadError, setLoadError] = useState('');
+  const [alerts, setAlerts] = useState([]);
 
   const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
@@ -65,6 +76,14 @@ export default function TabPosicion() {
   useEffect(() => {
     load();
     const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Alertas de mantenimiento — se muestran en el popup de cada auto.
+  // No hace falta refrescarlas tan seguido, cambian mucho menos que la posición.
+  useEffect(() => {
+    fetchAPI('/maintenance/alerts').then(setAlerts).catch(() => {});
+    const interval = setInterval(() => fetchAPI('/maintenance/alerts').then(setAlerts).catch(() => {}), 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -174,21 +193,59 @@ export default function TabPosicion() {
               />
             ))}
 
-            {vehiclesWithCoords.map(v => (
-              <Marker
-                key={v.id}
-                position={[v.latNum, v.lngNum]}
-                icon={vehicleIcon(v.photo_url)}
-                eventHandlers={{ click: () => setSelected(v) }}
-              >
-                <Popup>
-                  <div className="text-black">
-                    <p className="font-bold">{v.plate}</p>
-                    <p>{v.brand} {v.model}</p>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            {vehiclesWithCoords.map(v => {
+              const alert = alerts.find(a => a.vehicle_id === v.id);
+              return (
+                <Marker
+                  key={v.id}
+                  position={[v.latNum, v.lngNum]}
+                  icon={vehicleIcon(v.photo_url)}
+                  eventHandlers={{ click: () => setSelected(v) }}
+                >
+                  <Popup minWidth={220}>
+                    <div className="text-black space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <img src={v.photo_url || FALLBACK_PHOTO} className="w-10 h-10 rounded-lg object-cover" />
+                        <div>
+                          <p className="font-bold font-mono leading-none">{v.plate}</p>
+                          <p className="text-xs text-gray-600">{v.brand} {v.model}</p>
+                        </div>
+                      </div>
+
+                      {v.vin && (
+                        <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                          <Hash size={11} /> VIN: {v.vin}
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs pt-1 border-t border-gray-200">
+                        <span className="flex items-center gap-1 text-gray-600"><Gauge size={12} /> {Math.round(v.odometer_km || 0).toLocaleString('es-AR')} km</span>
+                        <span className="flex items-center gap-1 text-gray-600">{v.speed_kmh != null ? `${v.speed_kmh} km/h` : '—'}</span>
+                        <span className="flex items-center gap-1 text-gray-600">
+                          <Fuel size={12} /> Combustible: {v.fuel_level != null ? `${v.fuel_level}%` : 'No disponible'}
+                        </span>
+                        <span className="flex items-center gap-1 text-gray-600">
+                          RPM: {v.last_rpm != null ? v.last_rpm : 'No disponible'}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                        <Clock size={11} /> Última lectura: {haceCuanto(v.last_reading_at)}
+                      </p>
+
+                      {alert && (
+                        <div className="bg-amber-50 border border-amber-300 rounded-lg p-2 mt-1">
+                          <p className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                            <Wrench size={11} /> Necesita atención
+                          </p>
+                          <p className="text-[11px] text-amber-700">{alert.ai_recommendation}</p>
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
         </div>
       </div>
@@ -212,10 +269,12 @@ export default function TabPosicion() {
               <LineChart data={series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="recorded_at" tickFormatter={t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
+                <YAxis yAxisId="left" stroke="#10B981" fontSize={11} domain={[0, 200]} allowDataOverflow={false} />
+                <YAxis yAxisId="right" orientation="right" stroke="#6366F1" fontSize={11} domain={[0, 8000]} allowDataOverflow={false} />
                 <Tooltip contentStyle={{ background: '#0B1120', border: '1px solid #334155', borderRadius: 8 }} labelFormatter={t => new Date(t).toLocaleTimeString('es-AR')} />
-                <Line type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} yAxisId={0} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>

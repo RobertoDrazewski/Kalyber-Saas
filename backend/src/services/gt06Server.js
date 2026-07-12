@@ -268,15 +268,31 @@ function startGt06Server() {
                             }
                         }
                     } else if (header.msgId === 0x0900) {
-                        // "Transmisión transparente de datos" — un mensaje
-                        // propio del fabricante, aparece cada ~30s. Todavía
-                        // no identificado con certeza (parece traer fecha/
-                        // hora + posiblemente señal/GNSS), lo confirmamos
-                        // en cuanto tengamos tiempo de sentarnos con esto.
-                        // Lo ACKeamos igual para que el equipo no reintente
-                        // en loop pensando que no llegó.
+                        // "Transmisión transparente de datos" — formato
+                        // propio del fabricante. Confirmado: acá viaja el
+                        // VIN del auto (una sola vez, al conectar) y el
+                        // candidato fuerte de RPM (ver jt808Handler.js).
                         socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
-                        console.log(`[JT808] Transmisión transparente (0x0900) ID=${terminalIdHex} body=${header.body.toString('hex')}`);
+
+                        const parsed = jt808.parseTransparentTlv(header.body);
+
+                        if (parsed.vin && currentImei) {
+                            const vehicleId = await findVehicleIdByImei(currentImei);
+                            if (vehicleId) {
+                                await pool.query('UPDATE Vehicles SET vin = ? WHERE id = ? AND (vin IS NULL OR vin != ?)', [parsed.vin, vehicleId, parsed.vin]);
+                                console.log(`[JT808] VIN confirmado IMEI=${currentImei}: ${parsed.vin}`);
+                            }
+                        }
+
+                        if (parsed.rpm !== null && currentImei) {
+                            await telemetryIngestReal.ingestReading(currentImei, {
+                                lat: null, lng: null, speed_kmh: null, heading: null,
+                                engine_rpm: parsed.rpm,
+                                engine_load: null, coolant_temp: null, battery_voltage: null,
+                                harsh_brake: false,
+                            });
+                            console.log(`[JT808] RPM (candidato) IMEI=${currentImei}: ${parsed.rpm}`);
+                        }
 
                     } else {
                         console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);

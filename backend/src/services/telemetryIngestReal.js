@@ -119,8 +119,8 @@ async function ingestReading(imei, reading) {
         }
 
         await pool.query(
-            `UPDATE Vehicles SET lat = ?, lng = ?, heading = ?, odometer_km = ?, last_ping_at = NOW() WHERE id = ?`,
-            [reading.lat, reading.lng, reading.heading, newOdometer, device.vehicle_id]
+            `UPDATE Vehicles SET lat = ?, lng = ?, heading = ?, odometer_km = ?, speed_kmh = ?, last_ping_at = NOW() WHERE id = ?`,
+            [reading.lat, reading.lng, reading.heading, newOdometer, reading.speed_kmh ?? null, device.vehicle_id]
         );
     } else {
         await pool.query(

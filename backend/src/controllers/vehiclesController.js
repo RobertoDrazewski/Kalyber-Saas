@@ -5,7 +5,9 @@ const getVehicles = async (req, res) => {
     try {
         const ownerId = effectiveOwnerId(req);
         let query = `
-            SELECT v.*, d.full_name as current_driver_name, dev.imei as device_imei
+            SELECT v.*, d.full_name as current_driver_name, dev.imei as device_imei, dev.model as device_model,
+                (SELECT engine_rpm FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id AND tr.engine_rpm IS NOT NULL ORDER BY tr.recorded_at DESC LIMIT 1) as last_rpm,
+                (SELECT recorded_at FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id ORDER BY tr.recorded_at DESC LIMIT 1) as last_reading_at
             FROM Vehicles v
             LEFT JOIN Drivers d ON v.current_driver_id = d.id
             LEFT JOIN Devices dev ON v.device_id = dev.id
