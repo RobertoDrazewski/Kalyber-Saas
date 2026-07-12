@@ -142,18 +142,26 @@ export default function TabEquipos() {
   };
 
   // Vinculación por IMEI para el admin cliente: no necesita ver la
-  // lista de stock, solo ingresa el IMEI que le dimos y elige el
-  // auto. El backend reclama el equipo para su flota automáticamente.
+  // lista de stock, solo ingresa el código corto (o el IMEI si lo
+  // prefiere) que le dimos y elige el auto. El backend reclama el
+  // equipo para su flota automáticamente.
   const handleClaim = async (e) => {
     e.preventDefault();
     setClaimError('');
-    if (!claimForm.imei.trim() || !claimForm.vehicle_id) {
-      setClaimError('Ingresá el IMEI y elegí el vehículo');
+    const codeInput = claimForm.imei.trim();
+    if (!codeInput || !claimForm.vehicle_id) {
+      setClaimError('Ingresá el código del equipo y elegí el vehículo');
       return;
     }
     setClaiming(true);
     try {
-      await fetchAPI('/devices/pair', { method: 'POST', body: JSON.stringify(claimForm) });
+      // Si son solo dígitos y largo (14+), es un IMEI. Si no, es el
+      // código corto de activación.
+      const isImei = /^\d{14,16}$/.test(codeInput);
+      const body = isImei
+        ? { imei: codeInput, vehicle_id: claimForm.vehicle_id }
+        : { activation_code: codeInput, vehicle_id: claimForm.vehicle_id };
+      await fetchAPI('/devices/pair', { method: 'POST', body: JSON.stringify(body) });
       setClaimForm({ imei: '', vehicle_id: '' });
       load();
     } catch (err) {
@@ -275,19 +283,19 @@ export default function TabEquipos() {
       ) : (
         <>
           <p className="text-slate-400 text-sm max-w-2xl">
-            Ingresá el IMEI del equipo que te enviamos y elegí a qué auto lo vas a conectar. Una vez vinculado, es tuyo — nadie más lo puede tomar.
+            Ingresá el código corto que te dimos con el equipo (o el IMEI, si preferís) y elegí a qué auto lo vas a conectar. Una vez vinculado, es tuyo — nadie más lo puede tomar.
           </p>
 
-          {/* Vinculación por IMEI — el admin cliente NO ve stock ajeno, solo pega el código */}
+          {/* Vinculación por código corto o IMEI — el admin cliente NO ve stock ajeno, solo pega el código */}
           <div className="bg-[#1E293B]/50 p-6 rounded-2xl border border-slate-700 space-y-4">
             {claimError && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{claimError}</div>}
             <form onSubmit={handleClaim} className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
               <div className="flex-1 min-w-[180px]">
-                <label className="block text-xs text-slate-400 mb-1">IMEI del equipo</label>
+                <label className="block text-xs text-slate-400 mb-1">Código del equipo</label>
                 <div className="flex gap-2">
                   <input
                     className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white font-mono"
-                    placeholder="El código que te dio Kalyber"
+                    placeholder="Ej. K7M2QX (o el IMEI completo)"
                     value={claimForm.imei}
                     onChange={e => setClaimForm({ ...claimForm, imei: e.target.value })}
                     required
@@ -337,7 +345,12 @@ export default function TabEquipos() {
               <div className="flex justify-between items-start gap-3">
                 <div>
                   <p className="font-mono text-white font-bold">{d.imei}</p>
-                  <p className={`text-xs font-semibold ${info.color}`}>{info.label}</p>
+                  {isSuperAdmin && d.activation_code && !d.owner_id && (
+                    <p className="text-xs font-mono font-bold text-[#F59E0B] mt-1">
+                      Código para el cliente: {d.activation_code}
+                    </p>
+                  )}
+                  <p className={`text-xs font-semibold ${info.color} mt-1`}>{info.label}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">{info.desc}</p>
                   {d.label && <p className="text-[11px] text-slate-500 mt-0.5">"{d.label}"</p>}
                   {d.phone_number && <p className="text-[11px] text-slate-500 mt-0.5 font-mono">ICC: {d.phone_number}</p>}

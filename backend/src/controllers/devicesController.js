@@ -1,6 +1,17 @@
 const pool = require('../config/database');
 const { effectiveOwnerId } = require('../middlewares/requireRole');
 
+// Código corto de activación — alternativa fácil de tipear al IMEI
+// completo. NO es secuencial/adivinable como un id de base de datos:
+// 6 caracteres al azar (sin 0/O/1/I para no confundir al escribirlo
+// a mano), suficiente para no chocar ni ser adivinado por otro cliente.
+function generateActivationCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0,O,1,I
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+
 // ============================================================
 // Alta de equipo (por IMEI) — SOLO super_admin (ver deviceRoutes.js).
 //
@@ -17,11 +28,23 @@ const addDevice = async (req, res) => {
         return res.status(400).json({ error: 'Modelo inválido (tiene que ser VL04 o VL502)' });
     }
     try {
-        const [result] = await pool.query(
-            `INSERT INTO Devices (imei, label, model, phone_number, status, owner_id) VALUES (?, ?, ?, ?, 'unpaired', NULL)`,
-            [imei, label || null, model || 'VL502', phone_number || null]
-        );
-        res.json({ id: result.insertId, imei, label, model: model || 'VL502', phone_number, status: 'unpaired' });
+        let activationCode, inserted = false, result;
+        // Reintenta si por casualidad choca con uno ya existente (muy
+        // improbable con 33^6 combinaciones, pero mejor cubrirlo).
+        for (let attempt = 0; attempt < 5 && !inserted; attempt++) {
+            activationCode = generateActivationCode();
+            try {
+                [result] = await pool.query(
+                    `INSERT INTO Devices (imei, label, model, phone_number, activation_code, status, owner_id) VALUES (?, ?, ?, ?, ?, 'unpaired', NULL)`,
+                    [imei, label || null, model || 'VL502', phone_number || null, activationCode]
+                );
+                inserted = true;
+            } catch (err) {
+                if (err.code === 'ER_DUP_ENTRY' && err.message.includes('activation_code')) continue; // reintentar con otro código
+                throw err;
+            }
+        }
+        res.json({ id: result.insertId, imei, label, model: model || 'VL502', phone_number, activation_code: activationCode, status: 'unpaired' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Ese IMEI ya está registrado' });
@@ -109,8 +132,15 @@ const getDeviceRawData = async (req, res) => {
 // flota y nadie más lo puede tomar.
 // ============================================================
 const pairDevice = async (req, res) => {
-    const { imei, vehicle_id } = req.body;
+    // El cliente puede pegar el IMEI completo O el código corto de
+    // activación — lo que tenga más a mano. Cualquiera de los dos
+    // identifica el mismo equipo, sin ambigüedad.
+    const { imei, activation_code, vehicle_id } = req.body;
     const ownerId = effectiveOwnerId(req);
+
+    if (!imei && !activation_code) {
+        return res.status(400).json({ error: 'Ingresá el IMEI o el código de activación del equipo' });
+    }
 
     // Un admin necesita saber a qué flota está pareando; super_admin
     // puede pasar ?owner_id=X en la query para hacerlo en nombre de
@@ -123,10 +153,12 @@ const pairDevice = async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [[device]] = await connection.query('SELECT id, vehicle_id, owner_id FROM Devices WHERE imei = ?', [imei]);
+        const [[device]] = activation_code
+            ? await connection.query('SELECT id, vehicle_id, owner_id FROM Devices WHERE activation_code = ?', [activation_code.toUpperCase()])
+            : await connection.query('SELECT id, vehicle_id, owner_id FROM Devices WHERE imei = ?', [imei]);
         if (!device) {
             await connection.rollback();
-            return res.status(404).json({ error: 'IMEI no encontrado' });
+            return res.status(404).json({ error: 'No se encontró ningún equipo con ese IMEI/código' });
         }
 
         if (device.owner_id === null) {

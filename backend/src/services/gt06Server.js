@@ -191,6 +191,13 @@ async function findVehicleIdByImei(imei) {
     return device?.vehicle_id || null;
 }
 
+// Id de la tabla Devices — útil en los logs para cruzar rápido contra
+// lo que se ve en Equipos GPS, sin tener que buscar por IMEI a mano.
+async function findDeviceIdByImei(imei) {
+    const [[device]] = await pool.query('SELECT id FROM Devices WHERE imei = ?', [imei]);
+    return device?.id ?? null;
+}
+
 function startGt06Server() {
     const server = net.createServer((socket) => {
         let buffer = Buffer.alloc(0);
@@ -213,7 +220,9 @@ function startGt06Server() {
                     const terminalIdHex = header.terminalId.toString('hex');
 
                     if (header.msgId === jt808.MSG_ID.TERMINAL_REGISTER) {
-                        console.log(`[JT808] Registro de terminal, ID crudo=${terminalIdHex} desde ${remote}`);
+                        const imeiPrefixLog = jt808.terminalIdToImeiPrefix(header.terminalId);
+                        const [[deviceLog]] = await pool.query('SELECT id FROM Devices WHERE imei LIKE ?', [`${imeiPrefixLog}%`]);
+                        console.log(`[JT808] Registro de terminal, ID crudo=${terminalIdHex} (id=${deviceLog?.id ?? 'no encontrado en Devices'}) desde ${remote}`);
                         socket.write(jt808.buildRegisterResponse(header.terminalId, 1, header.serialNo));
                         console.log(`[JT808] Respondido 0x8100 (registro OK)`);
 
@@ -305,7 +314,8 @@ function startGt06Server() {
                 try {
                     if (protocolNumber === PROTOCOL.LOGIN) {
                         currentImei = bcdToImei(content.slice(0, 8));
-                        console.log(`[GT06] Login IMEI=${currentImei} desde ${remote}`);
+                        const deviceId = await findDeviceIdByImei(currentImei);
+                        console.log(`[GT06] Login IMEI=${currentImei} (id=${deviceId ?? 'no encontrado en Devices'}) desde ${remote}`);
                         socket.write(buildAck(protocolNumber, serial));
                     } else if (protocolNumber === PROTOCOL.STATUS_HEARTBEAT) {
                         socket.write(buildAck(protocolNumber, serial));
