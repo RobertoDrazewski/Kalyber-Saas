@@ -284,14 +284,17 @@ function startGt06Server() {
                             }
                         }
 
+                        // MODIFICACION: Se incluyen todos los parametros mapeados de la Trama 0x0900
                         if (parsed.rpm !== null && currentImei) {
                             await telemetryIngestReal.ingestReading(currentImei, {
                                 lat: null, lng: null, speed_kmh: null, heading: null,
                                 engine_rpm: parsed.rpm,
-                                engine_load: null, coolant_temp: null, battery_voltage: null,
+                                engine_load: parsed.engine_load, 
+                                coolant_temp: parsed.coolant_temp, 
+                                battery_voltage: parsed.battery_voltage,
                                 harsh_brake: false,
                             });
-                            console.log(`[JT808] RPM (candidato) IMEI=${currentImei}: ${parsed.rpm}`);
+                            console.log(`[JT808] OBD Data IMEI=${currentImei}: RPM=${parsed.rpm}, Temp=${parsed.coolant_temp}°C, Bat=${parsed.battery_voltage}V, Load=${parsed.engine_load}`);
                         }
 
                     } else {

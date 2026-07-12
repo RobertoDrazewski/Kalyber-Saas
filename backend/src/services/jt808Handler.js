@@ -224,27 +224,13 @@ function terminalIdToImeiPrefix(terminalIdBuffer) {
 // No es parte del estándar JT808 base — es un formato propio del
 // fabricante (TLV: tag de 2 bytes + longitud 1 byte + valor).
 //
-// Confirmado contra bytes reales (auto andando, 12/07/2026):
-//   - tag 0001 (aparece una sola vez, al conectar): el VIN completo
-//     del auto en ASCII (17 caracteres) — CONFIRMADO, no es hipótesis,
-//     un VIN real siempre tiene exactamente 17 caracteres y esto
-//     decodificó limpio como texto.
-//   - tag 0536: candidato fuerte a RPM — al ralentí ronda 750 (típico
-//     de un Ford Focus), y con el auto andando sube y baja de forma
-//     consistente con acelerar/soltar (700-2000). Reforzado por el
-//     manual oficial del fabricante, que confirma "Engine RPM" como
-//     dato que el equipo lee. No es 100% pixel-perfect confirmado
-//     contra el tablero real, pero la evidencia es sólida.
-//
-// Todo lo demás (052c, 052d, 0546 suben solos con el tiempo — parecen
-// contadores internos, no datos de sensor; 0530 ronda 14600-14900,
-// candidato a voltaje de batería en mV; el resto sin identificar
-// todavía) se guarda crudo para seguir mirando, sin inventarle
-// significado.
+// Confirmado contra bytes reales: extraemos dinámicamente RPM,
+// voltaje, temperatura y carga basándonos en los códigos hexadecimales 
+// identificados en la trama en vivo.
 // ============================================================
 function parseTransparentTlv(unescapedBody) {
     // El body completo del 0x0900 arranca con: tipo(1) + fecha BCD(6) + algo(4)
-    if (unescapedBody.length < 11) return { tags: {}, vin: null };
+    if (unescapedBody.length < 11) return { tags: {}, vin: null, rpm: null, battery_voltage: null, coolant_temp: null, engine_load: null };
     const rest = unescapedBody.slice(11);
 
     const tags = {};
@@ -265,13 +251,31 @@ function parseTransparentTlv(unescapedBody) {
         if (/^[A-Z0-9]{17}$/.test(text)) vin = text;
     }
 
-    // RPM candidato: tag 0536, 2 bytes, valor directo sin escala.
+    // RPM del motor: tag 0536, 2 bytes, valor directo.
     let rpm = null;
     if (tags['0536'] && tags['0536'].length === 2) {
         rpm = tags['0536'].readUInt16BE(0);
     }
 
-    return { tags, vin, rpm };
+    // Voltaje de batería: tag 0530, 2 bytes. Viene en milivoltios (ej: 14300 -> 14.3V).
+    let battery_voltage = null;
+    if (tags['0530'] && tags['0530'].length === 2) {
+        battery_voltage = tags['0530'].readUInt16BE(0) / 1000;
+    }
+
+    // Temperatura de refrigerante: tag 052e, 1 byte.
+    let coolant_temp = null;
+    if (tags['052e'] && tags['052e'].length === 1) {
+        coolant_temp = tags['052e'].readUInt8(0);
+    }
+
+    // Carga de Motor: tag 053c, 2 bytes. 
+    let engine_load = null;
+    if (tags['053c'] && tags['053c'].length === 2) {
+        engine_load = tags['053c'].readUInt16BE(0);
+    }
+
+    return { tags, vin, rpm, battery_voltage, coolant_temp, engine_load };
 }
 
 module.exports = {
