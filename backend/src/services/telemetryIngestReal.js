@@ -123,9 +123,13 @@ async function ingestReading(imei, reading) {
             [reading.lat, reading.lng, reading.heading, newOdometer, reading.speed_kmh ?? null, device.vehicle_id]
         );
     } else {
+        // Aquí caen los paquetes 0x0900 (OBD Transmisión Transparente) del VL502
         await pool.query(
-            `UPDATE Vehicles SET last_ping_at = NOW() WHERE id = ?`,
-            [device.vehicle_id]
+            `UPDATE Vehicles SET 
+                last_ping_at = NOW(),
+                last_rpm = COALESCE(?, last_rpm)
+             WHERE id = ?`,
+            [reading.engine_rpm, device.vehicle_id]
         );
     }
 
