@@ -39,6 +39,7 @@ const HD_CONSTRAINTS = {
 export default function BarcodeScannerModal({ onScan, onClose }) {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
+  const scannedRef = useRef(false); // evita procesar/loopear después del primer resultado
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -52,12 +53,22 @@ export default function BarcodeScannerModal({ onScan, onClose }) {
           { video: HD_CONSTRAINTS },
           videoRef.current,
           (result) => {
-            if (cancelled || !result) return;
+            // A diferencia del QR (loop manual que cortábamos solos),
+            // esta librería sigue mandando resultados en loop mientras
+            // el código siga en cuadro — sin este freno, "onScan" se
+            // llamaba decenas de veces por segundo y colgaba la página
+            // en el celular antes de que la cámara llegara a cerrarse.
+            if (cancelled || !result || scannedRef.current) return;
+            scannedRef.current = true;
+            cancelled = true; // así el catch de abajo no muestra error si reset() dispara una excepción interna
+            reader.reset(); // cortamos la cámara ya mismo, no esperamos al unmount
             onScan(result.getText().trim());
           }
         );
       } catch (err) {
-        setError('No se pudo acceder a la cámara en alta resolución. Revisá los permisos del navegador, o escribí el ICC a mano.');
+        if (!cancelled) {
+          setError('No se pudo acceder a la cámara en alta resolución. Revisá los permisos del navegador, o escribí el ICC a mano.');
+        }
       }
     }
 
