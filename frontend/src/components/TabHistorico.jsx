@@ -1,79 +1,222 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { fetchAPI } from '../services/api';
-import { History, Calendar, Clock, MapPin } from 'lucide-react';
+import { MapContainer, TileLayer, Polyline, Marker } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { History, Clock, MapPin, Gauge, X, RefreshCw } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
+const dotIcon = (color) => L.divIcon({
+  className: '',
+  html: `<div style="width:14px;height:14px;border-radius:9999px;background:${color};border:2px solid #0B1120;box-shadow:0 0 6px rgba(0,0,0,.6);"></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+function formatDate(dateString) {
+  if (!dateString) return 'En curso...';
+  return new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short' }).format(new Date(dateString));
+}
+function formatTime(dateString) {
+  if (!dateString) return '—';
+  return new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(new Date(dateString));
+}
+function formatDuration(min) {
+  if (min == null) return '—';
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
+
 export default function TabHistorico() {
-  const [historyLogs, setHistoryLogs] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [vehicleFilter, setVehicleFilter] = useState('all');
   const [loadError, setLoadError] = useState('');
+  const [reconstructing, setReconstructing] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [tripTrail, setTripTrail] = useState([]);
+
+  const load = () => fetchAPI('/trips').then(setTrips).catch(err => setLoadError(err.message));
+
+  const refresh = async () => {
+    setReconstructing(true);
+    try {
+      await fetchAPI('/trips/reconstruct', { method: 'POST' });
+    } catch (err) {
+      // si falla la reconstrucción no rompemos la pantalla, igual mostramos lo que ya había
+    }
+    await load();
+    setReconstructing(false);
+  };
 
   useEffect(() => {
-    fetchAPI('/trips')
-      .then(setHistoryLogs)
-      .catch(err => setLoadError(err.message));
+    refresh();
+    fetchAPI('/vehicles').then(setVehicles).catch(() => {});
   }, []);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'En curso...';
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-AR', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-    }).format(date);
-  };
+  // Cuando se selecciona un viaje, buscamos el trazo real de ese
+  // tramo (Telemetry_Raw entre start_time y end_time del vehículo).
+  useEffect(() => {
+    if (!selectedTrip) { setTripTrail([]); return; }
+    fetchAPI(`/telemetry/vehicle/${selectedTrip.vehicle_id}?limit=500`)
+      .then(rows => {
+        const start = new Date(selectedTrip.start_time).getTime();
+        const end = new Date(selectedTrip.end_time || Date.now()).getTime();
+        const points = rows
+          .filter(r => {
+            const t = new Date(r.recorded_at).getTime();
+            return t >= start - 60000 && t <= end + 60000 && r.lat && r.lng;
+          })
+          .map(r => [parseFloat(r.lat), parseFloat(r.lng)]);
+        setTripTrail(points);
+      })
+      .catch(() => setTripTrail([]));
+  }, [selectedTrip]);
+
+  const filteredTrips = useMemo(() => {
+    return vehicleFilter === 'all' ? trips : trips.filter(t => String(t.vehicle_id) === vehicleFilter);
+  }, [trips, vehicleFilter]);
+
+  // Agrupar por día para el diseño tipo "bitácora"
+  const groupedByDay = useMemo(() => {
+    const groups = {};
+    for (const t of filteredTrips) {
+      const day = new Date(t.start_time).toISOString().slice(0, 10);
+      if (!groups[day]) groups[day] = [];
+      groups[day].push(t);
+    }
+    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredTrips]);
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-        <History className="text-[#10B981]" /> Bitácora Histórica
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <History className="text-[#10B981]" /> Bitácora de Viajes
+        </h2>
+        <div className="flex items-center gap-2">
+          <select
+            value={vehicleFilter}
+            onChange={e => setVehicleFilter(e.target.value)}
+            className="bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+          >
+            <option value="all">Todos los autos</option>
+            {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate}</option>)}
+          </select>
+          <button
+            onClick={refresh}
+            disabled={reconstructing}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#6366F1]/10 border border-[#6366F1]/30 text-[#6366F1] text-sm font-semibold hover:bg-[#6366F1]/20 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={reconstructing ? 'animate-spin' : ''} />
+            {reconstructing ? 'Actualizando...' : 'Actualizar'}
+          </button>
+        </div>
+      </div>
+
       <ErrorBanner message={loadError} />
+      <p className="text-slate-500 text-sm -mt-4">
+        Los viajes se arman solos a partir del GPS real: empiezan cuando el auto arranca a moverse y cierran cuando queda quieto un rato.
+      </p>
 
-      <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4 md:p-6">
-        <p className="text-slate-400 mb-6 text-sm">
-          Registro inalterable de actividad de la flota. Todos los turnos y jornadas de trabajo quedan guardados aquí.
-        </p>
-
-        <div className="space-y-4">
-          {historyLogs.map((log, index) => (
-            <div key={log.id || index} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-[#0B1120] rounded-xl border border-slate-800 hover:border-slate-600 transition-colors gap-4">
-
-              <div className="flex items-center gap-4 md:w-1/4">
-                <div className="w-10 h-10 rounded-full bg-[#10B981]/20 flex items-center justify-center text-[#10B981] shrink-0">
-                  <MapPin size={18} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Lista agrupada por día */}
+        <div className={`space-y-6 ${selectedTrip ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+          {groupedByDay.map(([day, dayTrips]) => {
+            const totalKm = dayTrips.reduce((s, t) => s + Number(t.distance_km || 0), 0);
+            return (
+              <div key={day}>
+                <div className="flex items-baseline justify-between mb-2 px-1">
+                  <h3 className="text-white font-bold text-sm">
+                    {new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date(day))}
+                  </h3>
+                  <span className="text-xs text-slate-500">{dayTrips.length} viaje(s) · {totalKm.toFixed(1)} km</span>
                 </div>
-                <div>
-                  <p className="font-mono text-white font-bold">{log.plate}</p>
-                  <p className="text-xs text-slate-400">{log.driver_name || 'Sin conductor asignado'}</p>
+                <div className="space-y-2">
+                  {dayTrips.map(trip => (
+                    <button
+                      key={trip.id}
+                      onClick={() => setSelectedTrip(trip)}
+                      className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#1E293B]/50 rounded-xl border text-left transition-colors gap-3 ${
+                        selectedTrip?.id === trip.id ? 'border-[#6366F1]' : 'border-slate-800 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 sm:w-1/4">
+                        <div className="w-9 h-9 rounded-full bg-[#10B981]/10 flex items-center justify-center text-[#10B981] shrink-0">
+                          <MapPin size={16} />
+                        </div>
+                        <div>
+                          <p className="font-mono text-white font-bold text-sm">{trip.plate}</p>
+                          <p className="text-xs text-slate-500">{trip.driver_name || 'Sin conductor asignado'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-300 sm:w-1/4">
+                        <Clock size={13} className="text-slate-500 shrink-0" />
+                        {formatTime(trip.start_time)} — {formatTime(trip.end_time)}
+                        <span className="text-slate-500">({formatDuration(trip.duration_minutes)})</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-300 sm:w-1/4">
+                        <Gauge size={13} className="text-slate-500 shrink-0" />
+                        Máx. {trip.max_speed_kmh ?? '—'} km/h
+                      </div>
+                      <div className="sm:w-1/6 sm:text-right">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#6366F1]/10 text-[#6366F1] text-xs font-bold border border-[#6366F1]/20">
+                          {Number(trip.distance_km).toFixed(1)} km
+                        </span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
+            );
+          })}
 
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 md:w-2/4 text-sm text-slate-300">
-                <div className="flex items-center gap-2">
-                  <Calendar size={14} className="text-slate-500" />
-                  <span><span className="text-slate-500">Inicio:</span> {formatDate(log.start_time)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock size={14} className="text-slate-500" />
-                  <span><span className="text-slate-500">Fin:</span> {formatDate(log.end_time)}</span>
-                </div>
-              </div>
-
-              <div className="md:w-1/4 md:text-right">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#6366F1]/10 text-[#6366F1] text-xs font-bold border border-[#6366F1]/20">
-                  {log.distance_km} km recorridos
-                </span>
-              </div>
-
-            </div>
-          ))}
-
-          {historyLogs.length === 0 && !loadError && (
-            <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-3">
+          {groupedByDay.length === 0 && !loadError && !reconstructing && (
+            <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3 bg-[#1E293B]/30 rounded-2xl border border-slate-800">
               <History size={40} className="opacity-20" />
-              <p>El historial de la flota está vacío.</p>
+              <p>Todavía no hay viajes registrados con datos reales.</p>
+              <p className="text-xs">Van a aparecer solos apenas el auto haga un recorrido y quede detenido un rato.</p>
             </div>
           )}
         </div>
+
+        {/* Panel del viaje seleccionado, con su trazo real */}
+        {selectedTrip && (
+          <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 overflow-hidden h-fit sticky top-4">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-start">
+              <div>
+                <p className="font-mono text-white font-bold">{selectedTrip.plate}</p>
+                <p className="text-xs text-slate-400">{formatDate(selectedTrip.start_time)} · {formatTime(selectedTrip.start_time)} - {formatTime(selectedTrip.end_time)}</p>
+              </div>
+              <button onClick={() => setSelectedTrip(null)} className="text-slate-400 hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="h-64">
+              <MapContainer center={tripTrail[0] || [-32.8895, -68.8458]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                  attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                />
+                {tripTrail.length > 1 && <Polyline positions={tripTrail} pathOptions={{ color: '#6366F1', weight: 4 }} />}
+                {tripTrail.length > 0 && <Marker position={tripTrail[0]} icon={dotIcon('#10B981')} />}
+                {tripTrail.length > 1 && <Marker position={tripTrail[tripTrail.length - 1]} icon={dotIcon('#EF4444')} />}
+              </MapContainer>
+            </div>
+            <div className="p-4 grid grid-cols-3 gap-3 text-center border-t border-slate-800">
+              <div>
+                <p className="text-white font-bold">{Number(selectedTrip.distance_km).toFixed(1)}</p>
+                <p className="text-[11px] text-slate-500">km</p>
+              </div>
+              <div>
+                <p className="text-white font-bold">{formatDuration(selectedTrip.duration_minutes)}</p>
+                <p className="text-[11px] text-slate-500">duración</p>
+              </div>
+              <div>
+                <p className="text-white font-bold">{selectedTrip.max_speed_kmh ?? '—'}</p>
+                <p className="text-[11px] text-slate-500">km/h máx.</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

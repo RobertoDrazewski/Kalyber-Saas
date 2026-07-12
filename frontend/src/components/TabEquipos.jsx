@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
-import { Radio, Plus, Link2, Unlink } from 'lucide-react';
+import { Radio, Plus, Link2, Unlink, Pencil, Trash2, X } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
 const MODEL_INFO = {
@@ -8,13 +8,67 @@ const MODEL_INFO = {
   VL502: { label: 'JM-VL502 · Plan Avanzado', color: 'text-[#6366F1]', desc: 'Escáner OBD2 — lee ECU/CAN real (RPM, temp, combustible, DTC)' },
 };
 
+function EditDeviceModal({ device, onClose, onSaved }) {
+  const [label, setLabel] = useState(device.label || '');
+  const [model, setModel] = useState(device.model || 'VL502');
+  const [phoneNumber, setPhoneNumber] = useState(device.phone_number || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      await fetchAPI(`/devices/${device.id}`, { method: 'PATCH', body: JSON.stringify({ label, model, phone_number: phoneNumber }) });
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-[#0B1120] border border-slate-700 rounded-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+          <h3 className="text-white font-bold font-mono">{device.imei}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20} /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-4">
+          {error && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{error}</div>}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Modelo</label>
+            <select className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={model} onChange={e => setModel(e.target.value)}>
+              <option value="VL04">JM-VL04 (Básico)</option>
+              <option value="VL502">JM-VL502 (Avanzado)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Número de línea (SIM)</label>
+            <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" placeholder="Para saber cuál cortar después" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Etiqueta</label>
+            <input className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-2 text-white" value={label} onChange={e => setLabel(e.target.value)} />
+          </div>
+          <button type="submit" disabled={saving} className="w-full bg-[#6366F1] py-2.5 rounded-lg text-white font-bold hover:bg-[#4F46E5] disabled:opacity-60">
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function TabEquipos() {
   const currentUser = JSON.parse(localStorage.getItem('kyber_user') || '{}');
   const isSuperAdmin = currentUser.role === 'super_admin';
 
   const [devices, setDevices] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-  const [form, setForm] = useState({ imei: '', label: '', model: 'VL502' });
+  const [form, setForm] = useState({ imei: '', label: '', model: 'VL502', phone_number: '' });
   const [claimForm, setClaimForm] = useState({ imei: '', vehicle_id: '' });
   const [pairTarget, setPairTarget] = useState({});
   const [loadError, setLoadError] = useState('');
@@ -22,6 +76,17 @@ export default function TabEquipos() {
   const [claimError, setClaimError] = useState('');
   const [saving, setSaving] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [editingDevice, setEditingDevice] = useState(null);
+
+  const handleDelete = async (device) => {
+    if (!confirm(`¿Eliminar el equipo ${device.imei} por completo? El IMEI queda libre para volver a cargarlo si hace falta.`)) return;
+    try {
+      await fetchAPI(`/devices/${device.id}`, { method: 'DELETE' });
+      load();
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  };
 
   const load = () => Promise.all([
     fetchAPI('/devices').then(setDevices),
@@ -43,7 +108,7 @@ export default function TabEquipos() {
     setSaving(true);
     try {
       await fetchAPI('/devices', { method: 'POST', body: JSON.stringify(form) });
-      setForm({ imei: '', label: '', model: 'VL502' });
+      setForm({ imei: '', label: '', model: 'VL502', phone_number: '' });
       load();
     } catch (err) {
       setFormError(err.message);
@@ -136,6 +201,15 @@ export default function TabEquipos() {
                 </select>
               </div>
               <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs text-slate-400 mb-1">Número de línea (SIM)</label>
+                <input
+                  className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
+                  placeholder="Para saber cuál cortar después"
+                  value={form.phone_number}
+                  onChange={e => setForm({ ...form, phone_number: e.target.value })}
+                />
+              </div>
+              <div className="flex-1 min-w-[160px]">
                 <label className="block text-xs text-slate-400 mb-1">Etiqueta (opcional)</label>
                 <input
                   className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-4 py-2 text-white"
@@ -212,6 +286,7 @@ export default function TabEquipos() {
                   <p className={`text-xs font-semibold ${info.color}`}>{info.label}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">{info.desc}</p>
                   {d.label && <p className="text-[11px] text-slate-500 mt-0.5">"{d.label}"</p>}
+                  {d.phone_number && <p className="text-[11px] text-slate-500 mt-0.5">📞 {d.phone_number}</p>}
                 </div>
                 <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 ${
                   d.status === 'paired' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-slate-700/50 text-slate-400'
@@ -219,6 +294,17 @@ export default function TabEquipos() {
                   {d.status === 'paired' ? `Pareado — ${d.vehicle_plate}` : 'Sin parear'}
                 </span>
               </div>
+
+              {isSuperAdmin && (
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setEditingDevice(d)} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-[#1E293B] text-slate-300 py-1.5 rounded-lg hover:bg-[#1E293B]/70 border border-slate-700">
+                    <Pencil size={12} /> Editar
+                  </button>
+                  <button onClick={() => handleDelete(d)} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-[#EF4444]/10 text-[#EF4444] py-1.5 rounded-lg hover:bg-[#EF4444]/20">
+                    <Trash2 size={12} /> Eliminar
+                  </button>
+                </div>
+              )}
 
               {d.status === 'paired' ? (
                 <button
@@ -260,6 +346,14 @@ export default function TabEquipos() {
           </p>
         )}
       </div>
+
+      {editingDevice && (
+        <EditDeviceModal
+          device={editingDevice}
+          onClose={() => setEditingDevice(null)}
+          onSaved={() => { setEditingDevice(null); load(); }}
+        />
+      )}
     </div>
   );
 }

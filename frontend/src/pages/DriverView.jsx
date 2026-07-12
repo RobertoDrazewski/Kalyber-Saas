@@ -3,9 +3,10 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Car, CheckCircle2 } from 'lucide-react';
+import { LogOut, Car, CheckCircle2, Wrench } from 'lucide-react';
 import { fetchAPI } from '../services/api';
 import ErrorBanner from '../components/ErrorBanner';
+import MaintenanceEventForm from '../components/MaintenanceEventForm';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -57,6 +58,7 @@ export default function DriverView() {
   const [trail, setTrail] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [selecting, setSelecting] = useState(false);
+  const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [selectError, setSelectError] = useState('');
   const navigate = useNavigate();
 
@@ -78,17 +80,51 @@ export default function DriverView() {
 
   const myVehicle = vehiclesWithCoords.find(v => v.current_driver_name === user.name);
 
+  // Mismo trazo segmentado por viaje que en Mapa en Vivo — se corta
+  // cuando el auto queda quieto y arranca de otro color al volver a
+  // moverse.
+  const TRAIL_COLORS = ['#10B981', '#6366F1', '#F59E0B', '#EC4899', '#06B6D4'];
+  const MOVING_SPEED_KMH = 3;
+  const STOP_GAP_MINUTES = 4;
+
+  function segmentTripsForDisplay(rawSeries) {
+    const points = rawSeries
+      .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng), speed: toNum(p.speed_kmh), t: p.recorded_at }))
+      .filter(p => p.lat !== null && p.lng !== null);
+
+    const segments = [];
+    let current = [];
+    let lastMovingIdx = -1;
+
+    points.forEach((p, i) => {
+      const isMoving = (p.speed ?? 0) > MOVING_SPEED_KMH;
+      if (isMoving) {
+        current.push([p.lat, p.lng]);
+        lastMovingIdx = i;
+      } else if (current.length) {
+        const minutesSinceMove = (new Date(p.t) - new Date(points[lastMovingIdx].t)) / 60000;
+        if (minutesSinceMove > STOP_GAP_MINUTES) {
+          if (current.length > 1) segments.push(current);
+          current = [];
+        } else {
+          current.push([p.lat, p.lng]);
+        }
+      }
+    });
+    if (current.length > 1) segments.push(current);
+
+    return segments;
+  }
+
+  const tripSegments = segmentTripsForDisplay(trail);
+
   // Trazo de la trayectoria del propio auto — se sigue extendiendo
   // solo mientras el equipo siga mandando posiciones.
   const loadTrail = () => {
     if (!myVehicle) return;
     fetchAPI(`/telemetry/vehicle/${myVehicle.id}?limit=120`)
       .then(rows => {
-        const points = rows
-          .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng) }))
-          .filter(p => p.lat !== null && p.lng !== null)
-          .map(p => [p.lat, p.lng]);
-        setTrail(points);
+        setTrail(rows);
       })
       .catch(() => {});
   };
@@ -170,6 +206,32 @@ export default function DriverView() {
             ))}
           </MapContainer>
         </div>
+
+        {myVehicle && (
+          <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-sm flex items-center gap-2"><Wrench size={16} /> Mantenimiento de {myVehicle.plate}</h3>
+              {!showMaintenanceForm && (
+                <button
+                  onClick={() => setShowMaintenanceForm(true)}
+                  className="text-xs bg-[#6366F1]/10 text-[#6366F1] px-3 py-1.5 rounded-lg font-semibold hover:bg-[#6366F1]/20"
+                >
+                  + Cargar comprobante
+                </button>
+              )}
+            </div>
+            {showMaintenanceForm ? (
+              <MaintenanceEventForm
+                vehicleId={myVehicle.id}
+                currentOdometer={myVehicle.odometer_km}
+                onDone={() => setShowMaintenanceForm(false)}
+                onCancel={() => setShowMaintenanceForm(false)}
+              />
+            ) : (
+              <p className="text-xs text-slate-500">Sacale una foto al ticket del taller/lubricentro y cargalo acá — le queda al admin en el historial del auto.</p>
+            )}
+          </div>
+        )}
 
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4">
           <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2"><Car size={16} /> Elegí tu auto</h3>

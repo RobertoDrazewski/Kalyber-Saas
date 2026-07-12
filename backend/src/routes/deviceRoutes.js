@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addDevice, getDevices, pairDevice, unpairDevice } = require('../controllers/devicesController');
+const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice } = require('../controllers/devicesController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 
@@ -11,5 +11,8 @@ router.get('/', verifyToken, requireRole('super_admin', 'admin'), getDevices);
 router.post('/', verifyToken, requireRole('super_admin'), addDevice);
 router.post('/pair', verifyToken, requireRole('super_admin', 'admin'), pairDevice);
 router.delete('/:imei/pair', verifyToken, requireRole('super_admin', 'admin'), unpairDevice);
+router.get('/:id/raw', verifyToken, requireRole('super_admin', 'admin'), getDeviceRawData);
+router.patch('/:id', verifyToken, requireRole('super_admin', 'admin'), updateDevice);
+router.delete('/:id', verifyToken, requireRole('super_admin'), deleteDevice);
 
 module.exports = router;

@@ -11,17 +11,17 @@ const { effectiveOwnerId } = require('../middlewares/requireRole');
 // de los equipos que llegan mañana.
 // ============================================================
 const addDevice = async (req, res) => {
-    const { imei, label, model } = req.body;
+    const { imei, label, model, phone_number } = req.body;
     if (!imei) return res.status(400).json({ error: 'Falta el IMEI' });
     if (model && !['VL04', 'VL502'].includes(model)) {
         return res.status(400).json({ error: 'Modelo inválido (tiene que ser VL04 o VL502)' });
     }
     try {
         const [result] = await pool.query(
-            `INSERT INTO Devices (imei, label, model, status, owner_id) VALUES (?, ?, ?, 'unpaired', NULL)`,
-            [imei, label || null, model || 'VL502']
+            `INSERT INTO Devices (imei, label, model, phone_number, status, owner_id) VALUES (?, ?, ?, ?, 'unpaired', NULL)`,
+            [imei, label || null, model || 'VL502', phone_number || null]
         );
-        res.json({ id: result.insertId, imei, label, model: model || 'VL502', status: 'unpaired' });
+        res.json({ id: result.insertId, imei, label, model: model || 'VL502', phone_number, status: 'unpaired' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Ese IMEI ya está registrado' });
@@ -39,9 +39,11 @@ const getDevices = async (req, res) => {
     try {
         const ownerId = effectiveOwnerId(req);
         let query = `
-            SELECT dev.*, v.plate as vehicle_plate
+            SELECT dev.*, v.plate as vehicle_plate,
+                   u.name as owner_name, u.company_name as owner_company
             FROM Devices dev
             LEFT JOIN Vehicles v ON dev.vehicle_id = v.id
+            LEFT JOIN Users u ON dev.owner_id = u.id
         `;
         const params = [];
         if (ownerId) {
@@ -53,6 +55,47 @@ const getDevices = async (req, res) => {
         res.json(rows);
     } catch (error) {
         res.status(500).json({ error: 'Error obteniendo equipos' });
+    }
+};
+
+// ============================================================
+// Diagnóstico: "todo lo que la base de datos guarda" de un equipo
+// puntual — pensado para debug real, no para el uso diario. Devuelve
+// el equipo, a qué cliente/vehículo está pareado, y las últimas
+// lecturas crudas de Telemetry_Raw tal cual quedaron guardadas, sin
+// procesar ni maquillar nada.
+// ============================================================
+const getDeviceRawData = async (req, res) => {
+    const { id } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    try {
+        const ownerId = effectiveOwnerId(req);
+        const [[device]] = await pool.query(`
+            SELECT dev.*, v.plate as vehicle_plate, v.brand, v.model as vehicle_model,
+                   v.odometer_km, u.name as owner_name, u.company_name as owner_company
+            FROM Devices dev
+            LEFT JOIN Vehicles v ON dev.vehicle_id = v.id
+            LEFT JOIN Users u ON dev.owner_id = u.id
+            WHERE dev.id = ?
+        `, [id]);
+
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (ownerId && device.owner_id !== ownerId) {
+            return res.status(403).json({ error: 'Ese equipo no pertenece a tu flota' });
+        }
+
+        let readings = [];
+        if (device.vehicle_id) {
+            const [rows] = await pool.query(
+                `SELECT * FROM Telemetry_Raw WHERE vehicle_id = ? ORDER BY recorded_at DESC LIMIT ?`,
+                [device.vehicle_id, limit]
+            );
+            readings = rows;
+        }
+
+        res.json({ device, readings });
+    } catch (error) {
+        res.status(500).json({ error: 'Error obteniendo los datos crudos del equipo' });
     }
 };
 
@@ -137,4 +180,48 @@ const unpairDevice = async (req, res) => {
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice };
+// Editar un equipo (etiqueta o modelo) — no toca el pareo, para eso
+// están pairDevice/unpairDevice.
+const updateDevice = async (req, res) => {
+    const { id } = req.params;
+    const { label, model, phone_number } = req.body;
+    if (model && !['VL04', 'VL502'].includes(model)) {
+        return res.status(400).json({ error: 'Modelo inválido (tiene que ser VL04 o VL502)' });
+    }
+    try {
+        const ownerId = effectiveOwnerId(req);
+        const [[device]] = await pool.query('SELECT owner_id FROM Devices WHERE id = ?', [id]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (ownerId && device.owner_id !== ownerId) {
+            return res.status(403).json({ error: 'Ese equipo no pertenece a tu flota' });
+        }
+        await pool.query(
+            `UPDATE Devices SET label = COALESCE(?, label), model = COALESCE(?, model), phone_number = COALESCE(?, phone_number) WHERE id = ?`,
+            [label, model, phone_number, id]
+        );
+        res.json({ message: 'Equipo actualizado' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error actualizando el equipo' });
+    }
+};
+
+// Eliminar un equipo por completo (no solo desparear) — SOLO
+// super_admin, ya que es Puma Code quien programa/gestiona el
+// inventario físico. Si estaba pareado, primero lo desconecta del
+// vehículo para no dejar una referencia rota.
+const deleteDevice = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [[device]] = await pool.query('SELECT vehicle_id FROM Devices WHERE id = ?', [id]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.vehicle_id) {
+            await pool.query('UPDATE Vehicles SET device_id = NULL WHERE id = ?', [device.vehicle_id]);
+        }
+        await pool.query('DELETE FROM Devices WHERE id = ?', [id]);
+        res.json({ message: 'Equipo eliminado — el IMEI queda libre para volver a darlo de alta si hace falta' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error eliminando el equipo' });
+    }
+};
+
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice };

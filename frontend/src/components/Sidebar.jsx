@@ -1,4 +1,4 @@
-import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio, UserCog, ArrowLeftCircle, Receipt } from 'lucide-react';
+import { Activity, MapPin, History, Wrench, Users, Navigation, LogOut, Car, CalendarDays, X, Radio, UserCog, ArrowLeftCircle, Receipt, Cpu, ClipboardCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // visibleFor: si no está, el tab se ve para cualquier rol logueado en
@@ -10,11 +10,13 @@ const menuItems = [
   { id: 'calendario', label: 'Calendario', icon: CalendarDays },
   { id: 'historico', label: 'Histórico', icon: History },
   { id: 'mantenimiento', label: 'IA Mantenimiento', icon: Wrench },
+  { id: 'mantenimientoRealizado', label: 'Mantenimiento Realizado', icon: ClipboardCheck },
   { id: 'conductores', label: 'Conductores', icon: Users },
   { id: 'viajes', label: 'KPIs Viajes', icon: Navigation },
   { id: 'flota', label: 'Gestión de Flota', icon: Car },
   { id: 'equipos', label: 'Equipos GPS', icon: Radio }, // admin la ve para PAREAR, no para dar de alta (eso se filtra dentro de TabEquipos)
   { id: 'usuarios', label: 'Usuarios', icon: UserCog },
+  { id: 'diagnostico', label: 'Diagnóstico de Equipos', icon: Cpu, visibleFor: ['super_admin'] },
   { id: 'facturador', label: 'Facturador', icon: Receipt, visibleFor: ['super_admin'] },
 ];
 

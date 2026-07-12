@@ -88,12 +88,46 @@ export default function TabPosicion() {
 
   const selectedVehicleCoord = vehiclesWithCoords.find(v => v.id === selected?.id);
 
-  // Trazo de la trayectoria: solo los puntos de la serie que tienen
-  // coordenadas reales, convertidas a número, en orden cronológico.
-  const trail = series
-    .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng) }))
-    .filter(p => p.lat !== null && p.lng !== null)
-    .map(p => [p.lat, p.lng]);
+  // Trazo segmentado POR VIAJE — no es una sola línea continua. Se
+  // corta cuando el auto queda quieto un rato (baja el pasajero) y
+  // arranca un tramo nuevo, de otro color, cuando vuelve a moverse
+  // (sube el pasajero siguiente). Misma lógica de "viaje" que usa
+  // Histórico (reconstructTrips en el backend), aplicada acá en vivo
+  // sobre la ventana reciente de datos.
+  const TRAIL_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#F97316'];
+  const MOVING_SPEED_KMH = 3;
+  const STOP_GAP_MINUTES = 4;
+
+  function segmentTripsForDisplay(rawSeries) {
+    const points = rawSeries
+      .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng), speed: toNum(p.speed_kmh), t: p.recorded_at }))
+      .filter(p => p.lat !== null && p.lng !== null);
+
+    const segments = [];
+    let current = [];
+    let lastMovingIdx = -1;
+
+    points.forEach((p, i) => {
+      const isMoving = (p.speed ?? 0) > MOVING_SPEED_KMH;
+      if (isMoving) {
+        current.push([p.lat, p.lng]);
+        lastMovingIdx = i;
+      } else if (current.length) {
+        const minutesSinceMove = (new Date(p.t) - new Date(points[lastMovingIdx].t)) / 60000;
+        if (minutesSinceMove > STOP_GAP_MINUTES) {
+          if (current.length > 1) segments.push(current);
+          current = [];
+        } else {
+          current.push([p.lat, p.lng]); // semáforo/tráfico corto, sigue el mismo viaje
+        }
+      }
+    });
+    if (current.length > 1) segments.push(current); // tramo más reciente (puede seguir en curso)
+
+    return segments;
+  }
+
+  const tripSegments = segmentTripsForDisplay(series);
 
   return (
     <div className="space-y-6">
@@ -131,10 +165,14 @@ export default function TabPosicion() {
             />
             {selected && <FlyToVehicle vehicle={selectedVehicleCoord} />}
 
-            {/* Trazo de la trayectoria del auto seleccionado */}
-            {selected && trail.length > 1 && (
-              <Polyline positions={trail} pathOptions={{ color: '#6366F1', weight: 4, opacity: 0.8 }} />
-            )}
+            {/* Un Polyline por viaje detectado, cada uno con su color */}
+            {selected && tripSegments.map((segment, i) => (
+              <Polyline
+                key={i}
+                positions={segment}
+                pathOptions={{ color: TRAIL_COLORS[i % TRAIL_COLORS.length], weight: 4, opacity: 0.8 }}
+              />
+            ))}
 
             {vehiclesWithCoords.map(v => (
               <Marker

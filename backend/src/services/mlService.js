@@ -16,6 +16,7 @@
 // ============================================================
 
 const pool = require('../config/database');
+const { sendMaintenanceAlert } = require('./maintenanceAlertService');
 
 const KM_TIRE_ROTATION = 9000; // rotación sugerida cada 9.000 km
 const KM_BRAKE_CHECK = 25000;  // revisión de frenos sugerida cada 25.000 km
@@ -57,13 +58,25 @@ function adjustBrakeScoreByHarshEvents(baseScore, harshBrakeCount, totalReadings
     return Math.max(0, Math.round((baseScore - penalty) * 10) / 10);
 }
 
-function buildRecommendation({ tireScore, brakeScore, anomalies }) {
+function buildRecommendation({ tireScore, brakeScore, anomalies, harshBrakeCount, hasLoggedMaintenance }) {
     const notes = [];
-    if (tireScore < 40) notes.push('Rotación de neumáticos vencida, agendar cuanto antes.');
+    const noHistoryNote = hasLoggedMaintenance ? '' : ' (todavía no se cargó ningún mantenimiento para este auto — el score asume "nunca se hizo", no un desgaste confirmado.)';
+
+    if (tireScore < 40) notes.push(`Rotación de neumáticos vencida según kilometraje, agendar cuanto antes.${noHistoryNote}`);
     else if (tireScore < 60) notes.push('Rotación de neumáticos se acerca, planificar en las próximas semanas.');
 
-    if (brakeScore < 40) notes.push('Revisión de frenos recomendada: patrón de frenadas bruscas + kilometraje elevado.');
-    else if (brakeScore < 60) notes.push('Frenos dentro de rango pero con desgaste a vigilar.');
+    if (brakeScore < 40) {
+        // No afirmamos "patrón de frenadas bruscas" salvo que REALMENTE
+        // haya al menos una detectada — antes esto se decía siempre,
+        // aunque harshBrakeCount fuera 0 (que es el caso de TODO el VL04
+        // hasta ahora, porque nunca confirmamos ese canal de datos).
+        const motivo = harshBrakeCount > 0
+            ? `kilometraje elevado + ${harshBrakeCount} frenada(s) brusca(s) detectada(s) recientemente`
+            : `kilometraje elevado`;
+        notes.push(`Revisión de frenos recomendada: ${motivo}.${noHistoryNote}`);
+    } else if (brakeScore < 60) {
+        notes.push('Frenos dentro de rango pero con desgaste a vigilar.');
+    }
 
     if (anomalies.length > 0) notes.push(...anomalies);
 
@@ -122,7 +135,8 @@ async function processReading(vehicleId, reading, source = 'real') {
     }
 
     const driverScore = Math.max(0, Math.round((100 - harshCount * 4) * 10) / 10);
-    const recommendation = buildRecommendation({ tireScore, brakeScore, anomalies });
+    const hasLoggedMaintenance = !!(lastTireEvent || lastBrakeEvent);
+    const recommendation = buildRecommendation({ tireScore, brakeScore, anomalies, harshBrakeCount: harshCount, hasLoggedMaintenance });
 
     await pool.query(
         `INSERT INTO Telemetry_Heuristics
@@ -142,6 +156,16 @@ async function processReading(vehicleId, reading, source = 'real') {
             source
         ]
     );
+
+    // Avisamos al admin de la flota por mail cuando el score cruza el
+    // umbral crítico — con cooldown de 7 días para no hacer spam (ver
+    // maintenanceAlertService.js).
+    if (tireScore < 40) {
+        sendMaintenanceAlert(vehicleId, 'neumaticos', `Rotación de neumáticos vencida según kilometraje (score actual: ${tireScore}/100).`);
+    }
+    if (brakeScore < 40) {
+        sendMaintenanceAlert(vehicleId, 'frenos', `Revisión de frenos recomendada por kilometraje (score actual: ${brakeScore}/100).`);
+    }
 
     return { tireScore, brakeScore, driverScore, anomalies, recommendation };
 }
