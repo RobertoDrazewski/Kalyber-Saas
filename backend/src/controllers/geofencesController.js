@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 const { effectiveOwnerId } = require('../middlewares/requireRole');
-const gt06Server = require('../services/gt06Server');
+const gt06Internal = require('../services/gt06InternalClient'); // FIX 13/07/2026: ver nota en gt06InternalClient.js — llamar a gt06Server directo daba un activeSockets vacío, este proceso corre separado del que tiene los equipos conectados
 
 // Mismo criterio de acceso que ya usa telemetryController — confirma
 // que el vehículo pedido sea de la flota de quien pregunta.
@@ -72,7 +72,7 @@ const createGeofence = async (req, res) => {
         );
 
         const command = `FENCE,ON,0,${lat},${lng},${radiusNum},${fenceMode},0#`;
-        const sendResult = await gt06Server.sendCommandToDevice(device.imei, command);
+        const sendResult = await gt06Internal.sendCommandToDevice(device.imei, command);
 
         if (sendResult.sent) {
             await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [result.insertId]);
@@ -137,7 +137,7 @@ const resyncGeofence = async (req, res) => {
         }
 
         const command = `FENCE,ON,0,${fence.lat},${fence.lng},${fence.radius_m},${fence.mode},0#`;
-        const sendResult = await gt06Server.sendCommandToDevice(fence.imei, command);
+        const sendResult = await gt06Internal.sendCommandToDevice(fence.imei, command);
 
         if (sendResult.sent) {
             await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [id]);

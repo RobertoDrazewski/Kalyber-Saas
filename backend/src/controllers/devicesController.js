@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 const { effectiveOwnerId } = require('../middlewares/requireRole');
-const gt06Server = require('../services/gt06Server');
+const gt06Internal = require('../services/gt06InternalClient'); // FIX 13/07/2026: ver nota en gt06InternalClient.js — llamar a gt06Server directo daba un activeSockets vacío, este proceso corre separado del que tiene los equipos conectados
 
 // Código corto de activación — alternativa fácil de tipear al IMEI
 // completo. NO es secuencial/adivinable como un id de base de datos:
@@ -285,7 +285,7 @@ const sendDeviceCommand = async (req, res) => {
             return res.status(400).json({ error: 'El envío de comandos por TCP solo está soportado para VL04 por ahora — el VL502 usa JT808, un protocolo distinto que todavía no tiene comandos de texto confirmados.' });
         }
 
-        const result = await gt06Server.sendCommandToDevice(imei, command);
+        const result = await gt06Internal.sendCommandToDevice(imei, command);
         if (!result.sent) {
             // Lo dejamos registrado igual, como 'failed', para que el
             // historial muestre el intento aunque no haya llegado.

@@ -48,6 +48,7 @@
 // ============================================================
 
 const net = require('net');
+const http = require('http');
 const crypto = require('crypto');
 const pool = require('../config/database');
 const telemetryIngestReal = require('./telemetryIngestReal');
@@ -962,4 +963,66 @@ function startGt06Server() {
     return server;
 }
 
-module.exports = { startGt06Server, sendCommandToDevice };
+// ============================================================
+// [NUEVO 13/07/2026] API HTTP interna, en un puerto aparte del TCP de
+// los equipos — para que el proceso de la API (server.js, que corre
+// en OTRO servicio de Railway) pueda pedirle A ESTE proceso —el único
+// que tiene el activeSockets real, en memoria— que mande un comando.
+//
+// EL BUG QUE ESTO RESUELVE: devicesController.js/geofencesController.js
+// hacían require('./gt06Server') directamente. Como gt06-standalone.js
+// (este archivo) y server.js corren como DOS PROCESOS DE NODE
+// SEPARADOS en Railway, cada require('./gt06Server') le da a cada
+// proceso su PROPIA copia del módulo, con su PROPIO activeSockets
+// vacío — el de la API nunca recibía conexiones reales de equipos
+// (esas llegan todas acá). Por eso sendCommandToDevice() SIEMPRE
+// devolvía "no tiene una conexión TCP activa", sin importar si el
+// equipo estaba online o no — estaba mirando el Map equivocado.
+//
+// Con esto, la API le pega a este endpoint por HTTP en vez de llamar
+// la función directo, y acá SÍ está el activeSockets real.
+// ============================================================
+function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) {
+    const secret = process.env.GT06_INTERNAL_SECRET || '';
+
+    const server = http.createServer((req, res) => {
+        if (req.method !== 'POST' || req.url !== '/internal/send-command') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No encontrado' }));
+            return;
+        }
+        if (secret && req.headers['x-internal-secret'] !== secret) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No autorizado' }));
+            return;
+        }
+
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const { imei, command } = JSON.parse(body || '{}');
+                if (!imei || !command) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Faltan imei o command en el body' }));
+                    return;
+                }
+                const result = await sendCommandToDevice(imei, command);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                console.error('[GT06 internal API] Error:', err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+    });
+
+    server.on('error', (err) => console.error('❌ Error en API interna de comandos GT06:', err.message));
+    server.listen(port, '0.0.0.0', () => {
+        console.log(`🔧 API interna de comandos GT06 escuchando en puerto ${port}${secret ? ' (con secreto configurado)' : ' (SIN secreto — cualquiera con acceso de red interna puede mandar comandos, considerá configurar GT06_INTERNAL_SECRET)'}`);
+    });
+    return server;
+}
+
+module.exports = { startGt06Server, sendCommandToDevice, startInternalCommandApi };
