@@ -269,32 +269,46 @@ function startGt06Server() {
                         }
                     } else if (header.msgId === 0x0900) {
                         // "Transmisión transparente de datos" — formato
-                        // propio del fabricante. Confirmado: acá viaja el
-                        // VIN del auto (una sola vez, al conectar) y el
-                        // candidato fuerte de RPM (ver jt808Handler.js).
+                        // propio del fabricante. Acá viaja el VIN del auto
+                        // (una sola vez, al conectar) y el candidato fuerte
+                        // de RPM (ver jt808Handler.js).
                         socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
 
                         const parsed = jt808.parseTransparentTlv(header.body);
 
-                        if (parsed.vin && currentImei) {
-                            const vehicleId = await findVehicleIdByImei(currentImei);
-                            if (vehicleId) {
-                                await pool.query('UPDATE Vehicles SET vin = ? WHERE id = ? AND (vin IS NULL OR vin != ?)', [parsed.vin, vehicleId, parsed.vin]);
-                                console.log(`[JT808] VIN confirmado IMEI=${currentImei}: ${parsed.vin}`);
-                            }
-                        }
+                        // BUG REAL ENCONTRADO Y CORREGIDO: acá abajo se
+                        // usaba "currentImei", una variable que SOLO se
+                        // llena cuando entra un login de GT06 (protocolo
+                        // viejo, VL04) — en una conexión JT808 (VL502) esa
+                        // variable nunca se define, así que esta rama
+                        // nunca guardaba nada, sin ningún error visible.
+                        // Ahora buscamos el equipo igual que ya hace el
+                        // reporte de posición: por el ID de terminal.
+                        const imeiPrefixTransparente = jt808.terminalIdToImeiPrefix(header.terminalId);
+                        const [[deviceTransparente]] = await pool.query(
+                            `SELECT imei, vehicle_id FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
+                            [`${imeiPrefixTransparente}%`]
+                        );
 
-                        // MODIFICACION: Se incluyen todos los parametros mapeados de la Trama 0x0900
-                        if (parsed.rpm !== null && currentImei) {
-                            await telemetryIngestReal.ingestReading(currentImei, {
-                                lat: null, lng: null, speed_kmh: null, heading: null,
-                                engine_rpm: parsed.rpm,
-                                engine_load: parsed.engine_load, 
-                                coolant_temp: parsed.coolant_temp, 
-                                battery_voltage: parsed.battery_voltage,
-                                harsh_brake: false,
-                            });
-                            console.log(`[JT808] OBD Data IMEI=${currentImei}: RPM=${parsed.rpm}, Temp=${parsed.coolant_temp}°C, Bat=${parsed.battery_voltage}V, Load=${parsed.engine_load}`);
+                        if (!deviceTransparente) {
+                            console.warn(`[JT808] 0x0900: no se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixTransparente}`);
+                        } else {
+                            if (parsed.vin) {
+                                await pool.query('UPDATE Vehicles SET vin = ? WHERE id = ? AND (vin IS NULL OR vin != ?)', [parsed.vin, deviceTransparente.vehicle_id, parsed.vin]);
+                                console.log(`[JT808] VIN confirmado equipo=${deviceTransparente.imei}: ${parsed.vin}`);
+                            }
+
+                            if (parsed.rpm !== null) {
+                                await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
+                                    lat: null, lng: null, speed_kmh: null, heading: null,
+                                    engine_rpm: parsed.rpm,
+                                    engine_load: parsed.engine_load,
+                                    coolant_temp: parsed.coolant_temp,
+                                    battery_voltage: parsed.battery_voltage,
+                                    harsh_brake: false,
+                                });
+                                console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} (candidatos sin confirmar: temp=${parsed.coolant_temp} bat=${parsed.battery_voltage} carga=${parsed.engine_load})`);
+                            }
                         }
 
                     } else {

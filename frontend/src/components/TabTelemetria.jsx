@@ -82,8 +82,8 @@ export default function TabTelemetria() {
                 <p className="text-[11px] text-slate-500">km/h</p>
               </div>
               <div>
-                <p className="text-white font-bold text-sm">{t.engine_load != null ? `${t.engine_load}%` : '—'}</p>
-                <p className="text-[11px] text-slate-500">Carga</p>
+                <p className="text-white font-bold text-sm">—</p>
+                <p className="text-[11px] text-slate-500">Carga (sin confirmar)</p>
               </div>
             </div>
           </button>
@@ -109,7 +109,7 @@ export default function TabTelemetria() {
                 <td className="px-6 py-4 font-mono text-[#10B981]">{t.plate}</td>
                 <td className="px-6 py-4">{t.engine_rpm != null ? `${t.engine_rpm} RPM` : <span className="text-slate-600">Sin dato (equipo Básico)</span>}</td>
                 <td className="px-6 py-4">{t.speed_kmh ?? 0} km/h</td>
-                <td className="px-6 py-4">{t.engine_load != null ? `${t.engine_load}%` : <span className="text-slate-600">—</span>}</td>
+                <td className="px-6 py-4"><span className="text-slate-600" title="Candidato sin confirmar todavía">Sin confirmar</span></td>
                 <td className="px-6 py-4 text-xs">Real</td>
               </tr>
             ))}

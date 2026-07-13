@@ -230,31 +230,42 @@ export default function TabPosicion() {
                         <div>
                           <p className="font-bold font-mono leading-none">{v.plate}</p>
                           <p className="text-xs text-gray-600">{v.brand} {v.model}</p>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${v.device_model === 'VL502' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>
+                            {v.device_model === 'VL502' ? 'Plan Avanzado' : 'Plan Básico'}
+                          </span>
                         </div>
                       </div>
 
-                      {v.vin && (
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1">
-                          <Hash size={11} /> VIN: {v.vin}
-                        </p>
-                      )}
-
+                      {/* Básico y Avanzado comparten esto — es lo único que el VL04 realmente tiene */}
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs pt-1 border-t border-gray-200">
                         <span className="flex items-center gap-1 text-gray-600"><Gauge size={12} /> {Math.round(v.odometer_km || 0).toLocaleString('es-AR')} km</span>
                         <span className="flex items-center gap-1 text-gray-600">{v.speed_kmh != null ? `${v.speed_kmh} km/h` : '—'}</span>
-                        <span className="flex items-center gap-1 text-gray-600">
-                          <Fuel size={12} /> Combustible: {v.fuel_level != null ? `${v.fuel_level}%` : 'No disponible'}
-                        </span>
-                        <span className="flex items-center gap-1 text-gray-600">
-                          RPM: {v.last_rpm != null ? v.last_rpm : 'No disponible'}
-                        </span>
                       </div>
+
+                      {/* Solo Avanzado (VL502) — el VL04 no tiene sensor de motor, no mostramos estos campos ni con "No disponible" */}
+                      {v.device_model === 'VL502' && (
+                        <>
+                          {v.vin && (
+                            <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                              <Hash size={11} /> VIN: {v.vin}
+                            </p>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs pt-1 border-t border-gray-200">
+                            <span className="flex items-center gap-1 text-gray-600">
+                              <Fuel size={12} /> Combustible: {v.fuel_level != null ? `${v.fuel_level}%` : 'No disponible'}
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-600">
+                              RPM: {v.last_rpm != null ? v.last_rpm : 'No disponible'}
+                            </span>
+                          </div>
+                        </>
+                      )}
 
                       <p className="text-[11px] text-gray-400 flex items-center gap-1">
                         <Clock size={11} /> Última lectura: {haceCuanto(v.last_reading_at)}
                       </p>
 
-                      {alert && (
+                      {alert && v.device_model === 'VL502' && (
                         <div className="bg-amber-50 border border-amber-300 rounded-lg p-2 mt-1">
                           <p className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
                             <Wrench size={11} /> Necesita atención

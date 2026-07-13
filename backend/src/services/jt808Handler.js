@@ -252,24 +252,35 @@ function parseTransparentTlv(unescapedBody) {
     }
 
     // RPM del motor: tag 0536, 2 bytes, valor directo.
+    // ⚠️ SIN CONFIRMAR — a diferencia de VIN (formato inconfundible) y
+    // RPM (rango de valores consistente con ralentí + manual del
+    // fabricante), estos 3 campos son candidatos que probé cruzando
+    // contra la velocidad real pero NUNCA against un valor real del
+    // tablero/tester. No los muestres en el panel como dato confirmado
+    // todavía — usalos solo para seguir investigando en los logs.
     let rpm = null;
     if (tags['0536'] && tags['0536'].length === 2) {
         rpm = tags['0536'].readUInt16BE(0);
     }
 
-    // Voltaje de batería: tag 0530, 2 bytes. Viene en milivoltios (ej: 14300 -> 14.3V).
+    // Candidato a voltaje de batería: tag 0530, rondaba 14.6-14.9V en
+    // la única sesión que lo vi variar — plausible pero sin confirmar.
     let battery_voltage = null;
     if (tags['0530'] && tags['0530'].length === 2) {
         battery_voltage = tags['0530'].readUInt16BE(0) / 1000;
     }
 
-    // Temperatura de refrigerante: tag 052e, 1 byte.
+    // Candidato a temperatura: tag 052e, se mantenía estable ~57-61 —
+    // sin confirmar, podría ser cualquier otra cosa estable.
     let coolant_temp = null;
     if (tags['052e'] && tags['052e'].length === 1) {
         coolant_temp = tags['052e'].readUInt8(0);
     }
 
-    // Carga de Motor: tag 053c, 2 bytes. 
+    // Candidato a carga de motor: tag 053c — este es el MÁS dudoso de
+    // los 4, se movía de forma errática (30, 170, 20, 130...) sin
+    // relación clara con nada. Guardarlo igual por si sirve para
+    // investigar, pero es el que menos confío de todos.
     let engine_load = null;
     if (tags['053c'] && tags['053c'].length === 2) {
         engine_load = tags['053c'].readUInt16BE(0);
