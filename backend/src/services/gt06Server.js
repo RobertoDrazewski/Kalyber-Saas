@@ -194,24 +194,20 @@ function parseAlarmPacket(content, hasFenceByte) {
     };
 }
 
-// Decodificación de la cola del 0x37 (GPS_LBS_EXTENDED), a partir del
-// análisis del 13/07/2026 sobre 9 frames reales de manejo en Maipú:
+// Decodificación de la cola del 0x37 (GPS_LBS_EXTENDED).
 //
-//   CONFIRMADO — el bloque LBS es real y coherente (MCC 722 = Argentina,
-//   MNC 07 = Movistar, LAC constante, CellID cambiando de a poco durante
-//   el viaje = handoff de antena). A diferencia del Alarm Packet del
-//   manual, acá el LBS arranca directo en offset 18 SIN el byte previo
-//   de "LBS length" — por eso antes quedaba todo mezclado en el hex
-//   crudo sin identificar.
+//   CONFIRMADO 13/07/2026 — el bloque LBS es real y coherente (MCC 722
+//   = Argentina, MNC 07 = Movistar, LAC constante, CellID cambiando de
+//   a poco durante el viaje = handoff de antena). A diferencia del
+//   Alarm Packet del manual, acá el LBS arranca directo en offset 18
+//   SIN el byte previo de "LBS length" — por eso antes quedaba todo
+//   mezclado en el hex crudo sin identificar.
 //
-//   HIPÓTESIS (sin confirmar, por eso solo se loguean, no se persisten
-//   todavía):
-//   - offset 27 = mismo campo "terminal info" que ya usamos en el
-//     heartbeat 0x13 (bit1 = ACC). En la sesión de prueba, 8 de 9
-//     frames dieron bit1=1 y el último (fin del viaje) dio bit1=0.
-//   - offset 34-35 (2 bytes) = contador que solo sube durante toda la
-//     sesión — candidato a odómetro/contador de pulsos del equipo.
-//     Falta comparar contra una distancia real conocida para confirmar.
+//   CONFIRMADO 13/07/2026 (contra sesión de manejo real completa):
+//   - offset 27 = mismo campo "terminal info" del heartbeat 0x13
+//     (bit1 = ACC). 20/21 coincidencias exactas.
+//   - offset 34-35 (2 bytes) = odómetro real del equipo en metros.
+//     Ratio contra distancia GPS real: ~0.001 km/tick, ±3%.
 function decodeLbsExtendedTail(content) {
     if (content.length < 36) return null;
 
@@ -220,11 +216,64 @@ function decodeLbsExtendedTail(content) {
     const lac = content.readUInt16BE(21);
     const cellId = (content[23] << 16) | (content[24] << 8) | content[25];
 
-    const terminalInfoHyp = content[27];
-    const accOnHyp = ((terminalInfoHyp & 0x02) >> 1) === 1;
-    const counterHyp = content.readUInt16BE(34);
+    const terminalInfo = content[27];
+    const accOn = ((terminalInfo & 0x02) >> 1) === 1;
+    const odometerCounter = content.readUInt16BE(34);
 
-    return { mcc, mnc, lac, cellId, terminalInfoHyp, accOnHyp, counterHyp };
+    return { mcc, mnc, lac, cellId, terminalInfo, accOn, odometerCounter };
+}
+
+// Acumula el odómetro real del equipo (offset 34-35 del 0x37) en
+// Vehicles.device_odometer_km, guardando el último valor crudo del
+// contador en Devices.last_odometer_counter (requiere
+// migration_gt06_odometer.sql) para poder calcular el próximo delta
+// aunque el server se reinicie.
+//
+// Maneja dos casos especiales del contador de 16 bits (0-65535):
+//   - Wraparound normal (65535 → 0): solo se acepta como tal si el
+//     contador anterior estaba muy cerca del techo (>60000) Y el resto
+//     resultante es chico (<5000 ticks ≈ 5km) — evita confundirlo con
+//     un reinicio real del equipo.
+//   - Reinicio del equipo (power-cycle, el contador vuelve a un valor
+//     bajo sin haber estado cerca del techo): se descarta el delta y
+//     solo se actualiza la base, sin sumar nada.
+async function accumulateDeviceOdometer(imei, rawCounter) {
+    const [[device]] = await pool.query(
+        `SELECT d.id, d.last_odometer_counter, d.vehicle_id, v.device_odometer_km
+         FROM Devices d LEFT JOIN Vehicles v ON v.id = d.vehicle_id
+         WHERE d.imei = ?`,
+        [imei]
+    );
+    if (!device || !device.vehicle_id) return null;
+
+    const prevCounter = device.last_odometer_counter;
+    const prevKm = parseFloat(device.device_odometer_km) || 0;
+
+    await pool.query('UPDATE Devices SET last_odometer_counter = ? WHERE id = ?', [rawCounter, device.id]);
+
+    if (prevCounter === null) return null; // primera lectura de este equipo, sin base para comparar
+    if (rawCounter === prevCounter) return prevKm;
+
+    let deltaTicks;
+    if (rawCounter > prevCounter) {
+        deltaTicks = rawCounter - prevCounter;
+    } else {
+        const wrapDelta = (65536 - prevCounter) + rawCounter;
+        const looksLikeGenuineWrap = prevCounter > 60000 && wrapDelta < 5000;
+        if (!looksLikeGenuineWrap) {
+            console.warn(`[GT06] Odómetro IMEI=${imei}: contador bajó de ${prevCounter} a ${rawCounter} sin estar cerca del techo — se interpreta como reinicio del equipo, no se suma`);
+            return prevKm;
+        }
+        deltaTicks = wrapDelta;
+    }
+
+    const deltaKm = deltaTicks / 1000; // 1 tick ≈ 1 metro (confirmado)
+    if (deltaKm > 65) {
+        console.warn(`[GT06] Odómetro IMEI=${imei}: salto de ${deltaKm.toFixed(1)}km descartado (fuera de rango razonable entre dos pings)`);
+        return prevKm;
+    }
+
+    return Number((prevKm + deltaKm).toFixed(3));
 }
 
 // CRC-16/X-25 (CRC-ITU) — el checksum estándar de GT06.
@@ -756,14 +805,17 @@ function startGt06Server() {
                         }
 
                         const gps = parseComboGpsBlock(content);
+                        const tailInfo = decodeLbsExtendedTail(content);
 
-                        // El resto de los bytes (después del bloque de posición) NO
-                        // están identificados todavía — se probó exhaustivamente
-                        // contra 900 y 2100 RPM reales y ningún campo coincidió, así
-                        // que NO es seguro asumir que esto es "OBD". Se guarda crudo
-                        // por si sirve para seguir investigando, sin atribuirle
-                        // significado.
+                        // El resto de los bytes sigue sin identificar (fuera de LBS
+                        // + ACC + odómetro, ya confirmados) — se guarda crudo por si
+                        // sirve para seguir investigando, sin atribuirle significado.
                         const tailHex = content.length > 16 ? content.slice(16).toString('hex') : null;
+
+                        // Odómetro real del equipo — ver accumulateDeviceOdometer().
+                        const deviceOdometerKm = tailInfo
+                            ? await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter)
+                            : null;
 
                         await telemetryIngestReal.ingestReading(currentImei, {
                             lat: gps?.lat ?? null,
@@ -775,17 +827,17 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
-                            dtc_codes: tailHex ? `RAW_TAIL:${tailHex}` : null
+                            dtc_codes: tailHex ? `RAW_TAIL:${tailHex}` : null,
+                            acc_signal: tailInfo ? tailInfo.accOn : null,
+                            device_odometer_km: deviceOdometerKm,
                         });
 
                         if (gps) {
                             console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
 
-                            // Solo logueo — no se persiste nada de esto todavía,
-                            // ver nota de decodeLbsExtendedTail() más arriba.
-                            const tailInfo = decodeLbsExtendedTail(content);
                             if (tailInfo) {
-                                console.log(`[GT06]   ↳ LBS(confirmado): MCC=${tailInfo.mcc} MNC=${tailInfo.mnc} LAC=${tailInfo.lac} CellID=${tailInfo.cellId} | HIPÓTESIS: ACC(offset27)=${tailInfo.accOnHyp ? 'ON' : 'OFF'} (byte=0x${tailInfo.terminalInfoHyp.toString(16).padStart(2, '0')}) contador(offset34-35)=${tailInfo.counterHyp}`);
+                                const odoTxt = deviceOdometerKm != null ? `${deviceOdometerKm.toFixed(3)}km` : '(primera lectura, sin base todavía)';
+                                console.log(`[GT06]   ↳ LBS: MCC=${tailInfo.mcc} MNC=${tailInfo.mnc} LAC=${tailInfo.lac} CellID=${tailInfo.cellId} | ACC=${tailInfo.accOn ? 'ON' : 'OFF'} | odómetro=${odoTxt}`);
                             }
                         } else {
                             console.log(`[GT06] Paquete 0x37 IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);

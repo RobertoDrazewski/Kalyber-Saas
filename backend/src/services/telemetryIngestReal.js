@@ -56,25 +56,49 @@ async function ingestReading(imei, reading) {
     // Usamos una estructura fija para el UPDATE y evitamos join() dinámico que rompe el orden de parámetros
     const hasCoords = reading.lat != null && reading.lng != null;
     
-    if (hasCoords) {
-        const [[prevState]] = await pool.query('SELECT lat, lng, odometer_km FROM Vehicles WHERE id = ?', [device.vehicle_id]);
-        let newOdometer = prevState?.odometer_km ?? 0;
-        if (prevState?.lat != null && (reading.speed_kmh ?? 0) > 2) {
-            const dist = haversineKm(parseFloat(prevState.lat), parseFloat(prevState.lng), reading.lat, reading.lng);
-            if (dist > 0 && dist < 3) newOdometer += dist;
-        }
+    // Red de seguridad: si este UPDATE falla por cualquier motivo (el
+    // bug de arriba, o algo nuevo el día de mañana), que NO se lleve
+    // puesto lo de abajo (last_seen_at + mlService) — Telemetry_Raw ya
+    // quedó guardado en el paso 1 pase lo que pase acá.
+    try {
+        if (hasCoords) {
+            const [[prevState]] = await pool.query('SELECT lat, lng, odometer_km FROM Vehicles WHERE id = ?', [device.vehicle_id]);
+            // FIX CRÍTICO (13/07/2026): mysql2 devuelve las columnas DECIMAL
+            // como STRING por defecto (para no perder precisión) — sin este
+            // parseFloat, "newOdometer" arrancaba siendo un string tipo
+            // "44197.40", y "newOdometer += dist" hacía CONCATENACIÓN DE
+            // TEXTO en vez de suma ("44197.40" + 0.142... = "44197.400.142...").
+            // Ese valor corrupto rompía el UPDATE de Vehicles con error de
+            // MySQL ("Incorrect decimal value"), lo que tiraba una excepción
+            // ANTES de llegar a actualizar Devices.last_seen_at y de llamar a
+            // mlService.processReading() — es decir, aunque Telemetry_Raw se
+            // seguía insertando bien (esa query corre antes y no depende de
+            // esto), la tabla Vehicles (de donde el panel lee "última
+            // posición" y "último estado") y las heurísticas de manejo
+            // dejaban de actualizarse por completo, para los DOS equipos
+            // (este archivo es compartido entre gt06Server.js y
+            // jt808Handler.js). Confirmado en logs reales: 122 fallos en
+            // VL04 y 13 en VL502 con el mismo mensaje de error exacto.
+            let newOdometer = parseFloat(prevState?.odometer_km) || 0;
+            if (prevState?.lat != null && (reading.speed_kmh ?? 0) > 2) {
+                const dist = haversineKm(parseFloat(prevState.lat), parseFloat(prevState.lng), reading.lat, reading.lng);
+                if (dist > 0 && dist < 3) newOdometer += dist;
+            }
 
-        await pool.query(
-            `UPDATE Vehicles SET lat=?, lng=?, heading=?, odometer_km=?, speed_kmh=?, last_ping_at=NOW(), 
-             last_rpm=?, last_fuel_level=?, last_status_flags=?, device_odometer_km=? WHERE id=?`,
-            [reading.lat, reading.lng, reading.heading, newOdometer, reading.speed_kmh ?? null, 
-             reading.engine_rpm ?? null, reading.fuel_level ?? null, statusFlagsJson, reading.device_odometer_km ?? null, device.vehicle_id]
-        );
-    } else {
-        await pool.query(
-            `UPDATE Vehicles SET last_ping_at=NOW(), last_rpm=?, last_fuel_level=?, last_status_flags=?, device_odometer_km=? WHERE id=?`,
-            [reading.engine_rpm ?? null, reading.fuel_level ?? null, statusFlagsJson, reading.device_odometer_km ?? null, device.vehicle_id]
-        );
+            await pool.query(
+                `UPDATE Vehicles SET lat=?, lng=?, heading=?, odometer_km=?, speed_kmh=?, last_ping_at=NOW(), 
+                 last_rpm=?, last_fuel_level=?, last_status_flags=?, device_odometer_km=? WHERE id=?`,
+                [reading.lat, reading.lng, reading.heading, newOdometer, reading.speed_kmh ?? null, 
+                 reading.engine_rpm ?? null, reading.fuel_level ?? null, statusFlagsJson, reading.device_odometer_km ?? null, device.vehicle_id]
+            );
+        } else {
+            await pool.query(
+                `UPDATE Vehicles SET last_ping_at=NOW(), last_rpm=?, last_fuel_level=?, last_status_flags=?, device_odometer_km=? WHERE id=?`,
+                [reading.engine_rpm ?? null, reading.fuel_level ?? null, statusFlagsJson, reading.device_odometer_km ?? null, device.vehicle_id]
+            );
+        }
+    } catch (err) {
+        console.error(`[telemetryIngestReal] Error actualizando Vehicles (IMEI ${imei}) — Telemetry_Raw sí se guardó, pero el panel no va a ver esta lectura como "última posición":`, err.message);
     }
 
     await pool.query(`UPDATE Devices SET last_seen_at = NOW() WHERE id = ?`, [device.id]);
