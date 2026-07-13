@@ -176,6 +176,39 @@ function parseAlarmPacket(content, hasFenceByte) {
     };
 }
 
+// Decodificación de la cola del 0x37 (GPS_LBS_EXTENDED), a partir del
+// análisis del 13/07/2026 sobre 9 frames reales de manejo en Maipú:
+//
+//   CONFIRMADO — el bloque LBS es real y coherente (MCC 722 = Argentina,
+//   MNC 07 = Movistar, LAC constante, CellID cambiando de a poco durante
+//   el viaje = handoff de antena). A diferencia del Alarm Packet del
+//   manual, acá el LBS arranca directo en offset 18 SIN el byte previo
+//   de "LBS length" — por eso antes quedaba todo mezclado en el hex
+//   crudo sin identificar.
+//
+//   HIPÓTESIS (sin confirmar, por eso solo se loguean, no se persisten
+//   todavía):
+//   - offset 27 = mismo campo "terminal info" que ya usamos en el
+//     heartbeat 0x13 (bit1 = ACC). En la sesión de prueba, 8 de 9
+//     frames dieron bit1=1 y el último (fin del viaje) dio bit1=0.
+//   - offset 34-35 (2 bytes) = contador que solo sube durante toda la
+//     sesión — candidato a odómetro/contador de pulsos del equipo.
+//     Falta comparar contra una distancia real conocida para confirmar.
+function decodeLbsExtendedTail(content) {
+    if (content.length < 36) return null;
+
+    const mcc = content.readUInt16BE(18);
+    const mnc = content[20];
+    const lac = content.readUInt16BE(21);
+    const cellId = (content[23] << 16) | (content[24] << 8) | content[25];
+
+    const terminalInfoHyp = content[27];
+    const accOnHyp = ((terminalInfoHyp & 0x02) >> 1) === 1;
+    const counterHyp = content.readUInt16BE(34);
+
+    return { mcc, mnc, lac, cellId, terminalInfoHyp, accOnHyp, counterHyp };
+}
+
 // CRC-16/X-25 (CRC-ITU) — el checksum estándar de GT06.
 function crcX25(buffer) {
     let crc = 0xFFFF;
@@ -620,6 +653,13 @@ function startGt06Server() {
 
                         if (gps) {
                             console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
+
+                            // Solo logueo — no se persiste nada de esto todavía,
+                            // ver nota de decodeLbsExtendedTail() más arriba.
+                            const tailInfo = decodeLbsExtendedTail(content);
+                            if (tailInfo) {
+                                console.log(`[GT06]   ↳ LBS(confirmado): MCC=${tailInfo.mcc} MNC=${tailInfo.mnc} LAC=${tailInfo.lac} CellID=${tailInfo.cellId} | HIPÓTESIS: ACC(offset27)=${tailInfo.accOnHyp ? 'ON' : 'OFF'} (byte=0x${tailInfo.terminalInfoHyp.toString(16).padStart(2, '0')}) contador(offset34-35)=${tailInfo.counterHyp}`);
+                            }
                         } else {
                             console.log(`[GT06] Paquete 0x37 IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
                         }
