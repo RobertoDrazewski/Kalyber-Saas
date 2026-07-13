@@ -34,6 +34,17 @@
 //      ya NO se le atribuye ningún significado — antes de este
 //      análisis se guardaba con ese nombre asumiendo que eran datos
 //      de motor, y no está confirmado que lo sean.
+//
+// ACTUALIZACIÓN (13/07/2026): apareció el manual oficial Concox de
+// esta familia de equipos (protocolo compartido con el VL04). Confirma
+// que el paquete 0x26 (y su variante multi-geocerca 0x27) NO es solo
+// "posición liviana" como se había asumido — es el paquete de ALARMA:
+// mismo bloque de posición (offsets 0-17, sin cambios) + LBS + info de
+// terminal + un código de alarma de 1 byte (frenada brusca, aceleración
+// brusca, giro brusco, colisión, SOS, geocerca, remolque/robo, tamper,
+// puerta, batería, etc). Antes se leía la posición y se tiraba el resto
+// sin loguear. Ver ALARM_CODES y parseAlarmPacket() más abajo. Esto NO
+// toca nada del lado VL502/JT808 (0x0900), que sigue igual.
 // ============================================================
 
 const net = require('net');
@@ -52,9 +63,14 @@ const PROTOCOL = {
     GPS_LOCATION: 0x12,
     STATUS_HEARTBEAT: 0x13,
     GPS_LOCATION_ALT: 0x22,
-    ALARM: 0x16,
     GPS_LBS_EXTENDED: 0x37, // = MSG_GPS_LBS_3 en la nomenclatura de Traccar: GPS + antena celular, SIN datos de motor
-    GPS_COMBO_LIGHT: 0x26, // versión liviana del mismo bloque de posición, más frecuente
+    // CORRECCIÓN 13/07/2026: 0x16 no existe en el manual real de esta
+    // familia — el número de protocolo de alarma correcto es 0x26 (y
+    // 0x27 para multi-geocerca). El viejo "ALARM: 0x16" nunca hizo
+    // match contra nada y quedaba silenciosamente en la rama "no
+    // reconocido" de abajo.
+    ALARM_SINGLE_FENCE: 0x26, // Alarm Packet (single geofence, UTC) — comparte offsets 0-17 con la posición
+    ALARM_MULTI_FENCE: 0x27,  // Alarm Packet (multiple geofences, UTC) — igual + 1 byte de Nº de geocerca
 };
 
 // Bloque de posición estándar GT06, confirmado contra bytes reales del
@@ -75,6 +91,88 @@ function parseComboGpsBlock(content) {
         lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
         speed_kmh: content[15] ?? 0,
         course: course,
+    };
+}
+
+// Tabla "Alarm and language" del manual Concox (paquetes 0x26/0x27),
+// byte 1 del campo "Alert and language". Solo se listan los códigos
+// documentados; cualquier código no presente acá se loguea como
+// "sin mapear" en vez de asumir significado.
+const ALARM_CODES = {
+    0x01: { label: 'sos', desc: 'Alerta SOS' },
+    0x02: { label: 'power_cut', desc: 'Corte de energía/combustible' },
+    0x03: { label: 'vibration', desc: 'Vibración detectada' },
+    0x04: { label: 'fence_enter', desc: 'Entró a geocerca' },
+    0x05: { label: 'fence_exit', desc: 'Salió de geocerca' },
+    0x06: { label: 'overspeed', desc: 'Exceso de velocidad' },
+    0x09: { label: 'tow_theft', desc: 'Remolque/robo detectado' },
+    0x0A: { label: 'gps_blindspot_enter', desc: 'Entró a zona ciega GPS' },
+    0x0B: { label: 'gps_blindspot_exit', desc: 'Salió de zona ciega GPS' },
+    0x0C: { label: 'powered_on', desc: 'Equipo encendido' },
+    0x0D: { label: 'gps_first_fix', desc: 'Primer fix GPS' },
+    0x0E: { label: 'ext_battery_low', desc: 'Batería externa (vehículo) baja' },
+    0x0F: { label: 'ext_battery_critical', desc: 'Protección por batería externa crítica' },
+    0x10: { label: 'sim_changed', desc: 'SIM cambiada' },
+    0x11: { label: 'powered_off', desc: 'Equipo apagado' },
+    0x12: { label: 'airplane_mode_forced', desc: 'Modo avión activado tras batería externa crítica' },
+    0x13: { label: 'tamper', desc: 'Manipulación/desmontaje detectado' },
+    0x14: { label: 'door', desc: 'Alerta de puerta' },
+    0x15: { label: 'powered_off_low_battery', desc: 'Apagado por batería interna baja' },
+    0x16: { label: 'sound_control', desc: 'Alerta por control de sonido' },
+    0x17: { label: 'rogue_base_station', desc: 'Estación base falsa detectada' },
+    0x18: { label: 'cover_removed', desc: 'Tapa removida' },
+    0x19: { label: 'internal_battery_low', desc: 'Batería interna del equipo baja' },
+    0x20: { label: 'deep_sleep', desc: 'Entró en modo de sueño profundo' },
+    0x23: { label: 'fall', desc: 'Caída detectada' },
+    0x29: { label: 'harsh_acceleration', desc: 'Aceleración brusca' },
+    0x2A: { label: 'sharp_left_turn', desc: 'Giro brusco a la izquierda' },
+    0x2B: { label: 'sharp_right_turn', desc: 'Giro brusco a la derecha' },
+    0x2C: { label: 'collision', desc: 'Colisión detectada' },
+    0x30: { label: 'harsh_braking', desc: 'Frenada brusca' },
+    0x32: { label: 'device_unplugged', desc: 'Equipo desconectado de la alimentación' },
+    0xFE: { label: 'acc_on', desc: 'ACC encendido' },
+    0xFF: { label: 'acc_off', desc: 'ACC apagado' },
+};
+
+// Paquete de Alarma GT06 (protocolo 0x26 = geocerca única, 0x27 =
+// multi-geocerca — ver manual Concox). Reusa el mismo bloque de
+// posición que ya veníamos parseando en offsets 0-17 y, si el
+// contenido trae la cola completa (LBS + terminal + alarma, offset
+// >= 32), agrega el código de alarma. Si llega recortado, devuelve
+// solo la posición sin romper nada (mismo comportamiento que antes).
+//
+// Offsets del contenido (después del bloque de posición 0-17):
+//   18      LBS length (self-length + MCC+MNC+LAC+CellID = 9)
+//   19-20   MCC
+//   21      MNC
+//   22-23   LAC
+//   24-26   CellID
+//   27      Terminal info (mismo formato de bits que el heartbeat 0x13)
+//   28      Nivel de batería
+//   29      Señal GSM
+//   30      Código de alarma (byte 1 de "Alert and language")
+//   31      Idioma (byte 2)
+//   32      Nº de geocerca (SOLO en 0x27 multi-geocerca; 0xFF = no aplica)
+function parseAlarmPacket(content, hasFenceByte) {
+    const gps = parseComboGpsBlock(content);
+    if (!gps) return null;
+
+    if (content.length < 32) {
+        // Llegó sin la cola de LBS/alarma — nos quedamos solo con la posición,
+        // igual que se comportaba antes para estos paquetes.
+        return { ...gps, terminalInfo: null, accOn: null, alarmCode: null, fenceNo: null };
+    }
+
+    const terminalInfo = content[27];
+    const alarmCode = content[30];
+    const rawFenceNo = hasFenceByte && content.length > 32 ? content[32] : null;
+
+    return {
+        ...gps,
+        terminalInfo,
+        accOn: ((terminalInfo & 0x02) >> 1) === 1, // mismo bit que ya usamos en el heartbeat 0x13
+        alarmCode,
+        fenceNo: rawFenceNo === 0xFF ? null : rawFenceNo,
     };
 }
 
@@ -526,13 +624,16 @@ function startGt06Server() {
                             console.log(`[GT06] Paquete 0x37 IMEI=${currentImei} procesado sin bloque de posición (paquete corto).`);
                         }
 
-                    } else if (protocolNumber === PROTOCOL.GPS_COMBO_LIGHT) {
-                        // --- Versión liviana del mismo bloque de posición, sin OBD
-                        // (confirmado 10/07/2026 — mismo offset que el 0x37) ---
+                    } else if (protocolNumber === PROTOCOL.ALARM_SINGLE_FENCE || protocolNumber === PROTOCOL.ALARM_MULTI_FENCE) {
+                        // --- Paquete de Alarma GT06 (0x26 / 0x27). Antes se
+                        // trataba como "posición liviana" y se descartaba todo
+                        // lo que viene después del offset 17 (LBS + terminal +
+                        // código de alarma). Ver nota de ACTUALIZACIÓN al
+                        // principio del archivo. ---
                         socket.write(buildAck(protocolNumber, serial));
 
                         if (!currentImei) {
-                            console.warn('[GT06] Paquete 0x26 sin login previo, se descarta');
+                            console.warn(`[GT06] Paquete 0x${protocolNumber.toString(16)} (alarma) sin login previo, se descarta`);
                             continue;
                         }
 
@@ -542,20 +643,45 @@ function startGt06Server() {
                             continue;
                         }
 
-                        const gps = parseComboGpsBlock(content);
-                        if (gps) {
-                            await telemetryIngestReal.ingestReading(currentImei, {
-                                lat: gps.lat,
-                                lng: gps.lon,
-                                speed_kmh: gps.speed_kmh,
-                                heading: gps.course,
-                                engine_rpm: null,
-                                engine_load: null,
-                                coolant_temp: null,
-                                battery_voltage: null,
-                                harsh_brake: false,
-                            });
-                            console.log(`[GT06] Posición (0x26) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
+                        const hasFenceByte = protocolNumber === PROTOCOL.ALARM_MULTI_FENCE;
+                        const parsed = parseAlarmPacket(content, hasFenceByte);
+                        if (!parsed) continue;
+
+                        // La posición sigue guardándose exactamente igual que
+                        // antes (mismo INSERT, misma forma), solo que ahora
+                        // harsh_brake se completa con el código real en vez de
+                        // ir siempre en false.
+                        await telemetryIngestReal.ingestReading(currentImei, {
+                            lat: parsed.lat,
+                            lng: parsed.lon,
+                            speed_kmh: parsed.speed_kmh,
+                            heading: parsed.course,
+                            engine_rpm: null,
+                            engine_load: null,
+                            coolant_temp: null,
+                            battery_voltage: null,
+                            harsh_brake: parsed.alarmCode === 0x30,
+                        });
+                        console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
+
+                        if (parsed.alarmCode != null && parsed.alarmCode !== 0x00) {
+                            const known = ALARM_CODES[parsed.alarmCode];
+                            if (known) {
+                                const fenceSuffix = hasFenceByte && parsed.fenceNo != null ? ` (geocerca #${parsed.fenceNo + 1})` : '';
+                                console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${known.label} (0x${parsed.alarmCode.toString(16)}) ${known.desc}${fenceSuffix}`);
+
+                                // ACC ON/OFF ya se sigue por el heartbeat 0x13 —
+                                // no lo duplicamos como fila en Telemetry_Alarms.
+                                if (parsed.alarmCode !== 0xFE && parsed.alarmCode !== 0xFF) {
+                                    await telemetryIngestReal.ingestAlarm(currentImei, {
+                                        id: parsed.alarmCode,
+                                        label: known.label,
+                                        desc: known.desc + fenceSuffix,
+                                    }, { lat: parsed.lat, lon: parsed.lon });
+                                }
+                            } else {
+                                console.log(`[GT06] Código de alarma sin mapear: 0x${parsed.alarmCode.toString(16)} IMEI=${currentImei} — agregar a ALARM_CODES si se confirma qué es`);
+                            }
                         }
 
                     } else {
