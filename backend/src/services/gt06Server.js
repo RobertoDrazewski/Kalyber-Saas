@@ -139,6 +139,14 @@ const ALARM_CODES = {
     0x2C: { label: 'collision', desc: 'Colisión detectada' },
     0x30: { label: 'harsh_braking', desc: 'Frenada brusca' },
     0x32: { label: 'device_unplugged', desc: 'Equipo desconectado de la alimentación' },
+    // [SIN CONFIRMAR — 13/07/2026] Apareció una sola vez, justo después de
+    // un ciclo real device_unplugged(0x32) -> reconexión de alimentación.
+    // Hipótesis por orden temporal: "alimentación restaurada / equipo
+    // reconectado". NO está en el manual Concox que decodificamos ni en
+    // el diccionario de Flespi — no hay fuente que lo respalde, solo la
+    // secuencia observada UNA vez. Falta ver si se repite consistente en
+    // la próxima desconexión/reconexión antes de confiar en esto.
+    0x72: { label: 'power_restored_unconfirmed', desc: 'Alimentación restaurada / equipo reconectado (SIN CONFIRMAR)' },
     0xFE: { label: 'acc_on', desc: 'ACC encendido' },
     0xFF: { label: 'acc_off', desc: 'ACC apagado' },
 };
