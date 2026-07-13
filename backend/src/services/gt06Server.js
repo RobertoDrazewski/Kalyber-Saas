@@ -271,9 +271,13 @@ function startGt06Server() {
                         // "Transmisión transparente de datos" — el primer
                         // byte del cuerpo indica el SUB-TIPO de mensaje
                         // (confirmado por el manual oficial del fabricante):
+                        //   0x02 = trouble codes / DTC                [NUEVO]
                         //   0x03 = alarmas / comportamiento de manejo
                         //          (frenada brusca, colisión, geocerca, etc.)
-                        //   0xf0 = reporte periódico normal (RPM, temp, etc.)
+                        //   0x04 = inicio/fin de viaje                [NUEVO]
+                        //   0xf0 = reporte periódico normal (RPM, temp,
+                        //          luces, puertas, combustible, etc. — ahora
+                        //          extendido con toda la Tabla 25 del manual)
                         socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
 
                         const subType = header.body[0];
@@ -289,22 +293,61 @@ function startGt06Server() {
                         } else if (subType === 0x03) {
                             // Alarma / comportamiento de manejo — ACÁ vive
                             // la frenada brusca (ID 0x1B), confirmado por el
-                            // manual oficial del fabricante.
+                            // manual oficial del fabricante. Cada alarma
+                            // queda guardada individual en Telemetry_Alarms
+                            // (antes se perdía todo salvo la frenada brusca,
+                            // que además pisaba el campo dtc_codes).
                             const alarmData = jt808.parseAlarmData(header.body);
                             for (const alarm of alarmData.alarms) {
                                 console.log(`[JT808] 🚨 ALARMA equipo=${deviceTransparente.imei}: ${alarm.label} (id=0x${alarm.id.toString(16)}) ${alarm.desc || ''}`);
-                                const isHarshBrake = alarm.id === 0x1B;
-                                await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
-                                    lat: alarmData.lat, lng: alarmData.lon,
-                                    speed_kmh: null, heading: null,
-                                    engine_rpm: null, engine_load: null, coolant_temp: null, battery_voltage: null,
-                                    harsh_brake: isHarshBrake,
-                                    dtc_codes: `ALARM:${alarm.label}`,
-                                });
+
+                                await telemetryIngestReal.ingestAlarm(deviceTransparente.imei, alarm, { lat: alarmData.lat, lon: alarmData.lon });
+
+                                // La frenada brusca además sigue alimentando
+                                // Telemetry_Raw/mlService (harsh_brake), para
+                                // no romper el score de desgaste de frenos
+                                // que ya depende de ese campo.
+                                if (alarm.id === 0x1B) {
+                                    await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
+                                        lat: alarmData.lat, lng: alarmData.lon,
+                                        speed_kmh: null, heading: null,
+                                        engine_rpm: null, engine_load: null, coolant_temp: null, battery_voltage: null,
+                                        harsh_brake: true,
+                                        dtc_codes: `ALARM:${alarm.label}`,
+                                    });
+                                }
+                            }
+
+                        } else if (subType === 0x02) {
+                            // [NUEVO] Trouble codes / DTC — sin confirmar
+                            // todavía contra bytes reales, loguear crudo
+                            // hasta validar contra una falla real conocida.
+                            const dtcData = jt808.parseTroubleCodes(header.body);
+                            console.log(`[JT808] DTC equipo=${deviceTransparente.imei}: ${JSON.stringify(dtcData.systems)}`);
+                            if (dtcData.systems.length) {
+                                await telemetryIngestReal.ingestTroubleCodes(deviceTransparente.imei, dtcData);
+                            }
+
+                        } else if (subType === 0x04) {
+                            // [NUEVO] Inicio/fin de viaje — trae odómetro y
+                            // combustible reales del tramo. Sin confirmar
+                            // todavía contra bytes reales.
+                            const tripData = jt808.parseTravelData(header.body);
+                            if (tripData) {
+                                console.log(`[JT808] Viaje (${tripData.kind}) equipo=${deviceTransparente.imei}: #${tripData.travelNumber} km=${tripData.distanceKm ?? '?'} combustible=${tripData.fuelConsumedL ?? '?'}L`);
+                                await telemetryIngestReal.ingestTripEvent(deviceTransparente.imei, tripData);
                             }
 
                         } else {
-                            // Reporte periódico normal (0xf0 y similares)
+                            // Reporte periódico normal (0xf0 y similares) —
+                            // ahora extendido con toda la Tabla 25: odómetro
+                            // del equipo, consumo promedio/instantáneo,
+                            // presión y vida de aceite, temp. de admisión y
+                            // de cabina, ángulo de volante, acelerador
+                            // relativo, combustible restante en litros, ACC
+                            // nativo, posición de caja y el snapshot de
+                            // estado (luces/puertas/ventanillas/cinturones/
+                            // fallas ECM-ABS-SRS/airbag/freno de mano/llave).
                             const parsed = jt808.parseTransparentTlv(header.body);
 
                             if (parsed.vin) {
@@ -312,7 +355,18 @@ function startGt06Server() {
                                 console.log(`[JT808] VIN confirmado equipo=${deviceTransparente.imei}: ${parsed.vin}`);
                             }
 
-                            if (parsed.rpm !== null || parsed.fuel_level !== null) {
+                            // Antes solo se guardaba si venía RPM o
+                            // combustible — ahora cualquier campo nuevo
+                            // (aunque no venga RPM en ese paquete puntual)
+                            // dispara el guardado, para no perder datos.
+                            const hasAnyData = [
+                                parsed.rpm, parsed.fuel_level, parsed.device_odometer_km, parsed.fuel_consumption_avg,
+                                parsed.fuel_consumption_instant, parsed.oil_pressure_kpa, parsed.oil_life_pct,
+                                parsed.intake_air_temp, parsed.cabin_temp, parsed.steering_angle, parsed.throttle_relative_pct,
+                                parsed.remaining_fuel_l, parsed.acc_signal, parsed.shift_position, parsed.statusFlags,
+                            ].some(v => v !== null && v !== undefined);
+
+                            if (hasAnyData) {
                                 await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
                                     lat: null, lng: null, speed_kmh: null, heading: null,
                                     engine_rpm: parsed.rpm,
@@ -321,8 +375,20 @@ function startGt06Server() {
                                     battery_voltage: parsed.battery_voltage,
                                     fuel_level: parsed.fuel_level,
                                     harsh_brake: false,
+                                    device_odometer_km: parsed.device_odometer_km,
+                                    fuel_consumption_avg: parsed.fuel_consumption_avg,
+                                    fuel_consumption_instant: parsed.fuel_consumption_instant,
+                                    oil_pressure_kpa: parsed.oil_pressure_kpa,
+                                    oil_life_pct: parsed.oil_life_pct,
+                                    intake_air_temp: parsed.intake_air_temp,
+                                    cabin_temp: parsed.cabin_temp,
+                                    steering_angle: parsed.steering_angle,
+                                    throttle_relative_pct: parsed.throttle_relative_pct,
+                                    remaining_fuel_l: parsed.remaining_fuel_l,
+                                    acc_signal: parsed.acc_signal,
+                                    statusFlags: parsed.statusFlags,
                                 });
-                                console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} temp=${parsed.coolant_temp}°C bat=${parsed.battery_voltage}V carga=${parsed.engine_load}% combustible=${parsed.fuel_level}% freno=${parsed.brake_pedal} acelerador=${parsed.accelerator_pedal}%`);
+                                console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} temp=${parsed.coolant_temp}°C bat=${parsed.battery_voltage}V carga=${parsed.engine_load}% combustible=${parsed.fuel_level}% odom=${parsed.device_odometer_km}km caja=${parsed.shift_position} ACC=${parsed.acc_signal}`);
                             }
                         }
 

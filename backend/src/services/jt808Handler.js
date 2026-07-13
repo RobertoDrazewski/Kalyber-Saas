@@ -12,6 +12,18 @@
 // estándar oficial) — por ejemplo RPM, si este equipo lo manda, va a
 // aparecer con un ID fuera del estándar que hay que loguear y
 // confirmar contra un valor real, mismo método que usamos siempre.
+//
+// ACTUALIZACIÓN: se agregó el parseo extendido de la Tabla 25 (data
+// stream IDs para vehículos de pasajeros, 0x0500-0x0548) del manual
+// oficial "Communication Protocol of VL502 V1.0.7", más las Tablas
+// 26 (DTC) y 29/30 (viaje), y la Tabla 28 completa de alarmas. Los
+// tags de motor (RPM, combustible, temp. agua, carga, freno,
+// acelerador, VIN) ya estaban confirmados contra bytes reales; el
+// resto (luces, puertas, cinturones, DTC, viajes) son NUEVOS — están
+// bien contra el manual, pero todavía NO CONTRA BYTES REALES. Seguí
+// el mismo método de siempre: logueá crudo, confirmá contra un
+// evento real conocido (por ej. abrir una puerta) antes de confiar
+// 100% en el valor.
 // ============================================================
 
 const START_JT808 = 0x7e;
@@ -208,13 +220,6 @@ function parseLocationReport(body) {
 // (el IMEI completo de 15 dígitos no entra en 6 bytes = 48 bits, pero
 // sin el dígito verificador sí entra). Confirmado contra el IMEI real
 // impreso en la etiqueta del VL502 (868935060187604).
-//
-// OJO: el dígito verificador del IMEI (el último) se calcula con el
-// algoritmo de Luhn — technically se podría reconstruir, pero como
-// nunca lo vamos a necesitar para nada (alcanza con los primeros 14
-// dígitos para buscar el equipo en la base de forma inequívoca),
-// hacemos el match completando con LIKE en vez de intentar adivinar
-// el dígito que falta.
 function terminalIdToImeiPrefix(terminalIdBuffer) {
     return terminalIdBuffer.readUIntBE(0, 6).toString();
 }
@@ -222,17 +227,21 @@ function terminalIdToImeiPrefix(terminalIdBuffer) {
 // ============================================================
 // Parser del "0x0900 — transmisión transparente" del VL502.
 //
-// CONFIRMADO CONTRA EL MANUAL OFICIAL DEL FABRICANTE ("Communication
-// Protocol of VL502 V1.0.7") — ya no son candidatos, son los tags
-// reales documentados. El primer byte del cuerpo indica el TIPO de
-// sub-mensaje:
-//   0x02 = Trouble code reporting (DTC)
-//   0x03 = Alarm and driving behavior data  <- frenada/giro brusco, colisión, etc.
-//   0x04 = Travel data (inicio/fin de viaje)
+// El primer byte del cuerpo indica el TIPO de sub-mensaje. Dentro de
+// ese cuerpo, según Tabla 31 del manual: tipo(1) + fecha BCD(6) +
+// dataType(1) + vehicleType(1) + subcategoría(1) = 10 bytes, y el
+// contenido específico arranca en el byte 10. En este codebase se
+// viene usando offset=11 en vez de 10 para los parsers ya confirmados
+// (parseAlarmData, la tabla periódica) — se mantiene ese mismo offset
+// acá para los parsers nuevos, por consistencia con lo que ya está
+// probado funcionando contra el equipo real.
+//
+//   0x02 = Trouble code reporting (DTC)               [NUEVO]
+//   0x03 = Alarm and driving behavior data              (ya confirmado)
+//   0x04 = Travel data (inicio/fin de viaje)           [NUEVO]
 //   0xf0 = Reporte periódico normal (extensión propia de Jimi, no
 //          documentada en la tabla base — la reversamos a mano y
-//          ahora coincide con los offsets oficiales de la tabla
-//          general de parámetros del vehículo).
+//          ahora coincide con los offsets oficiales de la Tabla 25).
 // ============================================================
 
 function parseTags(rest) {
@@ -248,88 +257,171 @@ function parseTags(rest) {
     return tags;
 }
 
+function readByte(tags, tag) {
+    return (tags[tag] && tags[tag].length === 1) ? tags[tag].readUInt8(0) : null;
+}
+function readWord(tags, tag) {
+    return (tags[tag] && tags[tag].length === 2) ? tags[tag].readUInt16BE(0) : null;
+}
+function readDword(tags, tag) {
+    return (tags[tag] && tags[tag].length === 4) ? tags[tag].readUInt32BE(0) : null;
+}
+function readBool(tags, tag) {
+    const v = readByte(tags, tag);
+    return v === null ? null : !!v;
+}
+
+// Tags booleanos de la Tabla 25 (0x0500-0x0527) — estado del auto
+// (luces, puertas, ventanillas, fallas, cinturones, etc). Se agrupan
+// todos en un único JSON (status_flags) por lectura, en vez de una
+// columna SQL por cada uno — son ~25 flags y la mayoría no cambian
+// lectura a lectura.
+const STATUS_FLAG_TAGS = {
+    '0500': 'luz_alta', '0501': 'luz_baja', '0502': 'luz_posicion', '0503': 'luz_antiniebla',
+    '0504': 'giro_izquierdo', '0505': 'giro_derecho', '0506': 'balizas',
+    '0507': 'puerta_del_izq', '0508': 'puerta_del_der', '0509': 'puerta_tras_izq', '050a': 'puerta_tras_der', '050b': 'baul',
+    '050c': 'seguro_general', '050d': 'seguro_del_izq', '050e': 'seguro_del_der', '050f': 'seguro_tras_izq', '0510': 'seguro_tras_der', '0511': 'seguro_baul',
+    '0512': 'ventanilla_del_izq', '0513': 'ventanilla_del_der', '0514': 'ventanilla_tras_izq', '0515': 'ventanilla_tras_der', '0516': 'techo_solar',
+    '0517': 'falla_ecm', '0518': 'falla_abs', '0519': 'falla_srs',
+    '051a': 'alarma_aceite', '051b': 'alarma_presion_neumaticos', '051c': 'alarma_mantenimiento',
+    '051d': 'airbag_desplegado', '051e': 'freno_mano_puesto',
+    '0520': 'cinturon_conductor', '0521': 'cinturon_acompanante',
+    '0523': 'llave_puesta', '0525': 'limpiaparabrisas_on', '0526': 'aire_acondicionado_on',
+};
+
+const SHIFT_POSITION = { 1: 'P', 2: 'R', 3: 'N', 4: 'D' };
+const REMOTE_SIGNAL = { 0: 'sin_presionar', 1: 'desbloqueo', 2: 'bloqueo', 3: 'baul', 4: 'desbloqueo_largo', 5: 'bloqueo_largo' };
+
 // Reporte periódico normal (type 0xf0) — datos del vehículo en vivo.
+// Extendido para sacar TODO lo que trae la Tabla 25 del manual para
+// vehículos de pasajeros, no solo los 8 campos de motor originales.
 function parseTransparentTlv(unescapedBody) {
-    if (unescapedBody.length < 11) {
-        return { tags: {}, vin: null, rpm: null, battery_voltage: null, coolant_temp: null, engine_load: null, fuel_level: null, brake_pedal: null, accelerator_pedal: null };
-    }
+    const empty = {
+        tags: {}, vin: null, rpm: null, battery_voltage: null, coolant_temp: null, engine_load: null,
+        fuel_level: null, brake_pedal: null, accelerator_pedal: null, device_odometer_km: null,
+        fuel_consumption_avg: null, fuel_consumption_instant: null, oil_pressure_kpa: null, oil_life_pct: null,
+        intake_air_temp: null, cabin_temp: null, steering_angle: null, throttle_relative_pct: null,
+        remaining_fuel_l: null, acc_signal: null, shift_position: null, remote_control_signal: null,
+        statusFlags: null,
+    };
+    if (unescapedBody.length < 11) return empty;
+
     const rest = unescapedBody.slice(11);
     const tags = parseTags(rest);
 
-    // VIN: tag 0001, 17 bytes ASCII — confirmado por formato inconfundible.
+    // --- Campos de motor, ya confirmados contra bytes reales ---
     let vin = null;
     if (tags['0001'] && tags['0001'].length === 17) {
         const text = tags['0001'].toString('ascii');
         if (/^[A-Z0-9]{17}$/.test(text)) vin = text;
     }
+    const rpm = readWord(tags, '0536');
+    const battery_voltage = tags['0530'] && tags['0530'].length === 2 ? tags['0530'].readUInt16BE(0) / 1000 : null;
+    const coolant_temp = readByte(tags, '052d') !== null ? readByte(tags, '052d') - 40 : null;
+    const engine_load = readByte(tags, '0114');
+    const fuel_level = readByte(tags, '0544');
+    const brake_pedal = readByte(tags, '051f');
+    const accelerator_pedal = readByte(tags, '053f');
 
-    // RPM — tag 0536, y=x sin escala. CONFIRMADO por el manual oficial.
-    let rpm = null;
-    if (tags['0536'] && tags['0536'].length === 2) {
-        rpm = tags['0536'].readUInt16BE(0);
-    }
+    // --- Campos NUEVOS de la Tabla 25 (todavía sin confirmar contra
+    // bytes reales — validar apenas lleguen datos del VL502 en vivo) ---
+    const device_odometer_km = readDword(tags, '0528') !== null ? readDword(tags, '0528') / 10 : null;
+    const fuel_consumption_avg = readWord(tags, '0537') !== null ? readWord(tags, '0537') / 100 : null;
+    const fuel_consumption_instant = readWord(tags, '0538') !== null ? readWord(tags, '0538') / 100 : null;
+    const oil_pressure_kpa = readWord(tags, '053b') !== null ? readWord(tags, '053b') / 10 : null;
+    const oil_life_pct = readByte(tags, '053a');
+    const intake_air_temp = readByte(tags, '052e') !== null ? readByte(tags, '052e') - 40 : null;
+    const cabin_temp = readByte(tags, '052f') !== null ? readByte(tags, '052f') - 40 : null;
+    const steering_angle = readWord(tags, '0541');
+    const throttle_relative_pct = readByte(tags, '0547');
+    const remaining_fuel_l = readWord(tags, '0543') !== null ? readWord(tags, '0543') / 100 : null;
+    const acc_signal = readBool(tags, '0522');
+    const shiftRaw = readByte(tags, '0527');
+    const shift_position = shiftRaw !== null ? (SHIFT_POSITION[shiftRaw] || `desconocido(${shiftRaw})`) : null;
+    const remoteRaw = readByte(tags, '0524');
+    const remote_control_signal = remoteRaw !== null ? (REMOTE_SIGNAL[remoteRaw] || `desconocido(${remoteRaw})`) : null;
 
-    // Voltaje — tag 0530, y=x en mV. CONFIRMADO por el manual oficial.
-    let battery_voltage = null;
-    if (tags['0530'] && tags['0530'].length === 2) {
-        battery_voltage = tags['0530'].readUInt16BE(0) / 1000;
-    }
+    // --- Snapshot de estado (booleans) ---
+    let statusFlags = null;
+    const flagEntries = Object.entries(STATUS_FLAG_TAGS)
+        .map(([tag, key]) => [key, readBool(tags, tag)])
+        .filter(([, v]) => v !== null);
+    if (flagEntries.length > 0) statusFlags = Object.fromEntries(flagEntries);
 
-    // Temperatura de agua/refrigerante — tag 052D (NO 052E, ese es la
-    // temperatura del aire de admisión — error mío corregido con el
-    // manual oficial). y=x-40.
-    let coolant_temp = null;
-    if (tags['052d'] && tags['052d'].length === 1) {
-        coolant_temp = tags['052d'].readUInt8(0) - 40;
-    }
-
-    // Carga de motor — tag 0114 (NO 053C, ese es "Air Flow" — error
-    // mío corregido). y=x, ya viene en %.
-    let engine_load = null;
-    if (tags['0114'] && tags['0114'].length === 1) {
-        engine_load = tags['0114'].readUInt8(0);
-    }
-
-    // Nivel de combustible — tag 0544, y=x, ya viene en %. NUEVO,
-    // nunca lo habíamos buscado en este tag — resuelve el misterio
-    // del combustible que nunca aparecía.
-    let fuel_level = null;
-    if (tags['0544'] && tags['0544'].length === 1) {
-        fuel_level = tags['0544'].readUInt8(0);
-    }
-
-    // Estado del pedal de freno — tag 051F, 0=liberado, 1=presionado.
-    // NUEVO — combinado con el ID de alarma 0x1B (frenada brusca) de
-    // parseAlarmData, da doble confirmación de un frenazo real.
-    let brake_pedal = null;
-    if (tags['051f'] && tags['051f'].length === 1) {
-        brake_pedal = tags['051f'].readUInt8(0);
-    }
-
-    // Posición del acelerador — tag 053F, y=x, en %. NUEVO.
-    let accelerator_pedal = null;
-    if (tags['053f'] && tags['053f'].length === 1) {
-        accelerator_pedal = tags['053f'].readUInt8(0);
-    }
-
-    return { tags, vin, rpm, battery_voltage, coolant_temp, engine_load, fuel_level, brake_pedal, accelerator_pedal };
+    return {
+        tags, vin, rpm, battery_voltage, coolant_temp, engine_load, fuel_level, brake_pedal, accelerator_pedal,
+        device_odometer_km, fuel_consumption_avg, fuel_consumption_instant, oil_pressure_kpa, oil_life_pct,
+        intake_air_temp, cabin_temp, steering_angle, throttle_relative_pct, remaining_fuel_l, acc_signal,
+        shift_position, remote_control_signal, statusFlags,
+    };
 }
 
-// IDs de alarma/comportamiento de manejo confirmados (Tabla 28 del
-// manual oficial) — solo los que nos importan para el producto.
+// Tabla 28 completa del manual oficial (0x00-0x3E) — antes solo
+// teníamos un subconjunto. Se deja completa para no perder ningún
+// tipo de alarma que el equipo pueda llegar a mandar.
 const ALARM_IDS = {
+    0x00: 'Falla de hardware detectada en autodiagnóstico',
+    0x01: 'Terminal conectado (plug-in)',
+    0x02: 'Terminal desconectado (plug-out)',
+    0x03: 'Alarma de alto voltaje',
+    0x04: 'Alarma de bajo voltaje',
+    0x05: 'Alarma de alta temperatura de agua',
+    0x06: 'Alarma de baja temperatura de agua',
+    0x07: 'Alarma de alta temperatura de aceite',
+    0x08: 'Alarma de alta temperatura de combustible',
+    0x09: 'Alarma de alta presión de aceite',
+    0x0A: 'Alarma de presión de neumáticos anormal',
     0x0B: 'Combustible bajo',
+    0x0C: 'Recordatorio de carga',
+    0x0D: 'Precalentamiento excesivo',
+    0x0E: 'Ralentí excesivo',
+    0x0F: 'Manejando con combustible bajo',
+    0x10: 'Auto recién arrancado manejando a alta velocidad',
+    0x11: 'Manejando de noche sin luces',
+    0x12: 'Manejando sin soltar el freno de mano',
+    0x13: 'Manejando con puertas abiertas',
+    0x14: 'Manejando con puertas sin seguro',
+    0x15: 'Manejando con el baúl abierto',
+    0x16: 'Alarma de punto muerto en movimiento (coasting)',
+    0x17: 'Conductor sin cinturón',
+    0x18: 'Acompañante sin cinturón',
+    0x19: 'Carga rápida de combustible',
     0x1A: 'Aceleración brusca',
     0x1B: 'Frenada brusca',
     0x1C: 'Giro brusco',
     0x1D: 'Cambio de carril rápido',
+    0x1E: 'Cruce de varios carriles de una vez',
+    0x1F: 'Cambios de carril continuos',
     0x20: 'Alarma de emergencia',
     0x21: 'Salió de la geocerca',
     0x22: 'Entró a la geocerca',
+    0x23: 'Manejo con fatiga (fatigue driving)',
+    0x24: 'Tiempo acumulado de manejo sobre el umbral',
     0x25: 'Exceso de velocidad',
     0x26: 'Colisión (leve)',
     0x27: 'Colisión (severa)',
     0x28: 'Vuelco del vehículo',
+    0x29: 'Freno pisado por tiempo prolongado',
+    0x2A: 'Embrague pisado por tiempo prolongado',
+    0x2B: 'Uso indebido del embrague (riding the clutch)',
+    0x2C: 'Alerta de cambio de marcha',
+    0x2D: 'Estacionado sin poner en P/N',
+    0x2E: 'Alerta de colisión al estacionar',
+    0x2F: 'Recordatorio de posible robo de combustible',
+    0x30: 'Recordatorio de remolque',
+    0x31: 'Alerta de puertas abiertas',
+    0x32: 'Alerta de puertas sin seguro',
+    0x33: 'Alerta de ventanillas abiertas',
+    0x34: 'Alerta de baúl abierto',
+    0x35: 'Alerta de techo solar abierto',
+    0x36: 'Alerta de tapa de combustible abierta',
+    0x37: 'Luces dejadas encendidas',
+    0x38: 'Recordatorio de encendido (ignition on)',
+    0x39: 'Recordatorio de apagado (ignition off)',
+    0x3A: 'Alerta de despertar (wake-up)',
+    0x3B: 'Nivel de urea sin cambios (anormal)',
+    0x3C: 'Alerta de aumento de nivel de urea',
+    0x3D: 'Manejando con falla del vehículo detectada',
     0x3E: 'Nivel de combustible anormal',
 };
 
@@ -368,6 +460,111 @@ function parseAlarmData(unescapedBody) {
     return { alarms, lat, lon };
 }
 
+// ============================================================
+// [NUEVO] Trouble codes / DTC (subtipo 0x02, Tabla 26 del manual).
+// Estructura: tipo(1)+fecha(6)+algo(4)=11 (mismo offset que el resto
+// de subtipos en este codebase) + número de sistemas(WORD) + por
+// cada sistema: systemID(DWORD) + cantidad de códigos(WORD) + lista
+// de códigos (16 bytes cada uno) + status(4)+lat(4)+lon(4) al final.
+// SIN CONFIRMAR contra bytes reales todavía — el auto de prueba
+// (Ford Focus) puede no tener ningún DTC activo para validar esto
+// hasta que aparezca una falla real u OBD simulado.
+// ============================================================
+function parseTroubleCodes(unescapedBody) {
+    if (unescapedBody.length < 13) return { systems: [], lat: null, lon: null };
+
+    let offset = 11;
+    const totalSystems = unescapedBody.readUInt16BE(offset);
+    offset += 2;
+
+    const systems = [];
+    for (let i = 0; i < totalSystems && offset + 6 <= unescapedBody.length; i++) {
+        const systemId = unescapedBody.readUInt32BE(offset);
+        offset += 4;
+        const codeCount = unescapedBody.readUInt16BE(offset);
+        offset += 2;
+        const codes = [];
+        for (let c = 0; c < codeCount && offset + 16 <= unescapedBody.length; c++) {
+            codes.push(unescapedBody.slice(offset, offset + 16).toString('hex'));
+            offset += 16;
+        }
+        systems.push({ systemId, codes });
+    }
+
+    let lat = null, lon = null;
+    if (offset + 12 <= unescapedBody.length) {
+        offset += 4; // status DWORD
+        lat = -(unescapedBody.readUInt32BE(offset) / 1_000_000);
+        lon = -(unescapedBody.readUInt32BE(offset + 4) / 1_000_000);
+    }
+
+    return { systems, lat, lon };
+}
+
+// ============================================================
+// [NUEVO] Datos de viaje (subtipo 0x04, Tablas 29/30 del manual).
+// El primer byte después del offset base indica si es inicio
+// (0x01) o fin (0x02) de viaje — el body de fin trae odómetro y
+// combustible reales del tramo, algo que hoy no tenemos (el
+// TabHistorico actual reconstruye viajes solo con GPS/haversine).
+// SIN CONFIRMAR contra bytes reales todavía.
+// ============================================================
+function parseTravelData(unescapedBody) {
+    if (unescapedBody.length < 16) return null;
+
+    let offset = 11;
+    const travelProperty = unescapedBody[offset]; // 0x01 = inicio, 0x02 = fin
+    offset += 1;
+    const travelNumber = unescapedBody.readUInt32BE(offset);
+    offset += 4;
+    const startTimeBcd = unescapedBody.slice(offset, offset + 6);
+    offset += 6;
+    const startTime = bcdToDateString(startTimeBcd);
+
+    if (travelProperty === 0x01) {
+        // Inicio de viaje: no hay más datos.
+        return { kind: 'inicio', travelNumber, startTime };
+    }
+
+    if (travelProperty === 0x02 && offset + 6 <= unescapedBody.length) {
+        const endTimeBcd = unescapedBody.slice(offset, offset + 6);
+        offset += 6;
+        const endTime = bcdToDateString(endTimeBcd);
+
+        let startLat = null, startLon = null, endLat = null, endLon = null;
+        if (offset + 16 <= unescapedBody.length) {
+            startLat = -(unescapedBody.readUInt32BE(offset) / 1_000_000); offset += 4;
+            startLon = -(unescapedBody.readUInt32BE(offset) / 1_000_000); offset += 4;
+            endLat = -(unescapedBody.readUInt32BE(offset) / 1_000_000); offset += 4;
+            endLon = -(unescapedBody.readUInt32BE(offset) / 1_000_000); offset += 4;
+        }
+        if (offset < unescapedBody.length) offset += 1; // byte de signos lat/lon, no lo usamos (forzamos hemisferio)
+
+        let idlingCount = null, idlingSeconds = null, distanceKm = null, fuelConsumedL = null;
+        if (offset + 8 <= unescapedBody.length) {
+            idlingCount = unescapedBody.readUInt16BE(offset); offset += 2;
+            idlingSeconds = unescapedBody.readUInt16BE(offset); offset += 2;
+            distanceKm = unescapedBody.readUInt16BE(offset) / 10; offset += 2;
+            fuelConsumedL = unescapedBody.readUInt16BE(offset) / 100; offset += 2;
+        }
+
+        return {
+            kind: 'fin', travelNumber, startTime, endTime,
+            startLat, startLon, endLat, endLon,
+            idlingCount, idlingSeconds, distanceKm, fuelConsumedL,
+        };
+    }
+
+    return { kind: 'desconocido', travelProperty, travelNumber, startTime };
+}
+
+function bcdToDateString(bcdBuffer) {
+    // YY-MM-DD-HH-MM-SS en BCD → 'YYYY-MM-DD HH:MM:SS' para insertar directo en DATETIME
+    const digits = [...bcdBuffer].map(b => b.toString(16).padStart(2, '0'));
+    const [yy, mm, dd, hh, mi, ss] = digits;
+    return `20${yy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+}
+
 module.exports = {
     MSG_ID,
     extractJT808Frame,
@@ -378,5 +575,8 @@ module.exports = {
     terminalIdToImeiPrefix,
     parseTransparentTlv,
     parseAlarmData,
+    parseTroubleCodes,
+    parseTravelData,
     ALARM_IDS,
+    STATUS_FLAG_TAGS,
 };
