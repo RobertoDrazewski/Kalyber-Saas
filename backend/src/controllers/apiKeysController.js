@@ -36,6 +36,7 @@ const createApiKey = async (req, res) => {
         // red — de acá en más solo existe el hash en la base.
         res.json({ api_key: rawKey, key_prefix: keyPrefix, label: label || 'Sin nombre' });
     } catch (error) {
+        console.error('[ApiKeys] Error generando key:', error.message);
         res.status(500).json({ error: 'Error generando la API key' });
     }
 };
