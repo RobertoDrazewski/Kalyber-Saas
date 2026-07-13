@@ -50,7 +50,7 @@ function Features() {
             </div>
             <h3 className="text-xl font-bold mb-3 text-white">Evaluación de Conductores</h3>
             <p className="text-slate-400 leading-relaxed">
-              Reduzca el desgaste prematuro de los componentes y el consumo ineficiente de combustible. El sistema inercial audita a los operadores constantemente, detectando <strong className="text-slate-300">frenadas bruscas, aceleraciones agresivas y excesos de tiempo en ralentí</strong>.
+              Disponible con el <strong className="text-slate-300">Plan Avanzado</strong>: la unidad de control (ECU) reporta en vivo <strong className="text-slate-300">frenadas bruscas, aceleraciones agresivas, giros cerrados y excesos de velocidad</strong>, con hora y ubicación exacta de cada evento en el panel.
             </p>
           </div>
 
@@ -138,11 +138,11 @@ function Hardware() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#10B981] font-bold">✓</span>
-                  <div><strong className="text-white">Sensores Inerciales (6 Ejes):</strong> Acelerómetro y giroscopio calibrados para identificar patrones de conducción de riesgo.</div>
+                  <div><strong className="text-white">Posición y Velocidad en Tiempo Real:</strong> GPS continuo con histórico de recorridos, visible en el panel web.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#10B981] font-bold">✓</span>
-                  <div><strong className="text-white">Alerta Acústica en Cabina:</strong> Notificación de voz automatizada para corrección inmediata del comportamiento del conductor.</div>
+                  <div><strong className="text-white">Alerta Acústica en Cabina (Local):</strong> Aviso sonoro inmediato dentro del vehículo ante frenadas o excesos de velocidad. Es una advertencia <em>local</em> para el conductor — no queda registrada en el panel del administrador (para eso está el Plan Avanzado).</div>
                 </li>
               </ul>
             </div>
@@ -163,7 +163,7 @@ function Hardware() {
               <ul className="space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Lectura Directa de ECU:</strong> Extracción en vivo de parámetros como RPM, temperatura del refrigerante y consumo de combustible.</div>
+                  <div><strong className="text-white">Lectura Directa de ECU:</strong> RPM, temperatura de motor, presión y vida útil de aceite, combustible y voltaje de batería en tiempo real.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
@@ -171,11 +171,11 @@ function Hardware() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Auditoría Operativa Híbrida:</strong> Correlación de datos del acelerómetro con métricas reales de consumo del vehículo.</div>
+                  <div><strong className="text-white">Eventos de Manejo con Ubicación:</strong> Frenadas y aceleraciones bruscas, giros cerrados, colisiones y exceso de velocidad, cada uno con hora y GPS exacto — no un puntaje estimado, el evento real.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Arquitectura Optimizada para IA:</strong> Generación de flujos de datos de alta resolución, esenciales para el mantenimiento predictivo.</div>
+                  <div><strong className="text-white">Estado Completo del Vehículo:</strong> Puertas, luces, cinturones de seguridad y freno de mano, visibles en vivo en el panel.</div>
                 </li>
               </ul>
             </div>
@@ -327,7 +327,7 @@ function Pricing() {
           
           <div className="mobile-carousel-item wide kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
-            <p className="text-slate-400 mb-8 h-12">Herramientas de auditoría digital para la gestión y evaluación del comportamiento de los operadores.</p>
+            <p className="text-slate-400 mb-8 h-12">Rastreo satelital y control de velocidad para flotas que necesitan saber dónde está cada unidad, sin datos de motor.</p>
             
             <div className="mb-6 p-5 bg-[#050B14] rounded-2xl border border-slate-800">
               <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
@@ -355,11 +355,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Análisis de Operadores (Machine Learning):</strong> Evaluación algorítmica de los patrones de conducción para identificar áreas de mejora.</div>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Rastreo Satelital Continuo:</strong> Posicionamiento global con registro histórico de recorridos.</div>
+                <div><strong className="text-white font-semibold">Rastreo Satelital Continuo:</strong> Posicionamiento global en tiempo real con registro histórico de recorridos.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
@@ -367,7 +363,11 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Control de Velocidad:</strong> Parametrización de límites y advertencias dinámicas en el interior de la unidad.</div>
+                <div><strong className="text-white font-semibold">Alerta Sonora Local en Cabina:</strong> Aviso inmediato al conductor por exceso de velocidad, sin costo de datos adicional. Es una advertencia dentro del vehículo, no un reporte al panel.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Upgrade sin cambiar de plataforma:</strong> Si más adelante necesita datos de motor y comportamiento del conductor, migra al Plan Avanzado sin perder su historial de recorridos.</div>
               </li>
             </ul>
           </div>
@@ -402,7 +402,7 @@ function Pricing() {
             <ul className="text-slate-300 space-y-5 flex-1">
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Mantenimiento Predictivo Integral:</strong> Modelos de IA aplicados simultáneamente al diagnóstico del vehículo y al análisis del operador.</div>
+                <div><strong className="text-white font-semibold">Mantenimiento Predictivo Integral:</strong> Heurísticas de desgaste (frenos, neumáticos) combinadas con eventos de manejo reales reportados por el propio equipo — no una estimación, el dato real de la ECU.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
