@@ -16,6 +16,7 @@ const paymentRoutes = require('./src/routes/paymentRoutes');
 const fuelroutes = require('./src/routes/fuelroutes');
 const apiKeysRoutes = require('./src/routes/apiKeysRoutes');
 const publicApiRoutes = require('./src/routes/publicApiRoutes');
+const geofenceRoutes = require('./src/routes/geofenceRoutes'); // [NUEVO] crear/listar/borrar geocercas
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/fuel', fuelroutes);
 app.use('/api/apikeys', apiKeysRoutes);
+app.use('/api/geofences', geofenceRoutes); // [NUEVO]
 app.use('/api/v1', publicApiRoutes); // API pública para terceros, autenticada con API key (no JWT)
 
 app.get('/api/status', (req, res) => {

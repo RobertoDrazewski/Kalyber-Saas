@@ -21,9 +21,11 @@ function PlanBadge({ model }) {
   );
 }
 
-// El ACC (motor encendido/apagado) solo llega confirmado y en vivo
-// desde el VL502 (tag 0x0522 del manual). Para el Básico no lo
-// mostramos — mejor no mostrar nada que mostrar un dato inventado.
+// El ACC (motor encendido/apagado) llega confirmado en vivo tanto del
+// VL502 (tag 0x0522) como del VL04 (offset 27 del paquete 0x37,
+// confirmado 13/07/2026 contra el heartbeat real). Si no hay dato
+// (equipo recién pareado, sin lecturas todavía), mostramos "sin dato"
+// en vez de inventar un estado.
 function AccBadge({ accOn }) {
   if (accOn === null || accOn === undefined) {
     return (
@@ -126,15 +128,47 @@ function StatusPill({ label, value, bad }) {
   );
 }
 
-// Cada evento de Telemetry_Alarms trae un alarm_id (Tabla 28 del
-// manual VL502) — coloreamos por severidad aproximada, sin inventar
-// íconos por cada uno de los 63 tipos posibles.
-function severityColor(alarmId) {
-  const critical = [0x26, 0x27, 0x28, 0x20]; // colisión leve/severa, vuelco, emergencia
-  const warning = [0x1A, 0x1B, 0x1C, 0x25, 0x0B, 0x3E]; // aceleración/frenada/giro brusco, exceso velocidad, combustible
-  if (critical.includes(alarmId)) return { cls: 'bg-red-500/10 text-red-400 border-red-500/30', dot: 'bg-red-500' };
-  if (warning.includes(alarmId)) return { cls: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dot: 'bg-amber-500' };
+// Cada evento de Telemetry_Alarms trae un alarm_id — PERO OJO: el
+// VL04 (GT06) y el VL502 (JT808) usan DOS tablas de códigos distintas
+// que comparten el mismo rango de números para cosas diferentes (ej:
+// 0x2C = "colisión" en VL04 pero "cambio de marcha" en VL502). Clasificar
+// por alarm_id numérico clasificaba mal — colisión real aparecía gris.
+// Clasificamos por palabras clave en label/description en cambio, que
+// ya vienen en texto plano y no colisionan entre las dos fuentes.
+function severityColor(alarm) {
+  const text = `${alarm.label || ''} ${alarm.description || ''}`.toLowerCase();
+  const critical = ['collision', 'colisi', 'sos', 'vuelco', 'rollover', 'emergencia', 'harsh_braking', 'frenada brusca'];
+  const warning = ['harsh', 'brusc', 'turn', 'giro', 'overspeed', 'exceso de velocidad', 'power_cut', 'corte de energ',
+    'unplugged', 'desconectado', 'battery', 'bateria', 'batería', 'tamper', 'sabotaje', 'fence', 'geocerca',
+    'remolque', 'robo', 'theft', 'fatiga', 'fatigue'];
+  if (critical.some(k => text.includes(k))) return { cls: 'bg-red-500/10 text-red-400 border-red-500/30', dot: 'bg-red-500' };
+  if (warning.some(k => text.includes(k))) return { cls: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dot: 'bg-amber-500' };
   return { cls: 'bg-slate-700/20 text-slate-400 border-slate-700', dot: 'bg-slate-500' };
+}
+
+// Timeline de eventos reales — se usa igual en el panel Avanzado y en
+// el Básico, la única diferencia es de dónde salen los eventos (ambos
+// pegan a la misma tabla Telemetry_Alarms vía el mismo endpoint).
+function AlarmTimeline({ alarms }) {
+  if (alarms.length === 0) {
+    return <p className="text-slate-600 text-sm">Sin eventos registrados todavía para este auto.</p>;
+  }
+  return (
+    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+      {alarms.map(a => {
+        const sev = severityColor(a);
+        return (
+          <div key={a.id} className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${sev.cls}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${sev.dot}`}></span>
+              <span className="text-sm font-medium truncate">{a.label}</span>
+            </div>
+            <span className="text-[11px] shrink-0 opacity-80">{fmtHora(a.recorded_at)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function fmtHora(dateString) {
@@ -234,24 +268,7 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
         {/* Eventos de manejo reales — frenadas, giros, colisiones, geocerca */}
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
           <p className="text-sm text-slate-400 mb-4 flex items-center gap-2"><AlertTriangle size={15} className="text-amber-400" /> Eventos de manejo (histórico real)</p>
-          {alarms.length === 0 ? (
-            <p className="text-slate-600 text-sm">Sin eventos registrados todavía para este auto.</p>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {alarms.map(a => {
-                const sev = severityColor(a.alarm_id);
-                return (
-                  <div key={a.id} className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${sev.cls}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${sev.dot}`}></span>
-                      <span className="text-sm font-medium truncate">{a.label}</span>
-                    </div>
-                    <span className="text-[11px] shrink-0 opacity-80">{fmtHora(a.recorded_at)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <AlarmTimeline alarms={alarms} />
         </div>
 
         {/* Códigos de falla (DTC) */}
@@ -326,12 +343,23 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
 }
 
 // ============================================================
-// Panel Básico — el JM-VL04 solo confirma posición y velocidad. Las
-// alarmas de manejo son un aviso sonoro LOCAL en la cabina (no se
-// transmiten a la plataforma), así que no mostramos score de
-// conducción, anomalías, ni ningún dato de motor: sería inventado.
+// Panel Básico — el JM-VL04 no tiene lectura de motor (RPM, temp.,
+// combustible), eso sigue siendo exclusivo del Plan Avanzado (VL502).
+//
+// PERO confirmado 13/07/2026 contra tráfico real: el VL04 SÍ reporta
+// por red (no solo buzzer local) colisión, corte de energía y
+// desconexión física — y usa el mismo mecanismo de transporte para
+// frenada/aceleración/giro brusco, así que también deberían llegar.
+// Además el equipo manda su propio odómetro real (no estimado por
+// GPS) y el estado de ACC en cada posición. El score de conducción y
+// el desgaste de frenos (Telemetry_Heuristics) ya se calculan igual
+// que en el Avanzado, porque solo dependen de harsh_brake + km — no
+// de datos de motor. Antes de este cambio nada de esto se mostraba.
 // ============================================================
-function PanelBasico({ vehicle, series }) {
+function PanelBasico({ vehicle, series, alarms }) {
+  const last = series[series.length - 1] || {};
+  const accOn = last.acc_signal ?? vehicle.last_status_flags?.acc_signal ?? null;
+
   return (
     <div className="space-y-6">
       <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-5">
@@ -339,6 +367,7 @@ function PanelBasico({ vehicle, series }) {
           <div className="flex items-center gap-3">
             <span className="font-mono text-[#10B981] font-bold text-lg">{vehicle.plate}</span>
             <PlanBadge model="VL04" />
+            <AccBadge accOn={accOn} />
           </div>
           <div className="flex items-center gap-4">
             <HeadingCompass heading={vehicle.heading} />
@@ -347,12 +376,14 @@ function PanelBasico({ vehicle, series }) {
             </span>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-md">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <GaugeStat icon={Gauge} label="Velocidad" value={vehicle.speed_kmh} unit="km/h" color="#10B981" />
-          <GaugeStat icon={MapPin} label="Posición" value={vehicle.lat != null ? 'GPS activo' : 'Sin señal'} unit="" color="#6366F1" />
+          <GaugeStat icon={MapPin} label="Odómetro equipo" value={vehicle.device_odometer_km != null ? Math.round(vehicle.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
+          <GaugeStat icon={ShieldCheck} label="Score de manejo" value={vehicle.driver_score} unit="/100" color={vehicle.driver_score != null && vehicle.driver_score < 70 ? '#F59E0B' : '#10B981'} />
+          <GaugeStat icon={Wrench} label="Desgaste frenos" value={vehicle.brake_wear_score} unit="/100" color={vehicle.brake_wear_score != null && vehicle.brake_wear_score < 40 ? '#EF4444' : '#818CF8'} />
         </div>
         <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-3">
-          Este auto tiene el equipo <strong className="text-slate-300">Básico (JM-VL04)</strong>: reporta únicamente posición GPS y velocidad. Las alarmas de manejo (frenada/aceleración/giro brusco) se avisan con un sonido local en la cabina — no viajan a este panel, por eso acá no se muestra score de conducción ni datos de motor. Para eso hace falta el Plan Avanzado (VL502).
+          Equipo <strong className="text-slate-300">Básico (JM-VL04)</strong>: GPS, velocidad y odómetro real del propio equipo. Confirmado que colisión, corte de energía y desconexión física llegan a este panel en vivo (no solo suena en cabina); frenada/aceleración/giro brusco usan el mismo camino y deberían llegar igual — todavía no tuvimos el primer evento real de manejo para confirmarlo al 100%. No tiene lectura de motor (RPM, temperatura, combustible): eso es exclusivo del Plan Avanzado (VL502).
         </p>
       </div>
 
@@ -372,6 +403,12 @@ function PanelBasico({ vehicle, series }) {
           </div>
         </div>
       )}
+
+      {/* Eventos de manejo reales — mismo mecanismo y misma tabla que el Avanzado */}
+      <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
+        <p className="text-sm text-slate-400 mb-4 flex items-center gap-2"><AlertTriangle size={15} className="text-amber-400" /> Eventos de manejo (histórico real)</p>
+        <AlarmTimeline alarms={alarms} />
+      </div>
     </div>
   );
 }
@@ -407,14 +444,21 @@ export default function TabTelemetria() {
     return () => clearInterval(interval);
   }, [selectedId]);
 
-  // Alarmas/DTC/viajes del equipo solo existen para el Plan Avanzado
-  // — no tiene sentido pedirlos para un auto con VL04.
+  // Las alarmas (Telemetry_Alarms) ya llegan de los DOS equipos —
+  // VL502 vía JT808 y VL04 vía GT06 0x26/0x27, confirmado 13/07/2026
+  // (colisión, corte de energía, desconexión física). DTC y "viajes
+  // reportados por el equipo" SÍ siguen siendo exclusivos del VL502
+  // porque dependen del OBD real, que el VL04 no tiene.
   useEffect(() => {
-    if (!selectedId || !isSelectedAvanzado) { setAlarms([]); setDtc([]); setTrips([]); return; }
+    if (!selectedId) { setAlarms([]); setDtc([]); setTrips([]); return; }
     const loadExtra = () => {
       fetchAPI(`/telemetry/vehicle/${selectedId}/alarms?limit=50`).then(setAlarms).catch(console.error);
-      fetchAPI(`/telemetry/vehicle/${selectedId}/dtc?limit=20`).then(setDtc).catch(console.error);
-      fetchAPI(`/telemetry/vehicle/${selectedId}/trips-device?limit=15`).then(setTrips).catch(console.error);
+      if (isSelectedAvanzado) {
+        fetchAPI(`/telemetry/vehicle/${selectedId}/dtc?limit=20`).then(setDtc).catch(console.error);
+        fetchAPI(`/telemetry/vehicle/${selectedId}/trips-device?limit=15`).then(setTrips).catch(console.error);
+      } else {
+        setDtc([]); setTrips([]);
+      }
     };
     loadExtra();
     const interval = setInterval(loadExtra, 15000);
@@ -437,7 +481,7 @@ export default function TabTelemetria() {
         <MetricCard title="Autos Activos" value={data.length} icon={Activity} trend="Actualizado ahora" />
         <MetricCard title="Anomalías (motor)" value={activeAnomaliesAvanzado} icon={AlertTriangle} trend={activeAnomaliesAvanzado > 0 ? 'Revisar mantenimiento' : 'Todo en rango'} />
         <MetricCard title="Plan Avanzado" value={avanzadoCount} icon={Zap} trend="ECU, alarmas y DTC reales" />
-        <MetricCard title="Plan Básico" value={basicoCount} icon={ShieldCheck} trend="Solo GPS y velocidad" />
+        <MetricCard title="Plan Básico" value={basicoCount} icon={ShieldCheck} trend="GPS + eventos de manejo reales" />
       </div>
 
       {/* Plan Avanzado — lista separada */}
@@ -493,9 +537,10 @@ export default function TabTelemetria() {
                   <span className="font-mono text-[#10B981] font-bold">{t.plate}</span>
                   <PlanBadge model={t.device_model} />
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="grid grid-cols-3 gap-2 text-center">
                   <div><p className="text-white font-bold text-sm">{t.speed_kmh ?? '—'}</p><p className="text-[11px] text-slate-500">km/h</p></div>
-                  <div><p className="text-white font-bold text-sm">{t.lat != null ? 'GPS OK' : '—'}</p><p className="text-[11px] text-slate-500">Posición</p></div>
+                  <div><p className="text-white font-bold text-sm">{t.driver_score ?? '—'}</p><p className="text-[11px] text-slate-500">Score</p></div>
+                  <div><p className="text-white font-bold text-sm">{t.lat != null ? 'OK' : '—'}</p><p className="text-[11px] text-slate-500">GPS</p></div>
                 </div>
               </button>
             ))}
@@ -511,7 +556,7 @@ export default function TabTelemetria() {
       {selectedVehicle && (
         isSelectedAvanzado
           ? <PanelAvanzado vehicle={selectedVehicle} series={series} alarms={alarms} dtc={dtc} trips={trips} />
-          : <PanelBasico vehicle={selectedVehicle} series={series} />
+          : <PanelBasico vehicle={selectedVehicle} series={series} alarms={alarms} />
       )}
     </div>
   );

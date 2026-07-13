@@ -50,7 +50,7 @@ function Features() {
             </div>
             <h3 className="text-xl font-bold mb-3 text-white">Evaluación de Conductores</h3>
             <p className="text-slate-400 leading-relaxed">
-              Disponible con el <strong className="text-slate-300">Plan Avanzado</strong>: la unidad de control (ECU) reporta en vivo <strong className="text-slate-300">frenadas bruscas, aceleraciones agresivas, giros cerrados y excesos de velocidad</strong>, con hora y ubicación exacta de cada evento en el panel.
+              Eventos de manejo reales con hora y ubicación exacta — colisión, frenada y aceleración brusca ya llegan al panel <strong className="text-slate-300">desde el Plan Básico</strong>. Con el <strong className="text-slate-300">Plan Avanzado</strong> se suma la lectura directa de la ECU: giros cerrados, exceso de velocidad cruzado con datos de motor, y el score de conducción más preciso del mercado.
             </p>
           </div>
 
@@ -117,17 +117,17 @@ function Hardware() {
           
           {/* Hardware Básico */}
           <div className="mobile-carousel-item kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
-            <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
-              <div className="absolute top-4 left-4 bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-slate-600">
+            <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
               </div>
-              <img src="/Jimi_Vl04l.png" alt="Hardware Básico" className="h-48 w-auto object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-transform duration-500" />
+              <img src="/Jimi_Vl04l.png" alt="Hardware Básico" className="h-24 md:h-48 w-auto object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-transform duration-500" />
             </div>
-            <div className="p-8 pt-6 flex-1 flex flex-col">
-              <h3 className="text-2xl font-bold text-white mb-1">Rastreador Inercial 4G</h3>
-              <p className="text-sm font-semibold text-[#10B981] mb-6 uppercase tracking-widest">Kalyber Tracking Core</p>
+            <div className="p-5 md:p-8 pt-4 md:pt-6 flex-1 flex flex-col">
+              <h3 className="text-xl md:text-2xl font-bold text-white mb-1">Rastreador Inercial 4G</h3>
+              <p className="text-xs md:text-sm font-semibold text-[#10B981] mb-4 md:mb-6 uppercase tracking-widest">Kalyber Tracking Core</p>
               
-              <ul className="space-y-4 text-slate-300 text-sm flex-1">
+              <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
                   <span className="text-[#10B981] font-bold">✓</span>
                   <div><strong className="text-white">Conectividad 4G LTE:</strong> Cobertura extendida con redundancia de red 3G/2G.</div>
@@ -146,7 +146,7 @@ function Hardware() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#10B981] font-bold">✓</span>
-                  <div><strong className="text-white">Alerta Acústica en Cabina (Local):</strong> Aviso sonoro inmediato dentro del vehículo ante frenadas o excesos de velocidad. Es una advertencia <em>local</em> para el conductor — no queda registrada en el panel del administrador (para eso está el Plan Avanzado).</div>
+                  <div><strong className="text-white">Eventos de Manejo en el Panel:</strong> Colisión, corte de energía y desconexión física llegan en vivo al panel del administrador — no es solo un aviso sonoro en cabina.</div>
                 </li>
               </ul>
             </div>
@@ -154,17 +154,17 @@ function Hardware() {
 
           {/* Hardware Avanzado */}
           <div className="mobile-carousel-item bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
-            <div className="p-8 pb-0 flex justify-center items-center h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
-              <div className="absolute top-4 left-4 bg-[#6366F1] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
+            <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-[#6366F1] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
               </div>
-              <img src="/Kalyber_OBD_Pro.png" alt="Hardware Avanzado" className="h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
+              <img src="/Kalyber_OBD_Pro.png" alt="Hardware Avanzado" className="h-24 md:h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
             </div>
-            <div className="p-8 pt-6 flex-1 flex flex-col">
-              <h3 className="text-2xl font-bold text-white mb-1">Escáner Telemétrico OBD2</h3>
-              <p className="text-sm font-semibold text-[#6366F1] mb-6 uppercase tracking-widest">Kalyber OBD-Telemetry Engine</p>
+            <div className="p-5 md:p-8 pt-4 md:pt-6 flex-1 flex flex-col">
+              <h3 className="text-xl md:text-2xl font-bold text-white mb-1">Escáner Telemétrico OBD2</h3>
+              <p className="text-xs md:text-sm font-semibold text-[#6366F1] mb-4 md:mb-6 uppercase tracking-widest">Kalyber OBD-Telemetry Engine</p>
               
-              <ul className="space-y-4 text-slate-300 text-sm flex-1">
+              <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
                   <div><strong className="text-white">Lectura Directa de ECU:</strong> RPM, temperatura de motor, presión y vida útil de aceite, combustible y voltaje de batería en tiempo real.</div>
@@ -331,28 +331,28 @@ function Pricing() {
           
           <div className="mobile-carousel-item wide kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
-            <p className="text-slate-400 mb-8 h-12">Rastreo satelital y control de velocidad para flotas que necesitan saber dónde está cada unidad, sin datos de motor.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Rastreo satelital, odómetro real y eventos de manejo en vivo — colisión, corte de energía y frenada/aceleración brusca, sin datos de motor.</p>
             
-            <div className="mb-6 p-5 bg-[#050B14] rounded-2xl border border-slate-800">
-              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
+            <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-slate-800">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
               <div className="flex items-end gap-2 mb-2">
-                <p className="text-4xl font-extrabold text-white">$110</p>
+                <p className="text-3xl md:text-4xl font-extrabold text-white">$110</p>
                 <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">/ unidad</span></p>
               </div>
               <p className="text-xs text-slate-500">Incluye: Hardware Rastreador Inercial (JM-VL04), conectividad M2M y parametrización.</p>
             </div>
 
-            <div className="mb-8">
-              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
+            <div className="mb-5 md:mb-8">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
               <div className="flex items-end gap-2">
-                <p className="text-5xl font-extrabold text-white">$30</p>
+                <p className="text-4xl md:text-5xl font-extrabold text-white">$30</p>
                 <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por unidad</span></p>
               </div>
             </div>
 
-            <hr className="border-slate-800 mb-8" />
+            <hr className="border-slate-800 mb-5 md:mb-8" />
 
-            <ul className="text-slate-300 space-y-5 flex-1">
+            <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
                 <div><strong className="text-white font-semibold">Soberanía de Datos (Zero Third-Parties):</strong> Su información se procesa en infraestructura privada. Sin intermediarios ni licencias genéricas. Usted es el dueño absoluto de su información.</div>
@@ -371,11 +371,11 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Alerta Sonora Local en Cabina:</strong> Aviso inmediato al conductor por exceso de velocidad, sin costo de datos adicional. Es una advertencia dentro del vehículo, no un reporte al panel.</div>
+                <div><strong className="text-white font-semibold">Eventos de Manejo en Vivo:</strong> Colisión, corte de energía y desconexión física llegan al panel en tiempo real, con hora y ubicación — no es solo un aviso sonoro en cabina.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Upgrade sin cambiar de plataforma:</strong> Si más adelante necesita datos de motor y comportamiento del conductor, migra al Plan Avanzado sin perder su historial de recorridos.</div>
+                <div><strong className="text-white font-semibold">Upgrade sin cambiar de plataforma:</strong> Si más adelante necesita datos de motor, migra al Plan Avanzado sin perder su historial de recorridos.</div>
               </li>
             </ul>
           </div>
@@ -386,28 +386,28 @@ function Pricing() {
             </div>
             
             <h3 className="text-2xl font-bold text-white mb-2">Plan Avanzado</h3>
-            <p className="text-slate-400 mb-8 h-12">Solución integral de diagnóstico predictivo y telemetría para la gestión proactiva de flotas corporativas.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Solución integral de diagnóstico predictivo y telemetría para la gestión proactiva de flotas corporativas.</p>
             
-            <div className="mb-6 p-5 bg-[#050B14] rounded-2xl border border-[#6366F1]/30">
-              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
+            <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#6366F1]/30">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
               <div className="flex items-end gap-2 mb-2">
-                <p className="text-4xl font-extrabold text-white">$130</p>
+                <p className="text-3xl md:text-4xl font-extrabold text-white">$130</p>
                 <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">/ unidad</span></p>
               </div>
               <p className="text-xs text-slate-500">Incluye: Escáner Telemétrico OBD2 (JM-VL502), conectividad M2M y vinculación de API.</p>
             </div>
 
-            <div className="mb-8">
-              <p className="text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
+            <div className="mb-5 md:mb-8">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
               <div className="flex items-end gap-2">
-                <p className="text-5xl font-extrabold text-[#6366F1]">$60</p>
+                <p className="text-4xl md:text-5xl font-extrabold text-[#6366F1]">$60</p>
                 <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por unidad</span></p>
               </div>
             </div>
 
-            <hr className="border-slate-800 mb-8" />
+            <hr className="border-slate-800 mb-5 md:mb-8" />
 
-            <ul className="text-slate-300 space-y-5 flex-1">
+            <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
                 <div><strong className="text-white font-semibold">Mantenimiento Predictivo Integral:</strong> Heurísticas de desgaste (frenos, neumáticos) combinadas con eventos de manejo reales reportados por el propio equipo — no una estimación, el dato real de la ECU.</div>

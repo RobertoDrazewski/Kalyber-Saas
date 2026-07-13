@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Gauge, Fuel, Wrench, Hash, Clock } from 'lucide-react';
+import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
@@ -81,12 +81,34 @@ function MapResizer() {
   return null;
 }
 
+// Escucha clicks en el mapa SOLO mientras el usuario está en modo
+// "ubicar centro de geocerca" — el resto del tiempo no hace nada, no
+// interfiere con el click normal de los markers/popups.
+function FenceClickHandler({ active, onPick }) {
+  useMapEvents({
+    click(e) {
+      if (active) onPick([e.latlng.lat, e.latlng.lng]);
+    },
+  });
+  return null;
+}
+
 export default function TabPosicion() {
   const [vehicles, setVehicles] = useState([]);
   const [selected, setSelected] = useState(null);
   const [series, setSeries] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [alerts, setAlerts] = useState([]);
+
+  // Geocercas del auto seleccionado + estado del flujo de creación.
+  const [geofences, setGeofences] = useState([]);
+  const [placingFence, setPlacingFence] = useState(false); // true = "tocá el mapa para elegir el centro"
+  const [pendingCenter, setPendingCenter] = useState(null); // [lat, lng] ya elegido, esperando confirmar radio/modo
+  const [fenceRadius, setFenceRadius] = useState(150);
+  const [fenceMode, setFenceMode] = useState('OUT');
+  const [fenceName, setFenceName] = useState('');
+  const [savingFence, setSavingFence] = useState(false);
+  const [fenceError, setFenceError] = useState('');
 
   const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
@@ -97,6 +119,59 @@ export default function TabPosicion() {
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Geocercas — se cargan de nuevo cada vez que cambia el auto
+  // seleccionado. Al deseleccionar, se limpia todo el flujo de
+  // creación para no dejar un estado "a medio hacer" colgado.
+  const loadGeofences = () => {
+    if (!selected) { setGeofences([]); return; }
+    fetchAPI(`/geofences/vehicle/${selected.id}`).then(setGeofences).catch(() => setGeofences([]));
+  };
+  useEffect(() => {
+    loadGeofences();
+    setPlacingFence(false);
+    setPendingCenter(null);
+    setFenceError('');
+  }, [selected?.id]);
+
+  async function confirmFence() {
+    if (!selected || !pendingCenter) return;
+    setSavingFence(true);
+    setFenceError('');
+    try {
+      const res = await fetchAPI('/geofences', {
+        method: 'POST',
+        body: JSON.stringify({
+          vehicle_id: selected.id,
+          name: fenceName || null,
+          lat: pendingCenter[0],
+          lng: pendingCenter[1],
+          radius_m: fenceRadius,
+          mode: fenceMode,
+        }),
+      });
+      setPendingCenter(null);
+      setPlacingFence(false);
+      setFenceName('');
+      setFenceRadius(150);
+      if (!res.device_synced) setFenceError(res.message); // se guardó igual, pero avisamos que no llegó al equipo
+      loadGeofences();
+    } catch (err) {
+      setFenceError(err.message);
+    } finally {
+      setSavingFence(false);
+    }
+  }
+
+  async function removeFence(id) {
+    if (!confirm('¿Borrar esta geocerca? Esto solo la saca del panel — si el equipo la tiene configurada por SMS, hay que desactivarla aparte con FENCE,OFF#.')) return;
+    try {
+      await fetchAPI(`/geofences/${id}`, { method: 'DELETE' });
+      loadGeofences();
+    } catch (err) {
+      setFenceError(err.message);
+    }
+  }
 
   // Alertas de mantenimiento — se muestran en el popup de cada auto.
   // No hace falta refrescarlas tan seguido, cambian mucho menos que la posición.
@@ -194,7 +269,12 @@ export default function TabPosicion() {
         </div>
 
         {/* Mapa */}
-        <div className="w-full md:flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
+        <div className={`w-full md:flex-1 bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0 ${placingFence ? 'cursor-crosshair' : ''}`}>
+          {placingFence && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-[#10B981] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+              <Crosshair size={14} /> Tocá el mapa donde querés el centro de la geocerca
+            </div>
+          )}
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} maxZoom={19} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
             <TileLayer
@@ -204,6 +284,41 @@ export default function TabPosicion() {
               maxNativeZoom={19}
             />
             {selected && <FlyToVehicle vehicle={selectedVehicleCoord} />}
+            <FenceClickHandler active={placingFence} onPick={(latlng) => { setPendingCenter(latlng); setPlacingFence(false); }} />
+
+            {/* Geocercas ya guardadas del auto seleccionado */}
+            {selected && geofences.map(f => (
+              <Circle
+                key={f.id}
+                center={[Number(f.lat), Number(f.lng)]}
+                radius={f.radius_m}
+                pathOptions={{
+                  color: f.mode === 'OUT' ? '#F59E0B' : '#6366F1',
+                  fillColor: f.mode === 'OUT' ? '#F59E0B' : '#6366F1',
+                  fillOpacity: 0.12,
+                  weight: 2,
+                  dashArray: f.device_synced ? undefined : '6 6', // punteado = todavía no confirmamos que llegó al equipo
+                }}
+              >
+                <Popup>
+                  <div className="text-black text-xs space-y-1">
+                    <p className="font-bold">{f.name || `Geocerca #${f.id}`}</p>
+                    <p>Radio: {f.radius_m}m · Modo: {f.mode === 'OUT' ? 'Avisa si sale' : 'Avisa si entra'}</p>
+                    <p>{f.device_synced ? '✅ Comando enviado al equipo' : '⚠️ Sin confirmar en el equipo'}</p>
+                    <button onClick={() => removeFence(f.id)} className="text-red-600 font-semibold underline mt-1">Borrar</button>
+                  </div>
+                </Popup>
+              </Circle>
+            ))}
+
+            {/* Preview de la geocerca en construcción, antes de confirmar radio/modo */}
+            {pendingCenter && (
+              <Circle
+                center={pendingCenter}
+                radius={fenceRadius}
+                pathOptions={{ color: '#10B981', fillColor: '#10B981', fillOpacity: 0.15, weight: 2, dashArray: '4 4' }}
+              />
+            )}
 
             {/* Un Polyline por viaje detectado, cada uno con su color */}
             {selected && tripSegments.map((segment, i) => (
@@ -309,6 +424,107 @@ export default function TabPosicion() {
                 <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* Geocercas del auto */}
+          <div className="mt-6 pt-5 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-white flex items-center gap-2">
+                <MapPinned size={15} className="text-[#F59E0B]" /> Geocercas
+              </p>
+              {!placingFence && !pendingCenter && (
+                <button
+                  onClick={() => { setPlacingFence(true); setFenceError(''); }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20"
+                >
+                  <Plus size={13} /> Nueva geocerca
+                </button>
+              )}
+            </div>
+
+            <ErrorBanner message={fenceError} />
+
+            {placingFence && (
+              <p className="text-xs text-slate-500 mb-2">Hacé click en el mapa de arriba para elegir el centro. <button onClick={() => setPlacingFence(false)} className="text-slate-400 underline">Cancelar</button></p>
+            )}
+
+            {/* Form de confirmación, aparece apenas se elige un punto en el mapa */}
+            {pendingCenter && (
+              <div className="bg-[#0B1120] border border-[#10B981]/30 rounded-xl p-4 mb-3 space-y-3">
+                <p className="text-xs text-slate-400">
+                  Centro elegido: <span className="font-mono text-slate-300">{pendingCenter[0].toFixed(6)}, {pendingCenter[1].toFixed(6)}</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-slate-500 block mb-1">Nombre (opcional)</label>
+                    <input
+                      value={fenceName}
+                      onChange={e => setFenceName(e.target.value)}
+                      placeholder="Ej: Estacionamiento"
+                      className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-500 block mb-1">Radio (metros)</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={50000}
+                      value={fenceRadius}
+                      onChange={e => setFenceRadius(parseInt(e.target.value, 10) || 0)}
+                      className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-1">Avisar cuando el auto...</label>
+                  <select
+                    value={fenceMode}
+                    onChange={e => setFenceMode(e.target.value)}
+                    className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
+                  >
+                    <option value="OUT">Sale del área (ej: se movió de donde lo dejé)</option>
+                    <option value="IN">Entra al área (ej: llegó a destino)</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmFence}
+                    disabled={savingFence || !fenceRadius}
+                    className="flex-1 bg-[#10B981] hover:bg-[#0ea371] text-white text-sm font-bold py-2 rounded-lg disabled:opacity-50"
+                  >
+                    {savingFence ? 'Guardando...' : 'Guardar y enviar al equipo'}
+                  </button>
+                  <button
+                    onClick={() => { setPendingCenter(null); setFenceName(''); }}
+                    className="px-4 text-sm text-slate-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de geocercas ya guardadas */}
+            {geofences.length === 0 && !placingFence && !pendingCenter ? (
+              <p className="text-slate-600 text-sm">Sin geocercas configuradas para este auto todavía.</p>
+            ) : (
+              <div className="space-y-2">
+                {geofences.map(f => (
+                  <div key={f.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#0B1120] border border-slate-800">
+                    <div className="min-w-0">
+                      <p className="text-sm text-white font-medium truncate">{f.name || `Geocerca #${f.id}`}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {f.radius_m}m · {f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · {f.device_synced ? '✅ en el equipo' : '⚠️ sin confirmar'}
+                      </p>
+                    </div>
+                    <button onClick={() => removeFence(f.id)} className="text-slate-500 hover:text-red-400 shrink-0">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
