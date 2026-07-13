@@ -7,6 +7,7 @@ const getVehicles = async (req, res) => {
         let query = `
             SELECT v.*, d.full_name as current_driver_name, dev.imei as device_imei, dev.model as device_model,
                 (SELECT engine_rpm FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id AND tr.engine_rpm IS NOT NULL ORDER BY tr.recorded_at DESC LIMIT 1) as last_rpm,
+                (SELECT fuel_level FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id AND tr.fuel_level IS NOT NULL ORDER BY tr.recorded_at DESC LIMIT 1) as fuel_level,
                 (SELECT recorded_at FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id ORDER BY tr.recorded_at DESC LIMIT 1) as last_reading_at
             FROM Vehicles v
             LEFT JOIN Drivers d ON v.current_driver_id = d.id

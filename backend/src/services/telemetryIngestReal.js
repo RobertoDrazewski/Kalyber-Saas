@@ -80,10 +80,10 @@ async function ingestReading(imei, reading) {
     }
 
     await pool.query(
-        `INSERT INTO Telemetry_Raw (vehicle_id, lat, lng, speed_kmh, heading, engine_rpm, engine_load, coolant_temp, battery_voltage, harsh_brake, dtc_codes, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real')`,
+        `INSERT INTO Telemetry_Raw (vehicle_id, lat, lng, speed_kmh, heading, engine_rpm, engine_load, coolant_temp, battery_voltage, fuel_level, harsh_brake, dtc_codes, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real')`,
         [device.vehicle_id, reading.lat, reading.lng, reading.speed_kmh, reading.heading, reading.engine_rpm, reading.engine_load,
-         reading.coolant_temp, reading.battery_voltage, reading.harsh_brake ? 1 : 0, reading.dtc_codes || null]
+         reading.coolant_temp, reading.battery_voltage, reading.fuel_level ?? null, reading.harsh_brake ? 1 : 0, reading.dtc_codes || null]
     );
 
     // Protección crítica: Solo actualizar lat/lng en la tabla Vehicles si el paquete trae coordenadas.

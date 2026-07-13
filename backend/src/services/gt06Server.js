@@ -268,22 +268,15 @@ function startGt06Server() {
                             }
                         }
                     } else if (header.msgId === 0x0900) {
-                        // "Transmisión transparente de datos" — formato
-                        // propio del fabricante. Acá viaja el VIN del auto
-                        // (una sola vez, al conectar) y el candidato fuerte
-                        // de RPM (ver jt808Handler.js).
+                        // "Transmisión transparente de datos" — el primer
+                        // byte del cuerpo indica el SUB-TIPO de mensaje
+                        // (confirmado por el manual oficial del fabricante):
+                        //   0x03 = alarmas / comportamiento de manejo
+                        //          (frenada brusca, colisión, geocerca, etc.)
+                        //   0xf0 = reporte periódico normal (RPM, temp, etc.)
                         socket.write(jt808.buildGeneralResponse(header.terminalId, 1, header.msgId, header.serialNo));
 
-                        const parsed = jt808.parseTransparentTlv(header.body);
-
-                        // BUG REAL ENCONTRADO Y CORREGIDO: acá abajo se
-                        // usaba "currentImei", una variable que SOLO se
-                        // llena cuando entra un login de GT06 (protocolo
-                        // viejo, VL04) — en una conexión JT808 (VL502) esa
-                        // variable nunca se define, así que esta rama
-                        // nunca guardaba nada, sin ningún error visible.
-                        // Ahora buscamos el equipo igual que ya hace el
-                        // reporte de posición: por el ID de terminal.
+                        const subType = header.body[0];
                         const imeiPrefixTransparente = jt808.terminalIdToImeiPrefix(header.terminalId);
                         const [[deviceTransparente]] = await pool.query(
                             `SELECT imei, vehicle_id FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
@@ -292,22 +285,44 @@ function startGt06Server() {
 
                         if (!deviceTransparente) {
                             console.warn(`[JT808] 0x0900: no se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixTransparente}`);
+
+                        } else if (subType === 0x03) {
+                            // Alarma / comportamiento de manejo — ACÁ vive
+                            // la frenada brusca (ID 0x1B), confirmado por el
+                            // manual oficial del fabricante.
+                            const alarmData = jt808.parseAlarmData(header.body);
+                            for (const alarm of alarmData.alarms) {
+                                console.log(`[JT808] 🚨 ALARMA equipo=${deviceTransparente.imei}: ${alarm.label} (id=0x${alarm.id.toString(16)}) ${alarm.desc || ''}`);
+                                const isHarshBrake = alarm.id === 0x1B;
+                                await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
+                                    lat: alarmData.lat, lng: alarmData.lon,
+                                    speed_kmh: null, heading: null,
+                                    engine_rpm: null, engine_load: null, coolant_temp: null, battery_voltage: null,
+                                    harsh_brake: isHarshBrake,
+                                    dtc_codes: `ALARM:${alarm.label}`,
+                                });
+                            }
+
                         } else {
+                            // Reporte periódico normal (0xf0 y similares)
+                            const parsed = jt808.parseTransparentTlv(header.body);
+
                             if (parsed.vin) {
                                 await pool.query('UPDATE Vehicles SET vin = ? WHERE id = ? AND (vin IS NULL OR vin != ?)', [parsed.vin, deviceTransparente.vehicle_id, parsed.vin]);
                                 console.log(`[JT808] VIN confirmado equipo=${deviceTransparente.imei}: ${parsed.vin}`);
                             }
 
-                            if (parsed.rpm !== null) {
+                            if (parsed.rpm !== null || parsed.fuel_level !== null) {
                                 await telemetryIngestReal.ingestReading(deviceTransparente.imei, {
                                     lat: null, lng: null, speed_kmh: null, heading: null,
                                     engine_rpm: parsed.rpm,
                                     engine_load: parsed.engine_load,
                                     coolant_temp: parsed.coolant_temp,
                                     battery_voltage: parsed.battery_voltage,
+                                    fuel_level: parsed.fuel_level,
                                     harsh_brake: false,
                                 });
-                                console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} (candidatos sin confirmar: temp=${parsed.coolant_temp} bat=${parsed.battery_voltage} carga=${parsed.engine_load})`);
+                                console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} temp=${parsed.coolant_temp}°C bat=${parsed.battery_voltage}V carga=${parsed.engine_load}% combustible=${parsed.fuel_level}% freno=${parsed.brake_pedal} acelerador=${parsed.accelerator_pedal}%`);
                             }
                         }
 

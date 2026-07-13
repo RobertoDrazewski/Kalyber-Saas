@@ -221,72 +221,151 @@ function terminalIdToImeiPrefix(terminalIdBuffer) {
 
 // ============================================================
 // Parser del "0x0900 — transmisión transparente" del VL502.
-// No es parte del estándar JT808 base — es un formato propio del
-// fabricante (TLV: tag de 2 bytes + longitud 1 byte + valor).
 //
-// Confirmado contra bytes reales: extraemos dinámicamente RPM,
-// voltaje, temperatura y carga basándonos en los códigos hexadecimales 
-// identificados en la trama en vivo.
+// CONFIRMADO CONTRA EL MANUAL OFICIAL DEL FABRICANTE ("Communication
+// Protocol of VL502 V1.0.7") — ya no son candidatos, son los tags
+// reales documentados. El primer byte del cuerpo indica el TIPO de
+// sub-mensaje:
+//   0x02 = Trouble code reporting (DTC)
+//   0x03 = Alarm and driving behavior data  <- frenada/giro brusco, colisión, etc.
+//   0x04 = Travel data (inicio/fin de viaje)
+//   0xf0 = Reporte periódico normal (extensión propia de Jimi, no
+//          documentada en la tabla base — la reversamos a mano y
+//          ahora coincide con los offsets oficiales de la tabla
+//          general de parámetros del vehículo).
 // ============================================================
-function parseTransparentTlv(unescapedBody) {
-    // El body completo del 0x0900 arranca con: tipo(1) + fecha BCD(6) + algo(4)
-    if (unescapedBody.length < 11) return { tags: {}, vin: null, rpm: null, battery_voltage: null, coolant_temp: null, engine_load: null };
-    const rest = unescapedBody.slice(11);
 
+function parseTags(rest) {
     const tags = {};
     let i = 0;
     while (i < rest.length - 3) {
         const tag = rest.slice(i, i + 2).toString('hex');
         const length = rest[i + 2];
         if (i + 3 + length > rest.length) break;
-        const value = rest.slice(i + 3, i + 3 + length);
-        tags[tag] = value;
+        tags[tag] = rest.slice(i + 3, i + 3 + length);
         i += 3 + length;
     }
+    return tags;
+}
 
-    // VIN: tag 0001, 17 bytes, todos caracteres ASCII imprimibles.
+// Reporte periódico normal (type 0xf0) — datos del vehículo en vivo.
+function parseTransparentTlv(unescapedBody) {
+    if (unescapedBody.length < 11) {
+        return { tags: {}, vin: null, rpm: null, battery_voltage: null, coolant_temp: null, engine_load: null, fuel_level: null, brake_pedal: null, accelerator_pedal: null };
+    }
+    const rest = unescapedBody.slice(11);
+    const tags = parseTags(rest);
+
+    // VIN: tag 0001, 17 bytes ASCII — confirmado por formato inconfundible.
     let vin = null;
     if (tags['0001'] && tags['0001'].length === 17) {
         const text = tags['0001'].toString('ascii');
         if (/^[A-Z0-9]{17}$/.test(text)) vin = text;
     }
 
-    // RPM del motor: tag 0536, 2 bytes, valor directo.
-    // ⚠️ SIN CONFIRMAR — a diferencia de VIN (formato inconfundible) y
-    // RPM (rango de valores consistente con ralentí + manual del
-    // fabricante), estos 3 campos son candidatos que probé cruzando
-    // contra la velocidad real pero NUNCA against un valor real del
-    // tablero/tester. No los muestres en el panel como dato confirmado
-    // todavía — usalos solo para seguir investigando en los logs.
+    // RPM — tag 0536, y=x sin escala. CONFIRMADO por el manual oficial.
     let rpm = null;
     if (tags['0536'] && tags['0536'].length === 2) {
         rpm = tags['0536'].readUInt16BE(0);
     }
 
-    // Candidato a voltaje de batería: tag 0530, rondaba 14.6-14.9V en
-    // la única sesión que lo vi variar — plausible pero sin confirmar.
+    // Voltaje — tag 0530, y=x en mV. CONFIRMADO por el manual oficial.
     let battery_voltage = null;
     if (tags['0530'] && tags['0530'].length === 2) {
         battery_voltage = tags['0530'].readUInt16BE(0) / 1000;
     }
 
-    // Candidato a temperatura: tag 052e, se mantenía estable ~57-61 —
-    // sin confirmar, podría ser cualquier otra cosa estable.
+    // Temperatura de agua/refrigerante — tag 052D (NO 052E, ese es la
+    // temperatura del aire de admisión — error mío corregido con el
+    // manual oficial). y=x-40.
     let coolant_temp = null;
-    if (tags['052e'] && tags['052e'].length === 1) {
-        coolant_temp = tags['052e'].readUInt8(0);
+    if (tags['052d'] && tags['052d'].length === 1) {
+        coolant_temp = tags['052d'].readUInt8(0) - 40;
     }
 
-    // Candidato a carga de motor: tag 053c — este es el MÁS dudoso de
-    // los 4, se movía de forma errática (30, 170, 20, 130...) sin
-    // relación clara con nada. Guardarlo igual por si sirve para
-    // investigar, pero es el que menos confío de todos.
+    // Carga de motor — tag 0114 (NO 053C, ese es "Air Flow" — error
+    // mío corregido). y=x, ya viene en %.
     let engine_load = null;
-    if (tags['053c'] && tags['053c'].length === 2) {
-        engine_load = tags['053c'].readUInt16BE(0);
+    if (tags['0114'] && tags['0114'].length === 1) {
+        engine_load = tags['0114'].readUInt8(0);
     }
 
-    return { tags, vin, rpm, battery_voltage, coolant_temp, engine_load };
+    // Nivel de combustible — tag 0544, y=x, ya viene en %. NUEVO,
+    // nunca lo habíamos buscado en este tag — resuelve el misterio
+    // del combustible que nunca aparecía.
+    let fuel_level = null;
+    if (tags['0544'] && tags['0544'].length === 1) {
+        fuel_level = tags['0544'].readUInt8(0);
+    }
+
+    // Estado del pedal de freno — tag 051F, 0=liberado, 1=presionado.
+    // NUEVO — combinado con el ID de alarma 0x1B (frenada brusca) de
+    // parseAlarmData, da doble confirmación de un frenazo real.
+    let brake_pedal = null;
+    if (tags['051f'] && tags['051f'].length === 1) {
+        brake_pedal = tags['051f'].readUInt8(0);
+    }
+
+    // Posición del acelerador — tag 053F, y=x, en %. NUEVO.
+    let accelerator_pedal = null;
+    if (tags['053f'] && tags['053f'].length === 1) {
+        accelerator_pedal = tags['053f'].readUInt8(0);
+    }
+
+    return { tags, vin, rpm, battery_voltage, coolant_temp, engine_load, fuel_level, brake_pedal, accelerator_pedal };
+}
+
+// IDs de alarma/comportamiento de manejo confirmados (Tabla 28 del
+// manual oficial) — solo los que nos importan para el producto.
+const ALARM_IDS = {
+    0x0B: 'Combustible bajo',
+    0x1A: 'Aceleración brusca',
+    0x1B: 'Frenada brusca',
+    0x1C: 'Giro brusco',
+    0x1D: 'Cambio de carril rápido',
+    0x20: 'Alarma de emergencia',
+    0x21: 'Salió de la geocerca',
+    0x22: 'Entró a la geocerca',
+    0x25: 'Exceso de velocidad',
+    0x26: 'Colisión (leve)',
+    0x27: 'Colisión (severa)',
+    0x28: 'Vuelco del vehículo',
+    0x3E: 'Nivel de combustible anormal',
+};
+
+// Mensaje de alarma / comportamiento de manejo (type 0x03) — acá vive
+// la frenada brusca que veníamos buscando desde el principio.
+// Estructura (Tabla 27 del manual oficial): tipo(1) + fecha(6) + n
+// bytes de cabecera propietaria + total de alarmas(1) + [ID(1) +
+// largo descripción(1) + descripción(string)] repetido + status(4) +
+// lat(4) + lon(4).
+function parseAlarmData(unescapedBody) {
+    // El body de este sub-mensaje arranca igual que el periódico:
+    // tipo(1) + fecha BCD(6) + algo(4) = 11 bytes, después el tipo
+    // "0x03" ya lo sacamos afuera al leer unescapedBody[0].
+    if (unescapedBody.length < 12) return { alarms: [], lat: null, lon: null };
+
+    let offset = 11;
+    const totalAlarms = unescapedBody[offset];
+    offset += 1;
+
+    const alarms = [];
+    for (let i = 0; i < totalAlarms && offset < unescapedBody.length - 1; i++) {
+        const id = unescapedBody[offset];
+        const descLen = unescapedBody[offset + 1];
+        const desc = unescapedBody.slice(offset + 2, offset + 2 + descLen).toString('ascii');
+        alarms.push({ id, label: ALARM_IDS[id] || `ID desconocido 0x${id.toString(16)}`, desc });
+        offset += 2 + descLen;
+    }
+
+    let lat = null, lon = null;
+    if (offset + 12 <= unescapedBody.length) {
+        offset += 4; // status DWORD, no lo usamos por ahora
+        lat = -(unescapedBody.readUInt32BE(offset) / 1_000_000);
+        lon = -(unescapedBody.readUInt32BE(offset + 4) / 1_000_000);
+    }
+
+    return { alarms, lat, lon };
 }
 
 module.exports = {
@@ -298,4 +377,6 @@ module.exports = {
     parseLocationReport,
     terminalIdToImeiPrefix,
     parseTransparentTlv,
+    parseAlarmData,
+    ALARM_IDS,
 };
