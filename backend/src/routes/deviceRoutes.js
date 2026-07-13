@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice } = require('../controllers/devicesController');
+const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand } = require('../controllers/devicesController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 
@@ -14,5 +14,8 @@ router.delete('/:imei/pair', verifyToken, requireRole('super_admin', 'admin'), u
 router.get('/:id/raw', verifyToken, requireRole('super_admin', 'admin'), getDeviceRawData);
 router.patch('/:id', verifyToken, requireRole('super_admin', 'admin'), updateDevice);
 router.delete('/:id', verifyToken, requireRole('super_admin'), deleteDevice);
+// [NUEVO 13/07/2026] Enviar comando crudo al equipo (AT command sobre
+// TCP, protocolo 0x80) — SOLO super_admin. Ver nota en devicesController.js.
+router.post('/:imei/command', verifyToken, requireRole('super_admin'), sendDeviceCommand);
 
 module.exports = router;

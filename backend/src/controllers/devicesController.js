@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { effectiveOwnerId } = require('../middlewares/requireRole');
+const gt06Server = require('../services/gt06Server');
 
 // Código corto de activación — alternativa fácil de tipear al IMEI
 // completo. NO es secuencial/adivinable como un id de base de datos:
@@ -256,4 +257,38 @@ const deleteDevice = async (req, res) => {
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice };
+// ============================================================
+// [NUEVO 13/07/2026] Enviar un comando crudo al equipo VL04/GT06 por
+// la conexión TCP activa (protocolo 0x80, Online Command del manual
+// Concox). SOLO super_admin — esto le manda comandos de configuración
+// reales al hardware; un uso incorrecto puede, por ejemplo, cambiarle
+// el servidor de destino o desactivar el reporte. No hay UI todavía
+// (es herramienta de diagnóstico) — pensado para ir de menor a mayor
+// riesgo: primero comandos de solo lectura (PARAM#, STATUS#) para ver
+// la configuración real antes de mandar cualquier comando que cambie
+// algo, y recién ahí decidir qué activar (SPEED, HARACC, FENCE, etc.
+// con el modo de red habilitado).
+//
+// La respuesta del equipo (si contesta) NO vuelve en este request —
+// llega async por la conexión TCP y queda logueada en la consola del
+// servidor (protocolo 0x21, ver gt06Server.js).
+// ============================================================
+const sendDeviceCommand = async (req, res) => {
+    const { imei } = req.params;
+    const { command } = req.body;
+    if (!command || typeof command !== 'string' || command.length > 200) {
+        return res.status(400).json({ error: 'Falta el comando o es demasiado largo' });
+    }
+    try {
+        const result = await gt06Server.sendCommandToDevice(imei, command);
+        if (!result.sent) {
+            return res.status(409).json({ error: result.reason });
+        }
+        res.json({ message: `Comando "${command}" enviado a IMEI ${imei}. La respuesta del equipo (si contesta) queda en los logs del servidor.` });
+    } catch (error) {
+        console.error('❌ Error enviando comando al equipo:', error);
+        res.status(500).json({ error: 'Error enviando el comando' });
+    }
+};
+
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand };
