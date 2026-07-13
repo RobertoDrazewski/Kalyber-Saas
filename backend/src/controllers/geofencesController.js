@@ -61,8 +61,8 @@ const createGeofence = async (req, res) => {
         if (!device) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo GPS pareado todavía' });
         }
-        if (device.model !== 'VL04' && device.model !== 'VL502') {
-            return res.status(400).json({ error: 'Por ahora solo mandamos el comando de geocerca a equipos VL04 y VL502' });
+        if (device.model !== 'VL04') {
+            return res.status(400).json({ error: 'Por ahora solo mandamos el comando de geocerca a equipos VL04. El VL502 usa JT808, y el mensaje 0x8300 que se probó para eso es para MOSTRAR texto en el terminal, no para configurarlo — casi seguro no hace nada real. Hace falta implementar el mensaje JT808 correcto (0x8600, "Set Circular Fence") antes de habilitarlo acá.' });
         }
 
         const [result] = await pool.query(
@@ -132,8 +132,8 @@ const resyncGeofence = async (req, res) => {
         if (!fence.imei) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo pareado' });
         }
-        if (fence.model !== 'VL04' && fence.model !== 'VL502') {
-            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 y VL502 por ahora' });
+        if (fence.model !== 'VL04') {
+            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 por ahora — ver nota en createGeofence sobre por qué el VL502 no está habilitado todavía.' });
         }
 
         const command = `FENCE,ON,0,${fence.lat},${fence.lng},${fence.radius_m},${fence.mode},0#`;

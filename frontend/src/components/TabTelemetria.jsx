@@ -189,6 +189,19 @@ function parseStatusFlags(raw) {
 // ============================================================
 function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
   const last = series[series.length - 1] || {};
+  // FIX (13/07/2026): el VL502 manda posición (0x0200) mucho más
+  // seguido que datos de motor (0x0900, ~1 de cada 5 paquetes según
+  // los logs reales) — son mensajes SEPARADOS. Tomar directamente
+  // "la última fila" para RPM/temp/batería/combustible casi siempre
+  // agarraba un paquete de posición pura, con todo eso en null, y
+  // mostraba "Sin dato" aunque el motor SÍ estuviera reportando bien
+  // (se veía perfecto en los logs del TCP, pero nunca en el panel).
+  // Ahora buscamos la lectura más reciente que realmente traiga algo
+  // de motor, por separado de "last" (que se sigue usando para
+  // velocidad/ACC, eso sí viene en cada paquete).
+  const lastObd = [...series].reverse().find(r =>
+    r.engine_rpm != null || r.coolant_temp != null || r.battery_voltage != null || r.fuel_level != null
+  ) || {};
   const statusFlags = parseStatusFlags(vehicle.last_status_flags) || parseStatusFlags(last.status_flags);
   const hasRpmData = series.some(s => s.engine_rpm != null);
 
@@ -213,12 +226,12 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
         {/* Gauges — todo lo que el VL502 puede reportar */}
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           <GaugeStat icon={Gauge} label="Velocidad" value={vehicle.speed_kmh ?? last.speed_kmh} unit="km/h" color="#10B981" />
-          <GaugeStat icon={Zap} label="RPM" value={last.engine_rpm} unit="" color="#6366F1" />
-          <GaugeStat icon={Fuel} label="Combustible" value={last.fuel_level} unit="%" color="#F59E0B" />
-          <GaugeStat icon={Cpu} label="Temp. motor" value={last.coolant_temp} unit="°C" color="#EF4444" />
-          <GaugeStat icon={Zap} label="Batería" value={last.battery_voltage} unit="V" color="#818CF8" />
-          <GaugeStat icon={Wrench} label="Presión aceite" value={last.oil_pressure_kpa} unit="kPa" color="#94A3B8" />
-          <GaugeStat icon={MapPin} label="Odómetro equipo" value={last.device_odometer_km != null ? Math.round(last.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
+          <GaugeStat icon={Zap} label="RPM" value={lastObd.engine_rpm} unit="" color="#6366F1" />
+          <GaugeStat icon={Fuel} label="Combustible" value={lastObd.fuel_level} unit="%" color="#F59E0B" />
+          <GaugeStat icon={Cpu} label="Temp. motor" value={lastObd.coolant_temp} unit="°C" color="#EF4444" />
+          <GaugeStat icon={Zap} label="Batería" value={lastObd.battery_voltage} unit="V" color="#818CF8" />
+          <GaugeStat icon={Wrench} label="Presión aceite" value={lastObd.oil_pressure_kpa} unit="kPa" color="#94A3B8" />
+          <GaugeStat icon={MapPin} label="Odómetro equipo" value={(lastObd.device_odometer_km ?? vehicle.device_odometer_km) != null ? Math.round(lastObd.device_odometer_km ?? vehicle.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
         </div>
       </div>
 
