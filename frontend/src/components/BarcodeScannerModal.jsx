@@ -38,33 +38,44 @@ const HD_CONSTRAINTS = {
 
 export default function BarcodeScannerModal({ onScan, onClose }) {
   const videoRef = useRef(null);
-  const readerRef = useRef(null);
+  const controlsRef = useRef(null); // guardamos los controls del scan en curso, no el reader
   const scannedRef = useRef(false); // evita procesar/loopear después del primer resultado
   const [error, setError] = useState('');
 
   useEffect(() => {
     const reader = new BrowserMultiFormatReader(hints);
-    readerRef.current = reader;
     let cancelled = false;
 
     async function start() {
       try {
-        await reader.decodeFromConstraints(
+        const controls = await reader.decodeFromConstraints(
           { video: HD_CONSTRAINTS },
           videoRef.current,
-          (result) => {
-            // A diferencia del QR (loop manual que cortábamos solos),
-            // esta librería sigue mandando resultados en loop mientras
-            // el código siga en cuadro — sin este freno, "onScan" se
-            // llamaba decenas de veces por segundo y colgaba la página
-            // en el celular antes de que la cámara llegara a cerrarse.
+          (result, err, ctrls) => {
             if (cancelled || !result || scannedRef.current) return;
             scannedRef.current = true;
-            cancelled = true; // así el catch de abajo no muestra error si reset() dispara una excepción interna
-            reader.reset(); // cortamos la cámara ya mismo, no esperamos al unmount
+            // FIX: frenamos con la API oficial de zxing (controls.stop()),
+            // llamada desde ADENTRO del callback como corresponde.
+            //
+            // Antes acá se llamaba reader.reset() desde dentro de este
+            // mismo callback. reset() está pensado para cortar el scan
+            // desde AFUERA del ciclo de decodificación (ej. en el cleanup
+            // del useEffect al desmontar), no desde adentro de un frame
+            // que la librería todavía tiene en vuelo. Llamarlo acá cortaba
+            // el stream a mitad de un ciclo de decodificación interno, y
+            // la lógica de recuperación de zxing lo interpretaba como que
+            // la cámara se había caído sola — entonces reintentaba abrir
+            // getUserMedia de nuevo, reabriendo el permiso/la ventana de
+            // cámara en loop, aunque scannedRef ya estuviera en true.
+            (ctrls ?? controlsRef.current)?.stop();
             onScan(result.getText().trim());
           }
         );
+        controlsRef.current = controls;
+        // Por si el primer resultado llegó ANTES de que esta promesa
+        // terminara de resolver (cámara rápida / código ya en cuadro
+        // desde el primer frame) — no dejamos un stream corriendo de más.
+        if (cancelled || scannedRef.current) controls.stop();
       } catch (err) {
         if (!cancelled) {
           setError('No se pudo acceder a la cámara en alta resolución. Revisá los permisos del navegador, o escribí el ICC a mano.');
@@ -76,7 +87,10 @@ export default function BarcodeScannerModal({ onScan, onClose }) {
 
     return () => {
       cancelled = true;
-      readerRef.current?.reset();
+      // FIX: en el cleanup también usamos controls.stop(), no reader.reset().
+      // Es la forma consistente de cortar el stream sin disparar la
+      // lógica de "reintentar cámara" de la librería.
+      controlsRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
