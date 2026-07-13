@@ -4,9 +4,10 @@ const telemetryIngestReal = require('../services/telemetryIngestReal');
 const getLiveTelemetry = async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT t.*, v.plate, v.source as vehicle_source
+            SELECT t.*, v.plate, v.source as vehicle_source, dev.model as device_model
             FROM Telemetry_Heuristics t
             JOIN Vehicles v ON t.vehicle_id = v.id
+            LEFT JOIN Devices dev ON v.device_id = dev.id
             WHERE t.id IN (
                 SELECT MAX(id) FROM Telemetry_Heuristics GROUP BY vehicle_id
             )

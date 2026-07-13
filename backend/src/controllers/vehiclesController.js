@@ -10,7 +10,7 @@ const getVehicles = async (req, res) => {
                 (SELECT recorded_at FROM Telemetry_Raw tr WHERE tr.vehicle_id = v.id ORDER BY tr.recorded_at DESC LIMIT 1) as last_reading_at
             FROM Vehicles v
             LEFT JOIN Drivers d ON v.current_driver_id = d.id
-            LEFT JOIN Devices dev ON v.device_id = dev.id
+            LEFT JOIN Devices dev ON dev.vehicle_id = v.id AND dev.status = 'paired'
         `;
         const params = [];
         if (ownerId) {
