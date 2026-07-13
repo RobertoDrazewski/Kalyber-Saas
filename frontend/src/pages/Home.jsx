@@ -142,6 +142,10 @@ function Hardware() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#10B981] font-bold">✓</span>
+                  <div><strong className="text-white">Odómetro de Precisión:</strong> Kilometraje medido por el propio equipo (no una estimación por GPS), con resolución de metro.</div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-[#10B981] font-bold">✓</span>
                   <div><strong className="text-white">Alerta Acústica en Cabina (Local):</strong> Aviso sonoro inmediato dentro del vehículo ante frenadas o excesos de velocidad. Es una advertencia <em>local</em> para el conductor — no queda registrada en el panel del administrador (para eso está el Plan Avanzado).</div>
                 </li>
               </ul>
@@ -356,6 +360,10 @@ function Pricing() {
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
                 <div><strong className="text-white font-semibold">Rastreo Satelital Continuo:</strong> Posicionamiento global en tiempo real con registro histórico de recorridos.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Odómetro de Precisión del Equipo:</strong> Kilometraje real medido por el propio dispositivo, no una estimación por GPS — resolución de metro.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
