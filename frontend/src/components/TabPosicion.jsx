@@ -109,6 +109,8 @@ export default function TabPosicion() {
   const [fenceName, setFenceName] = useState('');
   const [savingFence, setSavingFence] = useState(false);
   const [fenceError, setFenceError] = useState('');
+  const [fenceNotice, setFenceNotice] = useState(''); // aviso benigno (guardado pero sin sync), no es un error real
+  const [resyncingId, setResyncingId] = useState(null);
 
   const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
@@ -132,12 +134,14 @@ export default function TabPosicion() {
     setPlacingFence(false);
     setPendingCenter(null);
     setFenceError('');
+    setFenceNotice('');
   }, [selected?.id]);
 
   async function confirmFence() {
     if (!selected || !pendingCenter) return;
     setSavingFence(true);
     setFenceError('');
+    setFenceNotice('');
     try {
       const res = await fetchAPI('/geofences', {
         method: 'POST',
@@ -154,12 +158,31 @@ export default function TabPosicion() {
       setPlacingFence(false);
       setFenceName('');
       setFenceRadius(150);
-      if (!res.device_synced) setFenceError(res.message); // se guardó igual, pero avisamos que no llegó al equipo
+      // Se guardó bien en los dos casos — esto NO es un error, es un
+      // aviso: si el equipo estaba offline, avisamos que hay que
+      // reintentar el envío (hay botón para eso en la lista de abajo),
+      // pero la geocerca ya está en la base y no hay que crearla de nuevo.
+      if (!res.device_synced) setFenceNotice(res.message);
       loadGeofences();
     } catch (err) {
       setFenceError(err.message);
     } finally {
       setSavingFence(false);
+    }
+  }
+
+  async function resyncFence(id) {
+    setResyncingId(id);
+    setFenceNotice('');
+    setFenceError('');
+    try {
+      const res = await fetchAPI(`/geofences/${id}/resync`, { method: 'POST' });
+      setFenceNotice(res.message);
+      loadGeofences();
+    } catch (err) {
+      setFenceError(err.message);
+    } finally {
+      setResyncingId(null);
     }
   }
 
@@ -443,6 +466,11 @@ export default function TabPosicion() {
             </div>
 
             <ErrorBanner message={fenceError} />
+            {fenceNotice && (
+              <div className="bg-amber-500/10 border border-amber-500/40 text-amber-400 p-3 rounded-xl mb-4 text-sm">
+                {fenceNotice}
+              </div>
+            )}
 
             {placingFence && (
               <p className="text-xs text-slate-500 mb-2">Hacé click en el mapa de arriba para elegir el centro. <button onClick={() => setPlacingFence(false)} className="text-slate-400 underline">Cancelar</button></p>
@@ -518,9 +546,20 @@ export default function TabPosicion() {
                         {f.radius_m}m · {f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · {f.device_synced ? '✅ en el equipo' : '⚠️ sin confirmar'}
                       </p>
                     </div>
-                    <button onClick={() => removeFence(f.id)} className="text-slate-500 hover:text-red-400 shrink-0">
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!f.device_synced && (
+                        <button
+                          onClick={() => resyncFence(f.id)}
+                          disabled={resyncingId === f.id}
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-[#6366F1]/10 text-[#818CF8] border border-[#6366F1]/30 hover:bg-[#6366F1]/20 disabled:opacity-50"
+                        >
+                          {resyncingId === f.id ? 'Enviando...' : 'Reintentar'}
+                        </button>
+                      )}
+                      <button onClick={() => removeFence(f.id)} className="text-slate-500 hover:text-red-400">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

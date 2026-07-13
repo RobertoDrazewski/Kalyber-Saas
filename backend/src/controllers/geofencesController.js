@@ -115,4 +115,49 @@ const deleteGeofence = async (req, res) => {
     }
 };
 
-module.exports = { getVehicleGeofences, createGeofence, deleteGeofence };
+// Reintenta mandar el comando FENCE de una geocerca que quedó
+// device_synced=0 (el equipo estaba offline cuando se creó). Útil
+// para no tener que ir a mandarlo a mano por SMS apenas el equipo
+// vuelva a conectarse — el botón "Reintentar" del panel pega acá.
+const resyncGeofence = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [[fence]] = await pool.query(
+            `SELECT g.*, d.imei, d.model
+             FROM Geofences g
+             JOIN Vehicles v ON v.id = g.vehicle_id
+             LEFT JOIN Devices d ON d.vehicle_id = v.id AND d.status = 'paired'
+             WHERE g.id = ?`,
+            [id]
+        );
+        if (!fence) return res.status(404).json({ error: 'Geocerca no encontrada' });
+        if (!(await assertVehicleAccess(req, fence.vehicle_id))) {
+            return res.status(403).json({ error: 'Esa geocerca no pertenece a tu flota' });
+        }
+        if (!fence.imei) {
+            return res.status(400).json({ error: 'Ese vehículo no tiene un equipo pareado' });
+        }
+        if (fence.model !== 'VL04') {
+            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 por ahora' });
+        }
+
+        const command = `FENCE,ON,0,${fence.lat},${fence.lng},${fence.radius_m},${fence.mode},0#`;
+        const sendResult = await gt06Server.sendCommandToDevice(fence.imei, command);
+
+        if (sendResult.sent) {
+            await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [id]);
+        }
+
+        res.json({
+            device_synced: sendResult.sent,
+            message: sendResult.sent
+                ? 'Comando reenviado al equipo. Confirmá con FENCE# que lo aplicó.'
+                : `Todavía no se pudo enviar: ${sendResult.reason}`,
+        });
+    } catch (error) {
+        console.error('❌ Error reintentando geocerca:', error);
+        res.status(500).json({ error: 'Error reintentando el envío' });
+    }
+};
+
+module.exports = { getVehicleGeofences, createGeofence, deleteGeofence, resyncGeofence };
