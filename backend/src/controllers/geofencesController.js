@@ -36,11 +36,6 @@ const getVehicleGeofences = async (req, res) => {
 // — ver gt06Server.js). Si el equipo está apagado/sin señal, la
 // geocerca queda guardada igual (device_synced=0) para no bloquear
 // al usuario, pero avisamos en la respuesta que no se sincronizó.
-//
-// OJO — esto es SOLO para equipos VL04/GT06 por ahora. El VL502 usa
-// otro protocolo (JT808) para geocercas; si el vehículo tiene VL502,
-// devolvemos error explicando que hay que agregar el comando
-// equivalente en jt808Handler antes de habilitarlo para ese modelo.
 // ============================================================
 const createGeofence = async (req, res) => {
     const { vehicle_id, name, lat, lng, radius_m, mode } = req.body;
@@ -66,8 +61,8 @@ const createGeofence = async (req, res) => {
         if (!device) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo GPS pareado todavía' });
         }
-        if (device.model !== 'VL04') {
-            return res.status(400).json({ error: 'Por ahora solo mandamos el comando de geocerca a equipos VL04 — para VL502 hay que agregar el comando equivalente en JT808 antes de habilitarlo' });
+        if (device.model !== 'VL04' && device.model !== 'VL502') {
+            return res.status(400).json({ error: 'Por ahora solo mandamos el comando de geocerca a equipos VL04 y VL502' });
         }
 
         const [result] = await pool.query(
@@ -137,8 +132,8 @@ const resyncGeofence = async (req, res) => {
         if (!fence.imei) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo pareado' });
         }
-        if (fence.model !== 'VL04') {
-            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 por ahora' });
+        if (fence.model !== 'VL04' && fence.model !== 'VL502') {
+            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 y VL502 por ahora' });
         }
 
         const command = `FENCE,ON,0,${fence.lat},${fence.lng},${fence.radius_m},${fence.mode},0#`;

@@ -565,6 +565,30 @@ function bcdToDateString(bcdBuffer) {
     return `20${yy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
+// ============================================================
+// [NUEVO] Comandos servidor→equipo (Mensaje 0x8300 - Text Info)
+// Envuelve comandos AT estándar de Jimi (como FENCE,ON...) dentro
+// del protocolo JT808 para mandarlos al equipo VL502.
+// ============================================================
+function buildTextCommandPacket(imei, commandText) {
+    // Reconstruir el ID de terminal (los primeros 14 dígitos del IMEI en 6 bytes BE)
+    const prefixStr = imei.slice(0, 14);
+    const prefixInt = parseInt(prefixStr, 10);
+    const terminalId = Buffer.alloc(6);
+    terminalId.writeUIntBE(prefixInt, 0, 6);
+
+    // Body: flag (1 byte) + texto. Flag 0x00 indica mensaje de texto normal.
+    const flag = Buffer.from([0x00]);
+    const textBuf = Buffer.from(commandText, 'ascii');
+    const body = Buffer.concat([flag, textBuf]);
+
+    // Generamos un serial number aleatorio para usar como ID de correlación
+    const serialNo = Math.floor(Math.random() * 0xFFFF);
+    const packet = buildFrame(0x8300, terminalId, serialNo, body);
+
+    return { packet, correlationId: serialNo.toString(16).padStart(4, '0') };
+}
+
 module.exports = {
     MSG_ID,
     extractJT808Frame,
@@ -579,4 +603,5 @@ module.exports = {
     parseTravelData,
     ALARM_IDS,
     STATUS_FLAG_TAGS,
+    buildTextCommandPacket,
 };

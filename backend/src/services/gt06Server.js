@@ -332,6 +332,19 @@ async function sendCommandToDevice(imei, commandText) {
             reason: `IMEI ${imei} no tiene una conexión TCP activa en este momento (equipo apagado o sin señal)`,
         };
     }
+    
+    // [NUEVO] Determinamos el modelo del equipo para saber qué protocolo de empaquetado usar
+    const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
+    
+    if (device && device.model === 'VL502') {
+        // Empaquetado JT808 (0x8300)
+        const { packet, correlationId } = jt808.buildTextCommandPacket(imei, commandText);
+        socket.write(packet);
+        console.log(`[JT808] ➡️  Comando enviado a IMEI=${imei} (correlationId=${correlationId}): "${commandText}"`);
+        return { sent: true, correlationId };
+    }
+
+    // Empaquetado original GT06 (0x80)
     const { packet, correlationId } = buildCommandPacket(commandText);
     socket.write(packet);
     console.log(`[GT06] ➡️  Comando enviado a IMEI=${imei} (correlationId=${correlationId}): "${commandText}" (hex: ${packet.toString('hex')})`);
@@ -447,6 +460,21 @@ function startGt06Server() {
                 try {
                     const header = jt808.parseHeader(jt808Result.unescaped);
                     const terminalIdHex = header.terminalId.toString('hex');
+                    const imeiPrefix = jt808.terminalIdToImeiPrefix(header.terminalId);
+
+                    // [NUEVO] Registrar el socket activo para poder mandarle comandos al VL502
+                    if (!currentImei) {
+                        const [[dbDevice]] = await pool.query(
+                            `SELECT imei FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
+                            [`${imeiPrefix}%`]
+                        );
+                        if (dbDevice) {
+                            currentImei = dbDevice.imei;
+                            activeSockets.set(currentImei, socket);
+                        }
+                    } else if (currentImei && !activeSockets.has(currentImei)) {
+                        activeSockets.set(currentImei, socket);
+                    }
 
                     if (header.msgId === jt808.MSG_ID.TERMINAL_REGISTER) {
                         const imeiPrefixLog = jt808.terminalIdToImeiPrefix(header.terminalId);
@@ -474,13 +502,13 @@ function startGt06Server() {
                             // le pasamos a ingestReading el IMEI REAL completo
                             // que encontramos en la base (no el prefijo), para
                             // no tocar la firma de esa función.
-                            const imeiPrefix = jt808.terminalIdToImeiPrefix(header.terminalId);
+                            const imeiPrefixLookup = jt808.terminalIdToImeiPrefix(header.terminalId);
                             const [[device]] = await pool.query(
                                 `SELECT imei, vehicle_id FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
-                                [`${imeiPrefix}%`]
+                                [`${imeiPrefixLookup}%`]
                             );
                             if (!device) {
-                                console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefix}`);
+                                console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixLookup}`);
                             } else {
                                 await telemetryIngestReal.ingestReading(device.imei, {
                                     lat: loc.lat,
