@@ -48,6 +48,7 @@
 // ============================================================
 
 const net = require('net');
+const crypto = require('crypto');
 const pool = require('../config/database');
 const telemetryIngestReal = require('./telemetryIngestReal');
 const jt808 = require('./jt808Handler');
@@ -272,10 +273,17 @@ const activeSockets = new Map();
 // En vez de replicarlo literal, seguimos el mismo esquema general
 // length=protocolo+contenido+SN+CRC que ya usamos en buildAck() y que
 // está confirmado contra tráfico real en el resto de este archivo.
+//
+// [NUEVO] El "Server Flag Bit" (4 bytes) ya NO va en cero — ahora es
+// un ID aleatorio que usamos para CORRELACIONAR la respuesta 0x21 del
+// equipo contra el comando exacto que la generó (ver CommandLog y el
+// handler de COMMAND_REPLY más abajo). El equipo está OBLIGADO por
+// protocolo a devolver este mismo valor tal cual en su respuesta, así
+// que es un ID de correlación gratis, sin inventar nada nuevo.
 let commandSerialCounter = 1;
-function buildCommandPacket(commandText) {
+function buildCommandPacket(commandText, correlationBuf) {
     const cmdBuf = Buffer.from(commandText, 'ascii');
-    const serverFlag = Buffer.alloc(4); // reservado — no lo usamos para correlacionar respuestas todavía
+    const serverFlag = correlationBuf || crypto.randomBytes(4);
     const language = Buffer.from([0x00, 0x02]); // inglés
     const innerLength = 4 + cmdBuf.length; // "Server flag bit + command content length", según el manual
     const content = Buffer.concat([Buffer.from([innerLength]), serverFlag, cmdBuf, language]);
@@ -289,7 +297,7 @@ function buildCommandPacket(commandText) {
     const crc = crcX25(beforeCrc);
     const crcBuf = Buffer.alloc(2);
     crcBuf.writeUInt16BE(crc, 0);
-    return Buffer.concat([START, beforeCrc, crcBuf, STOP]);
+    return { packet: Buffer.concat([START, beforeCrc, crcBuf, STOP]), correlationId: serverFlag.toString('hex') };
 }
 
 // Decodifica UTF-16BE (el "código 0x02" que usa el equipo para sus
@@ -309,9 +317,13 @@ function utf16beToString(buf) {
 // conectado. Devuelve {sent:false, reason} si el equipo no tiene una
 // conexión TCP abierta en este momento (no se puede encolar para
 // después — si no está conectado, no hay a quién mandárselo).
-// La RESPUESTA del equipo llega async por el protocolo 0x21 y se
-// loguea en el handler correspondiente más abajo, no la devuelve esta
-// función directamente.
+//
+// Devuelve también correlationId — quien llama esta función es
+// responsable de guardarlo en CommandLog si quiere trackear la
+// respuesta real del equipo (ver deviceCommandsController.js). La
+// respuesta en sí llega async por el protocolo 0x21 y se procesa en
+// el handler de COMMAND_REPLY más abajo, que actualiza CommandLog
+// directamente por su cuenta — sendCommandToDevice no la espera.
 async function sendCommandToDevice(imei, commandText) {
     const socket = activeSockets.get(imei);
     if (!socket || socket.destroyed) {
@@ -320,10 +332,10 @@ async function sendCommandToDevice(imei, commandText) {
             reason: `IMEI ${imei} no tiene una conexión TCP activa en este momento (equipo apagado o sin señal)`,
         };
     }
-    const packet = buildCommandPacket(commandText);
+    const { packet, correlationId } = buildCommandPacket(commandText);
     socket.write(packet);
-    console.log(`[GT06] ➡️  Comando enviado a IMEI=${imei}: "${commandText}" (hex: ${packet.toString('hex')})`);
-    return { sent: true };
+    console.log(`[GT06] ➡️  Comando enviado a IMEI=${imei} (correlationId=${correlationId}): "${commandText}" (hex: ${packet.toString('hex')})`);
+    return { sent: true, correlationId };
 }
 
 // Extrae el primer frame completo del buffer acumulado, si ya llegó
@@ -815,13 +827,31 @@ function startGt06Server() {
                         // --- [NUEVO 13/07/2026] Respuesta del equipo a un comando
                         // que le mandamos por sendCommandToDevice() (protocolo 0x80).
                         // Estructura según el manual: ServerFlagBit(4) + Código(1:
-                        // 0x01=ASCII, 0x02=UTF-16BE) + Contenido de la respuesta. ---
+                        // 0x01=ASCII, 0x02=UTF-16BE) + Contenido de la respuesta.
+                        //
+                        // El ServerFlagBit es el correlationId que generamos al
+                        // mandar el comando (ver buildCommandPacket) — el equipo lo
+                        // devuelve tal cual, así que lo usamos para marcar en
+                        // CommandLog CUÁL comando exacto es el que se confirmó. ---
                         socket.write(buildAck(protocolNumber, serial));
                         if (content.length >= 5) {
+                            const correlationId = content.slice(0, 4).toString('hex');
                             const code = content[4];
                             const replyBytes = content.slice(5);
                             const replyText = code === 0x02 ? utf16beToString(replyBytes) : replyBytes.toString('ascii');
-                            console.log(`[GT06] ⬅️  Respuesta a comando IMEI=${currentImei}: "${replyText}"`);
+                            console.log(`[GT06] ⬅️  Respuesta a comando IMEI=${currentImei} (correlationId=${correlationId}): "${replyText}"`);
+                            try {
+                                await pool.query(
+                                    `UPDATE CommandLog SET status = 'acked', response_text = ?, responded_at = NOW()
+                                     WHERE correlation_id = ? AND status = 'sent'`,
+                                    [replyText, correlationId]
+                                );
+                            } catch (err) {
+                                // Si la migración de CommandLog todavía no corrió, no
+                                // rompemos el flujo del socket por esto — solo se
+                                // pierde el tildecito de confirmación, no la telemetría.
+                                if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[GT06] Error actualizando CommandLog:', err.message);
+                            }
                         } else {
                             console.log(`[GT06] Respuesta a comando IMEI=${currentImei} (paquete corto, sin parsear): ${content.toString('hex')}`);
                         }

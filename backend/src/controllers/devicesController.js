@@ -258,20 +258,19 @@ const deleteDevice = async (req, res) => {
 };
 
 // ============================================================
-// [NUEVO 13/07/2026] Enviar un comando crudo al equipo VL04/GT06 por
-// la conexión TCP activa (protocolo 0x80, Online Command del manual
-// Concox). SOLO super_admin — esto le manda comandos de configuración
-// reales al hardware; un uso incorrecto puede, por ejemplo, cambiarle
-// el servidor de destino o desactivar el reporte. No hay UI todavía
-// (es herramienta de diagnóstico) — pensado para ir de menor a mayor
-// riesgo: primero comandos de solo lectura (PARAM#, STATUS#) para ver
-// la configuración real antes de mandar cualquier comando que cambie
-// algo, y recién ahí decidir qué activar (SPEED, HARACC, FENCE, etc.
-// con el modo de red habilitado).
+// Enviar un comando crudo al equipo VL04/GT06 por la conexión TCP
+// activa (protocolo 0x80, Online Command del manual Concox). SOLO
+// super_admin — esto le manda comandos de configuración reales al
+// hardware; un uso incorrecto puede, por ejemplo, cambiarle el
+// servidor de destino o desactivar el reporte.
 //
-// La respuesta del equipo (si contesta) NO vuelve en este request —
-// llega async por la conexión TCP y queda logueada en la consola del
-// servidor (protocolo 0x21, ver gt06Server.js).
+// [ACTUALIZADO] Ahora cada comando se guarda en CommandLog con su
+// correlationId — cuando el equipo conteste (protocolo 0x21),
+// gt06Server.js actualiza esa misma fila con la respuesta real, así
+// el panel puede mostrar un ✅ de verdad en vez de asumir que se
+// aplicó. Solo funciona para equipos VL04 (el VL502 usa JT808, otro
+// protocolo — no tenemos comandos de texto confirmados para ese lado
+// todavía).
 // ============================================================
 const sendDeviceCommand = async (req, res) => {
     const { imei } = req.params;
@@ -280,15 +279,61 @@ const sendDeviceCommand = async (req, res) => {
         return res.status(400).json({ error: 'Falta el comando o es demasiado largo' });
     }
     try {
+        const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.model !== 'VL04') {
+            return res.status(400).json({ error: 'El envío de comandos por TCP solo está soportado para VL04 por ahora — el VL502 usa JT808, un protocolo distinto que todavía no tiene comandos de texto confirmados.' });
+        }
+
         const result = await gt06Server.sendCommandToDevice(imei, command);
         if (!result.sent) {
+            // Lo dejamos registrado igual, como 'failed', para que el
+            // historial muestre el intento aunque no haya llegado.
+            await pool.query(
+                `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+                 VALUES (?, ?, ?, ?, 'failed', ?)`,
+                [device.id, imei, command, `failed-${Date.now()}`, req.user.id]
+            ).catch(() => {}); // si la tabla no existe todavía, no rompemos la respuesta al usuario
             return res.status(409).json({ error: result.reason });
         }
-        res.json({ message: `Comando "${command}" enviado a IMEI ${imei}. La respuesta del equipo (si contesta) queda en los logs del servidor.` });
+
+        await pool.query(
+            `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+             VALUES (?, ?, ?, ?, 'sent', ?)`,
+            [device.id, imei, command, result.correlationId, req.user.id]
+        ).catch(err => {
+            if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+            console.warn('[devicesController] CommandLog no existe todavía — corré migration_command_log.sql');
+        });
+
+        res.json({
+            message: `Comando "${command}" enviado a IMEI ${imei}.`,
+            correlation_id: result.correlationId,
+        });
     } catch (error) {
         console.error('❌ Error enviando comando al equipo:', error);
         res.status(500).json({ error: 'Error enviando el comando' });
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand };
+// [NUEVO] Historial de comandos mandados a un equipo puntual, con su
+// estado real (sent = esperando respuesta, acked = el equipo
+// confirmó, failed = no se pudo mandar). El panel hace polling de
+// esto para mostrar el tildecito apenas cambia de sent a acked.
+const getDeviceCommandLog = async (req, res) => {
+    const { imei } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, command_text, status, response_text, created_at, responded_at
+             FROM CommandLog WHERE imei = ? ORDER BY created_at DESC LIMIT ?`,
+            [imei, limit]
+        );
+        res.json(rows);
+    } catch (error) {
+        if (error.code === 'ER_NO_SUCH_TABLE') return res.json([]);
+        res.status(500).json({ error: 'Error obteniendo historial de comandos' });
+    }
+};
+
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, getDeviceCommandLog };

@@ -15,7 +15,7 @@ const ROLE_COLOR = {
 export default function DashboardLayout({ children, activeTab, setActiveTab }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const user = JSON.parse(localStorage.getItem('kalyber_user') || '{}');
+  const user = JSON.parse(localStorage.getItem('kyber_user') || '{}');
   const roleLabel = ROLE_LABEL[user.role] || user.role || '—';
   const roleColor = ROLE_COLOR[user.role] || 'text-slate-400 bg-slate-700/30 border-slate-600';
 

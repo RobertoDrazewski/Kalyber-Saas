@@ -12,6 +12,7 @@ import TabEquipos from '../components/TabEquipos';
 import TabUsuarios from '../components/TabUsuarios';
 import TabFacturador from '../components/TabFacturador';
 import TabDiagnostico from '../components/TabDiagnostico';
+import TabComandos from '../components/TabComandos';
 import TabMantenimientoRealizado from '../components/TabMantenimientoRealizado';
 import TabApiKeys from '../components/TabApiKeys';
 
@@ -33,6 +34,7 @@ export default function Dashboard() {
       case 'usuarios': return <TabUsuarios />;
       case 'facturador': return <TabFacturador />;
       case 'diagnostico': return <TabDiagnostico />;
+      case 'comandos': return <TabComandos />;
       case 'apikeys': return <TabApiKeys />;
       default: return <TabTelemetria />;
     }
