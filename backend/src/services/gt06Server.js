@@ -1194,11 +1194,41 @@ function startGt06Server() {
                                 // asustar al cliente con una "colisión" que nunca
                                 // pasó. Ver registerPowerEvent()/isLikelyTamperShock()
                                 // más abajo.
+                                //
+                                // [NUEVO 14/07/2026] Segunda causa de falso
+                                // positivo, distinta de la anterior: este equipo
+                                // puntual quedó instalado con un cable extensor
+                                // suelto atrás del tablero, así que se puede mover
+                                // solo con el auto estacionado. Un golpe/vibración
+                                // brusca con velocidad 0 casi seguro es el equipo
+                                // bailando en su soporte, no un choque real —
+                                // aceleración/giro brusco a 0km/h directamente no
+                                // tiene sentido físico (no se puede "acelerar
+                                // fuerte" ni "girar brusco" estando parado).
+                                //
+                                // OJO — esto es un trade-off a propósito: un choque
+                                // real contra el auto ESTACIONADO (alguien lo choca
+                                // de atrás en el semáforo, por ejemplo) también
+                                // quedaría marcado como manipulación con esta
+                                // regla, no como colisión. Se prioriza no asustar
+                                // en falso por sobre no perderse ese caso puntual,
+                                // porque con el cable suelto los falsos positivos
+                                // eran muchísimo más frecuentes. Si se arregla el
+                                // montaje del equipo (cable fijo) y/o se ajusta la
+                                // sensibilidad con el comando LEVEL, conviene
+                                // sacar esta condición o hacerla más estricta
+                                // (por ejemplo, exigir también ACC apagado).
                                 const shockCodes = new Set([0x2C, 0x29, 0x2A, 0x2B, 0x03]); // colisión, aceleración/giro/vibración bruscos
-                                const isTamperShock = shockCodes.has(parsed.alarmCode) && isLikelyTamperShock(currentImei);
+                                const isShockCode = shockCodes.has(parsed.alarmCode);
+                                const isStoppedShock = isShockCode && (parsed.speed_kmh ?? 0) === 0;
+                                const isPowerEventShock = isShockCode && isLikelyTamperShock(currentImei);
+                                const isTamperShock = isStoppedShock || isPowerEventShock;
                                 const effectiveLabel = isTamperShock ? 'tamper_suspected_shock' : known.label;
+                                const tamperReason = isStoppedShock
+                                    ? 'golpe con el vehículo detenido (velocidad 0) — el equipo está con un cable suelto y se mueve en su soporte, no es un choque real'
+                                    : 'golpe/vibración justo después de un corte de energía — no se cuenta como choque real';
                                 const effectiveDesc = isTamperShock
-                                    ? `Posible manipulación del equipo (golpe/vibración justo después de un corte de energía — no se cuenta como choque real)`
+                                    ? `Posible manipulación del equipo (${tamperReason})`
                                     : known.desc + fenceSuffix;
 
                                 if (parsed.alarmCode === 0x02 || parsed.alarmCode === 0x32 || parsed.alarmCode === 0x72) {
