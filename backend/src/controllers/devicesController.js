@@ -258,19 +258,21 @@ const deleteDevice = async (req, res) => {
 };
 
 // ============================================================
-// Enviar un comando crudo al equipo VL04/GT06 por la conexión TCP
-// activa (protocolo 0x80, Online Command del manual Concox). SOLO
-// super_admin — esto le manda comandos de configuración reales al
-// hardware; un uso incorrecto puede, por ejemplo, cambiarle el
-// servidor de destino o desactivar el reporte.
+// Enviar un comando de TEXTO crudo al equipo por la conexión TCP
+// activa. SOLO super_admin.
 //
-// [ACTUALIZADO] Ahora cada comando se guarda en CommandLog con su
-// correlationId — cuando el equipo conteste (protocolo 0x21),
-// gt06Server.js actualiza esa misma fila con la respuesta real, así
-// el panel puede mostrar un ✅ de verdad en vez de asumir que se
-// aplicó. Solo funciona para equipos VL04 (el VL502 usa JT808, otro
-// protocolo — no tenemos comandos de texto confirmados para ese lado
-// todavía).
+// VL04 (protocolo 0x80, Online Command del manual Concox) — comandos
+// de texto tipo AT, confirmado funcionando (SPEED, HORCOL, FENCE,
+// etc). VL502 (protocolo 0x8300, JT808 "Text Info") — [ACTUALIZADO
+// 14/07/2026] ahora se permite mandarlo, PERO el mensaje sigue
+// devolviendo la advertencia de que 0x8300 es para MOSTRAR texto en
+// el terminal, no para configurar nada — sirve como canal de
+// diagnóstico/prueba, no para parámetros reales. Para configurar el
+// VL502 de verdad usar sendDeviceParams (0x8103) más abajo.
+//
+// Cada comando se guarda en CommandLog con su correlationId — cuando
+// el equipo conteste (0x21 en GT06, 0x0001 en JT808), gt06Server.js
+// actualiza esa misma fila con la respuesta real.
 // ============================================================
 const sendDeviceCommand = async (req, res) => {
     const { imei } = req.params;
@@ -281,19 +283,14 @@ const sendDeviceCommand = async (req, res) => {
     try {
         const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
         if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
-        if (device.model !== 'VL04') {
-            return res.status(400).json({ error: 'El envío de comandos por TCP solo está soportado para VL04 por ahora — el VL502 usa JT808, un protocolo distinto que todavía no tiene comandos de texto confirmados.' });
-        }
 
         const result = await gt06Internal.sendCommandToDevice(imei, command);
         if (!result.sent) {
-            // Lo dejamos registrado igual, como 'failed', para que el
-            // historial muestre el intento aunque no haya llegado.
             await pool.query(
                 `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
                  VALUES (?, ?, ?, ?, 'failed', ?)`,
                 [device.id, imei, command, `failed-${Date.now()}`, req.user.id]
-            ).catch(() => {}); // si la tabla no existe todavía, no rompemos la respuesta al usuario
+            ).catch(() => {});
             return res.status(409).json({ error: result.reason });
         }
 
@@ -306,13 +303,73 @@ const sendDeviceCommand = async (req, res) => {
             console.warn('[devicesController] CommandLog no existe todavía — corré migration_command_log.sql');
         });
 
+        const vl502Warning = device.model === 'VL502'
+            ? ' ATENCIÓN: en VL502 esto va por el mensaje 0x8300 (texto), que probablemente no configura nada real — es un canal de diagnóstico, no de configuración.'
+            : '';
+
         res.json({
-            message: `Comando "${command}" enviado a IMEI ${imei}.`,
+            message: `Comando "${command}" enviado a IMEI ${imei}.${vl502Warning}`,
             correlation_id: result.correlationId,
         });
     } catch (error) {
         console.error('❌ Error enviando comando al equipo:', error);
         res.status(500).json({ error: 'Error enviando el comando' });
+    }
+};
+
+// ============================================================
+// [NUEVO 14/07/2026] Configuración estructurada para VL502 — mensaje
+// JT808 0x8103 real (Set Terminal Parameters), NO texto libre. Acepta
+// cualquier combinación de: heartbeatIntervalSec, reportIntervalSec
+// (reporte por TIEMPO), reportDistanceM (reporte por DISTANCIA —
+// esto el VL04 no lo tiene), sleepIntervalSec, alarmIntervalSec.
+// SOLO super_admin, SOLO VL502.
+// ============================================================
+const sendDeviceParams = async (req, res) => {
+    const { imei } = req.params;
+    const params = req.body || {};
+    const allowedKeys = ['heartbeatIntervalSec', 'reportIntervalSec', 'sleepIntervalSec', 'alarmIntervalSec', 'reportDistanceM'];
+    const filtered = Object.fromEntries(
+        Object.entries(params).filter(([k, v]) => allowedKeys.includes(k) && v !== '' && v != null)
+    );
+    if (Object.keys(filtered).length === 0) {
+        return res.status(400).json({ error: `Mandá al menos uno de: ${allowedKeys.join(', ')}` });
+    }
+
+    try {
+        const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.model !== 'VL502') {
+            return res.status(400).json({ error: 'Este endpoint es solo para VL502 (JT808 0x8103). Para VL04 usá /command con TIMER,...#' });
+        }
+
+        const result = await gt06Internal.sendParamsCommand(imei, filtered);
+        const commandLabel = `SET_PARAMS(0x8103): ${Object.entries(filtered).map(([k, v]) => `${k}=${v}`).join(', ')}`;
+
+        if (!result.sent) {
+            await pool.query(
+                `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+                 VALUES (?, ?, ?, ?, 'failed', ?)`,
+                [device.id, imei, commandLabel, `failed-${Date.now()}`, req.user.id]
+            ).catch(() => {});
+            return res.status(409).json({ error: result.reason });
+        }
+
+        await pool.query(
+            `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+             VALUES (?, ?, ?, ?, 'sent', ?)`,
+            [device.id, imei, commandLabel, result.correlationId, req.user.id]
+        ).catch(err => {
+            if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+        });
+
+        res.json({
+            message: `Parámetros enviados a IMEI ${imei}: ${Object.keys(filtered).join(', ')}. SIN CONFIRMAR contra prueba real todavía — verificá que el equipo conteste "éxito" y que el intervalo de reporte cambie de verdad.`,
+            correlation_id: result.correlationId,
+        });
+    } catch (error) {
+        console.error('❌ Error enviando parámetros al equipo:', error);
+        res.status(500).json({ error: 'Error enviando los parámetros' });
     }
 };
 
@@ -331,9 +388,11 @@ const getDeviceCommandLog = async (req, res) => {
         );
         res.json(rows);
     } catch (error) {
-        if (error.code === 'ER_NO_SUCH_TABLE') return res.json([]);
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(500).json({ error: 'La tabla CommandLog no existe todavía — falta correr migration_command_log.sql' });
+        }
         res.status(500).json({ error: 'Error obteniendo historial de comandos' });
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, getDeviceCommandLog };
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, getDeviceCommandLog };

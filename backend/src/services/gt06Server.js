@@ -437,6 +437,34 @@ async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
     return { sent: true, correlationId };
 }
 
+// [NUEVO 14/07/2026] Configuración de parámetros — SOLO VL502 (JT808
+// 0x8103, "Set Terminal Parameters"). El VL04 no tiene un equivalente
+// de "reporte por distancia" en el catálogo que armamos — solo por
+// tiempo, vía el comando de texto TIMER (ver sendCommandToDevice).
+async function sendParamsCommand(imei, params) {
+    const socket = activeSockets.get(imei);
+    if (!socket || socket.destroyed) {
+        return {
+            sent: false,
+            reason: `IMEI ${imei} no tiene una conexión TCP activa en este momento (equipo apagado o sin señal)`,
+        };
+    }
+
+    const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
+    if (!device || device.model !== 'VL502') {
+        return { sent: false, reason: 'Configuración por 0x8103 solo aplica a equipos VL502 (JT808). Para VL04 usá el comando de texto TIMER,tiempo_on,tiempo_off#.' };
+    }
+
+    try {
+        const { packet, correlationId, paramsSet } = jt808.buildSetTerminalParams(imei, params);
+        socket.write(packet);
+        console.log(`[JT808] ➡️  Parámetros (0x8103) enviados a IMEI=${imei} (correlationId=${correlationId}): ${paramsSet.join(', ')}`);
+        return { sent: true, correlationId, paramsSet, protocol: '0x8103 (JT808 Set Terminal Parameters) — SIN CONFIRMAR contra prueba real todavía' };
+    } catch (err) {
+        return { sent: false, reason: err.message };
+    }
+}
+
 // Extrae el primer frame completo del buffer acumulado, si ya llegó
 // entero. Devuelve null si hay que esperar más datos.
 function extractFrame(buf) {
@@ -1050,6 +1078,34 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     const secret = process.env.GT06_INTERNAL_SECRET || '';
 
     const server = http.createServer((req, res) => {
+        if (req.method === 'POST' && req.url === '/internal/send-params') {
+            if (secret && req.headers['x-internal-secret'] !== secret) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No autorizado' }));
+                return;
+            }
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const { imei, params } = JSON.parse(body || '{}');
+                    if (!imei || !params) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Faltan imei o params en el body' }));
+                        return;
+                    }
+                    const result = await sendParamsCommand(imei, params);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (err) {
+                    console.error('[GT06 internal API] Error en send-params:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
+            return;
+        }
+
         if (req.method === 'POST' && req.url === '/internal/send-fence') {
             if (secret && req.headers['x-internal-secret'] !== secret) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1117,4 +1173,4 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     return server;
 }
 
-module.exports = { startGt06Server, sendCommandToDevice, sendFenceCommand, startInternalCommandApi };
+module.exports = { startGt06Server, sendCommandToDevice, sendFenceCommand, sendParamsCommand, startInternalCommandApi };

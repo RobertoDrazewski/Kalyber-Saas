@@ -656,6 +656,61 @@ function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
     return { packet, correlationId: `jt808-${serialNo}` };
 }
 
+// ============================================================
+// [NUEVO 14/07/2026] Mensaje 0x8103 ("Set Terminal Parameters") del
+// estándar JT/T808 — Tabla 15 del estándar. A diferencia del 0x8300
+// (texto, no configura nada) o el intento anterior de mandarle
+// comandos GT06 al VL502, ESTE es el mensaje real y documentado para
+// configurar parámetros del equipo, incluido el intervalo de reporte
+// por tiempo Y por distancia — algo que el VL04 (GT06) no tiene como
+// opción separada, solo por tiempo con TIMER.
+//
+// Cada parámetro es ID(4 bytes) + longitud(1 byte) + valor. Los que
+// usamos acá son todos DWORD (4 bytes), matcheando la tabla estándar:
+//   0x0001 = intervalo de heartbeat (segundos)
+//   0x0020 = intervalo de reporte de posición por TIEMPO (segundos)
+//   0x0021 = intervalo de reporte en modo sueño (segundos)
+//   0x0022 = intervalo de reporte durante alarma urgente (segundos)
+//   0x0027 = intervalo de reporte de posición por DISTANCIA (metros)
+//
+// SIN CONFIRMAR CONTRA BYTES REALES TODAVÍA — mismo caso que el
+// 0x8600: sale del estándar público, no de un manual propio del
+// fabricante. Falta la prueba real (mandarlo, ver que el equipo
+// conteste 0x0001 con éxito, y confirmar que el intervalo de reporte
+// efectivamente cambió mirando la frecuencia real de los 0x0200 que
+// llegan después).
+// ============================================================
+const TERMINAL_PARAMS = {
+    heartbeatIntervalSec: 0x0001,
+    reportIntervalSec: 0x0020,
+    sleepIntervalSec: 0x0021,
+    alarmIntervalSec: 0x0022,
+    reportDistanceM: 0x0027,
+};
+
+function buildSetTerminalParams(imei, params) {
+    const terminalId = imeiToTerminalId(imei);
+
+    const entries = Object.entries(params).filter(([key, value]) => value != null && TERMINAL_PARAMS[key] != null);
+    if (entries.length === 0) throw new Error('No se pasó ningún parámetro válido para configurar');
+
+    const paramBufs = entries.map(([key, value]) => {
+        const paramId = Buffer.alloc(4);
+        paramId.writeUInt32BE(TERMINAL_PARAMS[key], 0);
+        const valBuf = Buffer.alloc(4);
+        valBuf.writeUInt32BE(Math.round(value), 0);
+        return Buffer.concat([paramId, Buffer.from([4]), valBuf]); // ID(4) + longitud(1) + valor DWORD(4)
+    });
+
+    const count = Buffer.from([entries.length]);
+    const body = Buffer.concat([count, ...paramBufs]);
+
+    const serialNo = Math.floor(Math.random() * 0xFFFF);
+    const packet = buildFrame(0x8103, terminalId, serialNo, body);
+
+    return { packet, correlationId: `jt808-${serialNo}`, paramsSet: entries.map(([k]) => k) };
+}
+
 module.exports = {
     MSG_ID,
     extractJT808Frame,
@@ -672,5 +727,7 @@ module.exports = {
     STATUS_FLAG_TAGS,
     buildTextCommandPacket,
     buildSetCircularFence,
+    buildSetTerminalParams,
+    TERMINAL_PARAMS,
     imeiToTerminalId,
 };
