@@ -665,8 +665,9 @@ function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
 // por tiempo Y por distancia — algo que el VL04 (GT06) no tiene como
 // opción separada, solo por tiempo con TIMER.
 //
-// Cada parámetro es ID(4 bytes) + longitud(1 byte) + valor. Los que
-// usamos acá son todos DWORD (4 bytes), matcheando la tabla estándar:
+// Cada parámetro es ID(WORD, 2 bytes) + longitud(1 byte) + valor. Los
+// valores que usamos acá son todos DWORD (4 bytes), matcheando la
+// tabla estándar:
 //   0x0001 = intervalo de heartbeat (segundos)
 //   0x0020 = intervalo de reporte de posición por TIEMPO (segundos)
 //   0x0021 = intervalo de reporte en modo sueño (segundos)
@@ -695,11 +696,19 @@ function buildSetTerminalParams(imei, params) {
     if (entries.length === 0) throw new Error('No se pasó ningún parámetro válido para configurar');
 
     const paramBufs = entries.map(([key, value]) => {
-        const paramId = Buffer.alloc(4);
-        paramId.writeUInt32BE(TERMINAL_PARAMS[key], 0);
+        // FIX 14/07/2026: el Parameter ID es WORD (2 bytes), no DWORD.
+        // Confirmado contra la Tabla 12 del manual oficial VL502
+        // ("Parameter ID WORD / Parameter Length BYTE / Parameter
+        // Value"). Con 4 bytes acá, todo el resto del body quedaba
+        // corrido de offset y el equipo rechazaba el mensaje con
+        // resultCode=1 sin importar qué parámetro se mandara —
+        // coincide con que haya fallado igual con
+        // heartbeatIntervalSec y con reportIntervalSec probados por
+        // separado esta noche.
+        const paramId = uint16be(TERMINAL_PARAMS[key]);
         const valBuf = Buffer.alloc(4);
         valBuf.writeUInt32BE(Math.round(value), 0);
-        return Buffer.concat([paramId, Buffer.from([4]), valBuf]); // ID(4) + longitud(1) + valor DWORD(4)
+        return Buffer.concat([paramId, Buffer.from([4]), valBuf]); // ID(2) + longitud(1) + valor DWORD(4)
     });
 
     const count = Buffer.from([entries.length]);
