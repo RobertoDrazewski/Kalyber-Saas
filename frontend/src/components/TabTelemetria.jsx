@@ -211,7 +211,14 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
   // FIX 14/07/2026: ver utils/chartFill.js — sostiene el último RPM
   // real conocido en vez de dejar el hueco que partía la línea del
   // gráfico ("saltos, no se ve completo").
-  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm']), [series]);
+  // FIX 14/07/2026: mismo problema que el RPM, pero al revés — el
+  // VL502 manda posición y datos de motor en paquetes separados; el
+  // paquete de solo motor (OBD) guarda speed_kmh=null a propósito
+  // (ver gt06Server.js, `lat: null, lng: null, speed_kmh: null` en el
+  // handler de OBD Data). Sin sostener el último valor real, la línea
+  // de velocidad se corta justo en esas filas, mientras el RPM
+  // (que sí se sostenía) se ve sólido — exactamente al revés de antes.
+  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm', 'speed_kmh']), [series]);
 
   return (
     <div className="space-y-6">
@@ -265,7 +272,7 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
                 <YAxis yAxisId="right" orientation="right" stroke="#6366F1" fontSize={11} domain={[0, 8000]} allowDataOverflow={false} />
                 <Tooltip contentStyle={{ background: '#0B1120', border: '1px solid #334155', borderRadius: 8 }} labelFormatter={t => new Date(t).toLocaleTimeString('es-AR')} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
+                <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} connectNulls={true} />
                 {hasRpmData && <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={true} />}
               </LineChart>
             </ResponsiveContainer>

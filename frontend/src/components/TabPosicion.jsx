@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair, Pencil } from 'lucide-react';
+import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair, Pencil, LogIn, LogOut } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 import { forwardFillSeries } from '../utils/chartFill';
 
@@ -248,12 +248,33 @@ export default function TabPosicion() {
     fetchAPI(`/telemetry/vehicle/${selected.id}?limit=120`).then(setSeries).catch(console.error);
   };
 
+  // [NUEVO 14/07/2026] Entradas y salidas de geocerca — pedido puntual:
+  // ver en Mapa en Vivo cuántas veces entró/salió cada auto. VL502 usa
+  // alarm_id 0x22 (entró) / 0x21 (salió) para esto — ver
+  // resolveGeofenceCrossing() en gt06Server.js. VL04 usa los códigos
+  // GT06 estándar 0x04 (entró) / 0x05 (salió), aunque la salida está
+  // confirmada rota en este firmware (ver conversación previa) — por
+  // eso el conteo de salidas para VL04 va a quedar siempre en 0, no es
+  // un bug de este panel.
+  const [fenceEventCounts, setFenceEventCounts] = useState({ entradas: 0, salidas: 0 });
+  const loadFenceEvents = () => {
+    if (!selected) { setFenceEventCounts({ entradas: 0, salidas: 0 }); return; }
+    fetchAPI(`/telemetry/vehicle/${selected.id}/alarms?limit=200`)
+      .then(alarms => {
+        const entradas = alarms.filter(a => a.alarm_id === 0x22 || a.alarm_id === 0x04).length;
+        const salidas = alarms.filter(a => a.alarm_id === 0x21 || a.alarm_id === 0x05).length;
+        setFenceEventCounts({ entradas, salidas });
+      })
+      .catch(() => setFenceEventCounts({ entradas: 0, salidas: 0 }));
+  };
+
   useEffect(() => {
     loadSeries();
+    loadFenceEvents();
     if (!selected) return;
     // El trazo se sigue extendiendo solo mientras el auto seleccionado
     // siga mandando posiciones nuevas, sin tener que volver a elegirlo.
-    const interval = setInterval(loadSeries, 5000);
+    const interval = setInterval(() => { loadSeries(); loadFenceEvents(); }, 5000);
     return () => clearInterval(interval);
   }, [selected]);
 
@@ -312,7 +333,10 @@ export default function TabPosicion() {
   // hooks than during the previous render" apenas se deseleccionaba un
   // auto. Ahora se calcula acá arriba, sin condición, y el JSX de abajo
   // solo lo referencia.
-  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm']), [series]);
+  // FIX 14/07/2026: mismo motivo que en TabTelemetria.jsx — el VL502
+  // manda posición y motor en paquetes separados, y el paquete de solo
+  // motor guarda speed_kmh=null a propósito.
+  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm', 'speed_kmh']), [series]);
 
   return (
     <div className="space-y-6">
@@ -492,10 +516,41 @@ export default function TabPosicion() {
                 <YAxis yAxisId="right" orientation="right" stroke="#6366F1" fontSize={11} domain={[0, 8000]} allowDataOverflow={false} />
                 <Tooltip contentStyle={{ background: '#0B1120', border: '1px solid #334155', borderRadius: 8 }} labelFormatter={t => new Date(t).toLocaleTimeString('es-AR')} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
+                <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} connectNulls={true} />
                 <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={true} />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* [NUEVO 14/07/2026] Entradas y salidas de geocerca — VL502
+              (Plan Avanzado) trae las dos; VL04 (Plan Básico) solo
+              entradas confirmadas, la salida está rota en ese firmware
+              (ver nota debajo del panel). */}
+          <div className="mt-6 pt-5 border-t border-slate-800">
+            <p className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
+              <MapPinned size={15} className="text-[#F59E0B]" /> Entradas y salidas de geocerca
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#0B1120] border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3">
+                <LogIn size={20} className="text-amber-400 shrink-0" />
+                <div>
+                  <p className="text-2xl font-bold text-white leading-none">{fenceEventCounts.entradas}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Entradas</p>
+                </div>
+              </div>
+              <div className="bg-[#0B1120] border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3">
+                <LogOut size={20} className="text-amber-400 shrink-0" />
+                <div>
+                  <p className="text-2xl font-bold text-white leading-none">{fenceEventCounts.salidas}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Salidas</p>
+                </div>
+              </div>
+            </div>
+            {selected.device_model !== 'VL502' && (
+              <p className="text-[11px] text-slate-500 mt-2">
+                Este equipo (Plan Básico) solo confirma entradas — la alarma de salida no la acepta este firmware todavía, así que "Salidas" va a quedar en 0 aunque el auto se haya ido de la zona.
+              </p>
+            )}
           </div>
 
           {/* Geocercas del auto */}
