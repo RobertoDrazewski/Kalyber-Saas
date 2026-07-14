@@ -61,8 +61,8 @@ const createGeofence = async (req, res) => {
         if (!device) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo GPS pareado todavía' });
         }
-        if (device.model !== 'VL04') {
-            return res.status(400).json({ error: 'Por ahora solo mandamos el comando de geocerca a equipos VL04. El VL502 usa JT808, y el mensaje 0x8300 que se probó para eso es para MOSTRAR texto en el terminal, no para configurarlo — casi seguro no hace nada real. Hace falta implementar el mensaje JT808 correcto (0x8600, "Set Circular Fence") antes de habilitarlo acá.' });
+        if (device.model !== 'VL04' && device.model !== 'VL502') {
+            return res.status(400).json({ error: 'Modelo de equipo no soportado para geocercas' });
         }
 
         const [result] = await pool.query(
@@ -71,18 +71,33 @@ const createGeofence = async (req, res) => {
             [vehicle_id, name || null, lat, lng, radiusNum, fenceMode]
         );
 
-        const command = `FENCE,ON,0,${lat},${lng},${radiusNum},${fenceMode},0#`;
-        const sendResult = await gt06Internal.sendCommandToDevice(device.imei, command);
+        // [ACTUALIZADO 13/07/2026] Ahora arma el mensaje correcto según
+        // el protocolo real de cada equipo — para VL04 sigue siendo el
+        // comando de texto FENCE (confirmado funcionando con un cruce
+        // real de geocerca); para VL502 arma el mensaje binario JT808
+        // 0x8600 real, EN VEZ del 0x8300 de texto que no configuraba
+        // nada. El 0x8600 todavía no está confirmado contra un cruce
+        // real — device_synced=1 acá solo dice "el comando salió y el
+        // equipo contestó 0x0001 con éxito", NO "confirmamos que la
+        // alarma de geocerca funciona" — eso hace falta probarlo aparte.
+        const sendResult = await gt06Internal.sendFenceCommand(device.imei, {
+            fenceId: result.insertId,
+            lat, lng, radiusM: radiusNum, mode: fenceMode,
+        });
 
         if (sendResult.sent) {
             await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [result.insertId]);
         }
 
+        const vl502Warning = device.model === 'VL502'
+            ? ' (VL502: el comando 0x8600 se mandó, pero todavía NO está confirmado que la alarma de geocerca realmente llegue al cruzar el límite — falta esa prueba real.)'
+            : '';
+
         res.json({
             id: result.insertId,
             message: sendResult.sent
-                ? 'Geocerca creada y comando enviado al equipo. La confirmación real del equipo (FENCE#) va a aparecer en los logs del servidor.'
-                : `Geocerca guardada, pero no se pudo enviar el comando al equipo ahora mismo: ${sendResult.reason}. Vas a tener que reenviarlo (por ejemplo con FENCE# desde SMS) cuando el equipo esté online.`,
+                ? `Geocerca creada y comando enviado al equipo.${vl502Warning}`
+                : `Geocerca guardada, pero no se pudo enviar el comando al equipo ahora mismo: ${sendResult.reason}.`,
             device_synced: sendResult.sent,
         });
     } catch (error) {
@@ -132,12 +147,13 @@ const resyncGeofence = async (req, res) => {
         if (!fence.imei) {
             return res.status(400).json({ error: 'Ese vehículo no tiene un equipo pareado' });
         }
-        if (fence.model !== 'VL04') {
-            return res.status(400).json({ error: 'Reenvío automático solo soportado para VL04 por ahora — ver nota en createGeofence sobre por qué el VL502 no está habilitado todavía.' });
+        if (fence.model !== 'VL04' && fence.model !== 'VL502') {
+            return res.status(400).json({ error: 'Modelo de equipo no soportado' });
         }
 
-        const command = `FENCE,ON,0,${fence.lat},${fence.lng},${fence.radius_m},${fence.mode},0#`;
-        const sendResult = await gt06Internal.sendCommandToDevice(fence.imei, command);
+        const sendResult = await gt06Internal.sendFenceCommand(fence.imei, {
+            fenceId: fence.id, lat: fence.lat, lng: fence.lng, radiusM: fence.radius_m, mode: fence.mode,
+        });
 
         if (sendResult.sent) {
             await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [id]);

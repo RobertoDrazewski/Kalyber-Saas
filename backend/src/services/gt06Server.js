@@ -387,7 +387,10 @@ async function sendCommandToDevice(imei, commandText) {
     const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
     
     if (device && device.model === 'VL502') {
-        // Empaquetado JT808 (0x8300)
+        // Empaquetado JT808 (0x8300) — ver advertencia en jt808Handler.js:
+        // esto es para mostrar texto, no para configurar. Sirve para
+        // diagnóstico/texto libre desde TabComandos, no para geocercas
+        // (usar sendFenceCommand para eso).
         const { packet, correlationId } = jt808.buildTextCommandPacket(imei, commandText);
         socket.write(packet);
         console.log(`[JT808] ➡️  Comando enviado a IMEI=${imei} (correlationId=${correlationId}): "${commandText}"`);
@@ -398,6 +401,39 @@ async function sendCommandToDevice(imei, commandText) {
     const { packet, correlationId } = buildCommandPacket(commandText);
     socket.write(packet);
     console.log(`[GT06] ➡️  Comando enviado a IMEI=${imei} (correlationId=${correlationId}): "${commandText}" (hex: ${packet.toString('hex')})`);
+    return { sent: true, correlationId };
+}
+
+// [NUEVO 13/07/2026] Geocercas — a diferencia de sendCommandToDevice
+// (texto libre), esto arma el mensaje CORRECTO según el protocolo real
+// de cada equipo: para VL04 sigue siendo el comando de texto FENCE
+// (confirmado funcionando), pero para VL502 arma el mensaje binario
+// JT808 0x8600 ("Set Circular Area") — el 0x8300 de texto NO configura
+// nada real, ver advertencia en jt808Handler.js. Todavía SIN CONFIRMAR
+// contra un cruce de geocerca real del lado VL502.
+async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
+    const socket = activeSockets.get(imei);
+    if (!socket || socket.destroyed) {
+        return {
+            sent: false,
+            reason: `IMEI ${imei} no tiene una conexión TCP activa en este momento (equipo apagado o sin señal)`,
+        };
+    }
+
+    const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
+
+    if (device && device.model === 'VL502') {
+        const { packet, correlationId } = jt808.buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode });
+        socket.write(packet);
+        console.log(`[JT808] ➡️  Geocerca (0x8600) enviada a IMEI=${imei} (correlationId=${correlationId}): centro=${lat},${lng} radio=${radiusM}m modo=${mode}`);
+        return { sent: true, correlationId, protocol: '0x8600 (JT808 Set Circular Area) — SIN CONFIRMAR contra prueba real todavía' };
+    }
+
+    // VL04: mismo comando de texto que ya está confirmado funcionando.
+    const command = `FENCE,ON,0,${lat},${lng},${radiusM},${mode},0#`;
+    const { packet, correlationId } = buildCommandPacket(command);
+    socket.write(packet);
+    console.log(`[GT06] ➡️  Geocerca enviada a IMEI=${imei} (correlationId=${correlationId}): "${command}"`);
     return { sent: true, correlationId };
 }
 
@@ -699,6 +735,28 @@ function startGt06Server() {
                             }
                         }
 
+                    } else if (header.msgId === jt808.MSG_ID.TERMINAL_GENERAL_RESPONSE) {
+                        // --- [NUEVO 13/07/2026] Respuesta del equipo a un
+                        // comando 0x8600/0x8300 que le mandamos (sendFenceCommand
+                        // / sendCommandToDevice). Estructura del estándar:
+                        // serialNo respondido(2) + msgId respondido(2) + resultado(1,
+                        // 0=éxito/1=fallo/2=mensaje incorrecto/3=no soportado). ---
+                        const respondingToSerial = header.body.readUInt16BE(0);
+                        const respondingToMsgId = header.body.readUInt16BE(2);
+                        const resultCode = header.body[4];
+                        const resultText = ['éxito', 'fallo', 'mensaje incorrecto', 'no soportado'][resultCode] || `código ${resultCode}`;
+                        const correlationId = `jt808-${respondingToSerial}`;
+                        console.log(`[JT808] ⬅️  Respuesta a comando ID=${terminalIdHex} (correlationId=${correlationId}, msgId respondido=0x${respondingToMsgId.toString(16)}): ${resultText}`);
+                        try {
+                            await pool.query(
+                                `UPDATE CommandLog SET status = ?, response_text = ?, responded_at = NOW()
+                                 WHERE correlation_id = ? AND status = 'sent'`,
+                                [resultCode === 0 ? 'acked' : 'failed', resultText, correlationId]
+                            );
+                        } catch (err) {
+                            if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog:', err.message);
+                        }
+
                     } else {
                         console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);
                     }
@@ -986,6 +1044,34 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     const secret = process.env.GT06_INTERNAL_SECRET || '';
 
     const server = http.createServer((req, res) => {
+        if (req.method === 'POST' && req.url === '/internal/send-fence') {
+            if (secret && req.headers['x-internal-secret'] !== secret) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No autorizado' }));
+                return;
+            }
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const { imei, fenceId, lat, lng, radiusM, mode } = JSON.parse(body || '{}');
+                    if (!imei || fenceId == null || lat == null || lng == null || !radiusM) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Faltan imei, fenceId, lat, lng o radiusM en el body' }));
+                        return;
+                    }
+                    const result = await sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode });
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (err) {
+                    console.error('[GT06 internal API] Error en send-fence:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
+            return;
+        }
+
         if (req.method !== 'POST' || req.url !== '/internal/send-command') {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'No encontrado' }));
@@ -1025,4 +1111,4 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     return server;
 }
 
-module.exports = { startGt06Server, sendCommandToDevice, startInternalCommandApi };
+module.exports = { startGt06Server, sendCommandToDevice, sendFenceCommand, startInternalCommandApi };

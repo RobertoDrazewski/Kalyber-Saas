@@ -44,4 +44,33 @@ async function sendCommandToDevice(imei, command) {
     }
 }
 
-module.exports = { sendCommandToDevice };
+async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
+    if (!INTERNAL_URL) {
+        return {
+            sent: false,
+            reason: 'Falta configurar GT06_INTERNAL_URL en las variables de entorno de este servicio.',
+        };
+    }
+    try {
+        const res = await fetch(`${INTERNAL_URL}/internal/send-fence`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(INTERNAL_SECRET ? { 'x-internal-secret': INTERNAL_SECRET } : {}),
+            },
+            body: JSON.stringify({ imei, fenceId, lat, lng, radiusM, mode }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            return { sent: false, reason: data.error || `El servicio gt06-standalone respondió ${res.status}` };
+        }
+        return data;
+    } catch (err) {
+        return {
+            sent: false,
+            reason: `No se pudo contactar al servicio gt06-standalone (${INTERNAL_URL}): ${err.message}`,
+        };
+    }
+}
+
+module.exports = { sendCommandToDevice, sendFenceCommand };

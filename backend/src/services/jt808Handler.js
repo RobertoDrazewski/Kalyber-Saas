@@ -565,17 +565,35 @@ function bcdToDateString(bcdBuffer) {
     return `20${yy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
-// ============================================================
-// [NUEVO] Comandos servidor→equipo (Mensaje 0x8300 - Text Info)
-// Envuelve comandos AT estándar de Jimi (como FENCE,ON...) dentro
-// del protocolo JT808 para mandarlos al equipo VL502.
-// ============================================================
-function buildTextCommandPacket(imei, commandText) {
-    // Reconstruir el ID de terminal (los primeros 14 dígitos del IMEI en 6 bytes BE)
+// Reconstruye el "terminal ID" (6 bytes) que usa JT808 a partir del
+// IMEI real guardado en nuestra base — son los primeros 14 dígitos
+// del IMEI, empaquetados como entero grande de 6 bytes BE. Factorizado
+// acá porque tanto buildTextCommandPacket como buildSetCircularFence
+// lo necesitan.
+function imeiToTerminalId(imei) {
     const prefixStr = imei.slice(0, 14);
     const prefixInt = parseInt(prefixStr, 10);
     const terminalId = Buffer.alloc(6);
     terminalId.writeUIntBE(prefixInt, 0, 6);
+    return terminalId;
+}
+
+// ============================================================
+// [NUEVO] Comandos servidor→equipo (Mensaje 0x8300 - Text Info)
+// Envuelve comandos AT estándar de Jimi (como FENCE,ON...) dentro
+// del protocolo JT808 para mandarlos al equipo VL502.
+//
+// OJO — SIN CONFIRMAR: 0x8300 en el estándar JT/T808 es para MOSTRAR
+// un mensaje de texto en la pantalla del terminal, no para pasarle
+// comandos de configuración tipo AT. Es muy probable que esto no haga
+// nada real en el equipo (el VL502 no tiene pantalla ni parsea
+// sintaxis GT06). Se deja acá para comandos de diagnóstico/texto
+// libre desde TabComandos, PERO para geocercas usar
+// buildSetCircularFence() de acá abajo, que sí es el mensaje correcto
+// del estándar.
+// ============================================================
+function buildTextCommandPacket(imei, commandText) {
+    const terminalId = imeiToTerminalId(imei);
 
     // Body: flag (1 byte) + texto. Flag 0x00 indica mensaje de texto normal.
     const flag = Buffer.from([0x00]);
@@ -587,6 +605,55 @@ function buildTextCommandPacket(imei, commandText) {
     const packet = buildFrame(0x8300, terminalId, serialNo, body);
 
     return { packet, correlationId: serialNo.toString(16).padStart(4, '0') };
+}
+
+// ============================================================
+// [NUEVO 13/07/2026] Mensaje 0x8600 ("Set Circular Area") del
+// estándar JT/T808 — este SÍ es el mensaje correcto para configurar
+// una geocerca circular real en el equipo (a diferencia del 0x8300
+// de arriba). Estructura según el estándar público:
+//   Atributo de configuración(1) + Total de áreas(2) +
+//   [ID de área(4) + Atributo de área(2) + Latitud centro(4) +
+//    Longitud centro(4) + Radio en metros(4)]  (repetido por área,
+//    acá mandamos una sola)
+//
+// Atributo de área usado acá (bitmask):
+//   bit3 = alarma AL ENTRAR reportada a la plataforma
+//   bit5 = alarma AL SALIR reportada a la plataforma
+// (no usamos ventana horaria ni límite de velocidad — quedan en 0)
+//
+// SIN CONFIRMAR CONTRA BYTES REALES TODAVÍA. A diferencia de los tags
+// de motor del VL502 (cruzados contra el manual específico del
+// fabricante en Scribd), esto sale del estándar público JT/T808 sin
+// un documento propio para confirmarlo. Falta la prueba real: crear
+// la geocerca, cruzar el límite con el auto, y ver si aparece la
+// alarma de geocerca (0x21=salió / 0x22=entró, ver ALARM_IDS) en el
+// próximo 0x0900 subtipo 0x03. Recién ahí se puede confiar en esto.
+// ============================================================
+function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
+    const terminalId = imeiToTerminalId(imei);
+
+    const settingAttr = Buffer.from([0x00]); // 0 = actualizar (reemplaza cualquier área previa con este ID)
+    const totalAreas = uint16be(1);
+
+    const areaId = Buffer.alloc(4);
+    areaId.writeUInt32BE(fenceId, 0);
+
+    const areaAttr = uint16be(mode === 'IN' ? 0x0008 : 0x0020); // bit3=alarma al entrar, bit5=alarma al salir
+
+    const latBuf = Buffer.alloc(4);
+    latBuf.writeUInt32BE(Math.round(Math.abs(lat) * 1_000_000), 0);
+    const lngBuf = Buffer.alloc(4);
+    lngBuf.writeUInt32BE(Math.round(Math.abs(lng) * 1_000_000), 0);
+    const radiusBuf = Buffer.alloc(4);
+    radiusBuf.writeUInt32BE(Math.round(radiusM), 0);
+
+    const body = Buffer.concat([settingAttr, totalAreas, areaId, areaAttr, latBuf, lngBuf, radiusBuf]);
+
+    const serialNo = Math.floor(Math.random() * 0xFFFF);
+    const packet = buildFrame(0x8600, terminalId, serialNo, body);
+
+    return { packet, correlationId: `jt808-${serialNo}` };
 }
 
 module.exports = {
@@ -604,4 +671,6 @@ module.exports = {
     ALARM_IDS,
     STATUS_FLAG_TAGS,
     buildTextCommandPacket,
+    buildSetCircularFence,
+    imeiToTerminalId,
 };
