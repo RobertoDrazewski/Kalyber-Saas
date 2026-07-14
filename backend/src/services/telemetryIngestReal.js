@@ -144,4 +144,38 @@ async function ingestTripEvent(imei, tripData) {
     return { vehicle_id: device.vehicle_id };
 }
 
-module.exports = { ingestReading, ingestAlarm, ingestTroubleCodes, ingestTripEvent };
+// ============================================================
+// [NUEVO 14/07/2026] Corrección retroactiva de manipulación —
+// confirmado con logs reales: cuando el equipo está desconectado, no
+// tiene señal para avisar nada en el momento. Las alarmas de "golpe"
+// (colisión, aceleración/giro brusco) que pasan MIENTRAS lo están
+// manoseando quedan en cola y se mandan TODAS JUNTAS recién cuando
+// reconecta — antes que el propio corte de energía / reconexión, que
+// suele llegar último en esa ráfaga. La corrección hacia adelante que
+// ya existía en gt06Server.js (marcar como manipulación lo que llega
+// DESPUÉS de un corte) se perdía estos casos porque el orden real es
+// al revés. Esto corrige retroactivamente: cuando llega el corte de
+// energía o la reconexión, reclasifica las alarmas de golpe de los
+// últimos `windowMs` que ya se habían guardado con la etiqueta real
+// (ej: "collision") por una etiqueta de manipulación.
+// ============================================================
+const SHOCK_ALARM_LABELS = ['collision', 'harsh_acceleration', 'sharp_left_turn', 'sharp_right_turn', 'vibration'];
+
+async function relabelRecentShockAsTamper(imei, windowMs) {
+    const device = await findPairedDevice(imei);
+    if (!device) return null;
+    const placeholders = SHOCK_ALARM_LABELS.map(() => '?').join(',');
+    const [result] = await pool.query(
+        `UPDATE Telemetry_Alarms
+         SET label = 'tamper_suspected_shock',
+             description = CONCAT('Posible manipulación del equipo (golpe/vibración cerca de un corte de energía — reclasificado retroactivamente, original: ', label, ')')
+         WHERE vehicle_id = ? AND label IN (${placeholders}) AND recorded_at >= (NOW() - INTERVAL ? SECOND)`,
+        [device.vehicle_id, ...SHOCK_ALARM_LABELS, Math.ceil(windowMs / 1000)]
+    );
+    if (result.affectedRows > 0) {
+        console.log(`[Tamper] Reclasificadas ${result.affectedRows} alarma(s) de golpe como manipulación (vehicle_id=${device.vehicle_id})`);
+    }
+    return { vehicle_id: device.vehicle_id, relabeled: result.affectedRows };
+}
+
+module.exports = { ingestReading, ingestAlarm, ingestTroubleCodes, ingestTripEvent, relabelRecentShockAsTamper };

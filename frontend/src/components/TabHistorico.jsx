@@ -256,7 +256,7 @@ export default function TabHistorico() {
                     return (
                       <div key={ev.id} className="flex items-center gap-2 text-xs text-slate-300">
                         <Icon size={13} className={`shrink-0 ${cls}`} />
-                        <span className="truncate">{ev.label}</span>
+                        <span className="truncate">{ev.description || ev.label}</span>
                         <span className="text-slate-600 ml-auto shrink-0">{formatTime(ev.recorded_at)}</span>
                       </div>
                     );

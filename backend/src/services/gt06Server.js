@@ -1201,8 +1201,18 @@ function startGt06Server() {
                                     ? `Posible manipulación del equipo (golpe/vibración justo después de un corte de energía — no se cuenta como choque real)`
                                     : known.desc + fenceSuffix;
 
-                                if (parsed.alarmCode === 0x02 || parsed.alarmCode === 0x32) {
+                                if (parsed.alarmCode === 0x02 || parsed.alarmCode === 0x32 || parsed.alarmCode === 0x72) {
                                     registerPowerEvent(currentImei);
+                                    // Corrección retroactiva — ver telemetryIngestReal.js:
+                                    // las alarmas de golpe suelen llegar ANTES que
+                                    // el propio corte/reconexión en la ráfaga real,
+                                    // así que además de marcar hacia adelante
+                                    // corregimos lo que ya se guardó hace poco.
+                                    try {
+                                        await telemetryIngestReal.relabelRecentShockAsTamper(currentImei, TAMPER_WINDOW_MS);
+                                    } catch (err) {
+                                        console.error('[GT06] Error reclasificando alarmas de golpe como manipulación:', err.message);
+                                    }
                                 }
 
                                 console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${effectiveLabel} (0x${parsed.alarmCode.toString(16)}) ${effectiveDesc}${isTamperShock ? ' [reclasificado, original: ' + known.label + ']' : ''}`);

@@ -164,7 +164,7 @@ function AlarmTimeline({ alarms }) {
           <div key={a.id} className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${sev.cls}`}>
             <div className="flex items-center gap-2 min-w-0">
               <Icon size={14} className={`shrink-0 ${cls}`} />
-              <span className="text-sm font-medium truncate">{a.label}</span>
+              <span className="text-sm font-medium truncate">{a.description || a.label}</span>
             </div>
             <span className="text-[11px] shrink-0 opacity-80">{fmtHora(a.recorded_at)}</span>
           </div>
