@@ -39,8 +39,8 @@ async function ingestReading(imei, reading) {
              fuel_level, harsh_brake, dtc_codes, source,
              device_odometer_km, fuel_consumption_avg, fuel_consumption_instant, oil_pressure_kpa, oil_life_pct,
              intake_air_temp, cabin_temp, steering_angle, throttle_relative_pct, remaining_fuel_l, acc_signal,
-             status_flags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             status_flags, brake_pedal_pct, accelerator_pedal_pct, shift_position, remote_control_signal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'real', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             device.vehicle_id, reading.lat, reading.lng, reading.speed_kmh, reading.heading, reading.engine_rpm, reading.engine_load,
             reading.coolant_temp, reading.battery_voltage, reading.fuel_level ?? null, reading.harsh_brake ? 1 : 0, reading.dtc_codes || null,
@@ -49,6 +49,12 @@ async function ingestReading(imei, reading) {
             reading.steering_angle ?? null, reading.throttle_relative_pct ?? null, reading.remaining_fuel_l ?? null,
             reading.acc_signal == null ? null : (reading.acc_signal ? 1 : 0),
             statusFlagsJson,
+            // [NUEVO 14/07/2026] El parser de jt808Handler.js ya sacaba
+            // estos 4 campos de la trama real, pero nunca se guardaban
+            // porque no había columna ni se pasaban acá — confirmado con
+            // bytes reales que brake_pedal/accelerator_pedal SÍ llegan.
+            reading.brake_pedal ?? null, reading.accelerator_pedal ?? null,
+            reading.shift_position ?? null, reading.remote_control_signal ?? null,
         ]
     );
 

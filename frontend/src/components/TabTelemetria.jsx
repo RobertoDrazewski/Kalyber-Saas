@@ -200,9 +200,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
   // de motor, por separado de "last" (que se sigue usando para
   // velocidad/ACC, eso sí viene en cada paquete).
   const lastObd = [...series].reverse().find(r =>
-    r.engine_rpm != null || r.coolant_temp != null || r.battery_voltage != null || r.fuel_level != null
+    r.engine_rpm != null || r.coolant_temp != null || r.battery_voltage != null || r.fuel_level != null ||
+    r.brake_pedal_pct != null || r.accelerator_pedal_pct != null || r.shift_position != null
   ) || {};
-  const statusFlags = parseStatusFlags(vehicle.last_status_flags) || parseStatusFlags(last.status_flags);
+  const statusFlags = parseStatusFlags(vehicle.last_status_flags) || parseStatusFlags(lastObd.status_flags) || parseStatusFlags(last.status_flags);
   const hasRpmData = series.some(s => s.engine_rpm != null);
 
   return (
@@ -214,6 +215,11 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
             <span className="font-mono text-[#10B981] font-bold text-lg">{vehicle.plate}</span>
             <PlanBadge model={AVANZADO} />
             <AccBadge accOn={last.acc_signal ?? null} />
+            {lastObd.shift_position && (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#6366F1]/10 text-[#818CF8] border border-[#6366F1]/30">
+                Caja: {lastObd.shift_position}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <HeadingCompass heading={vehicle.heading} />
@@ -232,6 +238,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           <GaugeStat icon={Zap} label="Batería" value={lastObd.battery_voltage} unit="V" color="#818CF8" />
           <GaugeStat icon={Wrench} label="Presión aceite" value={lastObd.oil_pressure_kpa} unit="kPa" color="#94A3B8" />
           <GaugeStat icon={MapPin} label="Odómetro equipo" value={(lastObd.device_odometer_km ?? vehicle.device_odometer_km) != null ? Math.round(lastObd.device_odometer_km ?? vehicle.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
+          {/* [NUEVO 14/07/2026] El parser ya sacaba esto de la trama real, nunca se mostraba */}
+          <GaugeStat icon={Gauge} label="Pedal freno" value={lastObd.brake_pedal_pct} unit="%" color="#EF4444" />
+          <GaugeStat icon={Gauge} label="Pedal acelerador" value={lastObd.accelerator_pedal_pct} unit="%" color="#F59E0B" />
+          <GaugeStat icon={Wrench} label="Consumo instant." value={lastObd.fuel_consumption_instant} unit="L/100km" color="#94A3B8" />
         </div>
       </div>
 

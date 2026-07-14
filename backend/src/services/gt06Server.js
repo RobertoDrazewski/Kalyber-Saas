@@ -707,6 +707,7 @@ function startGt06Server() {
                                 parsed.fuel_consumption_instant, parsed.oil_pressure_kpa, parsed.oil_life_pct,
                                 parsed.intake_air_temp, parsed.cabin_temp, parsed.steering_angle, parsed.throttle_relative_pct,
                                 parsed.remaining_fuel_l, parsed.acc_signal, parsed.shift_position, parsed.statusFlags,
+                                parsed.brake_pedal, parsed.accelerator_pedal, parsed.remote_control_signal,
                             ].some(v => v !== null && v !== undefined);
 
                             if (hasAnyData) {
@@ -730,6 +731,11 @@ function startGt06Server() {
                                     remaining_fuel_l: parsed.remaining_fuel_l,
                                     acc_signal: parsed.acc_signal,
                                     statusFlags: parsed.statusFlags,
+                                    // [NUEVO 14/07/2026] Ya se parseaban, no se guardaban.
+                                    brake_pedal: parsed.brake_pedal,
+                                    accelerator_pedal: parsed.accelerator_pedal,
+                                    shift_position: parsed.shift_position,
+                                    remote_control_signal: parsed.remote_control_signal,
                                 });
                                 console.log(`[JT808] OBD Data equipo=${deviceTransparente.imei}: RPM=${parsed.rpm} temp=${parsed.coolant_temp}°C bat=${parsed.battery_voltage}V carga=${parsed.engine_load}% combustible=${parsed.fuel_level}% odom=${parsed.device_odometer_km}km caja=${parsed.shift_position} ACC=${parsed.acc_signal}`);
                             }

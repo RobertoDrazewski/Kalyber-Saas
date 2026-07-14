@@ -58,7 +58,8 @@ const getVehicleSeries = async (req, res) => {
             `SELECT recorded_at, speed_kmh, engine_rpm, engine_load, coolant_temp, battery_voltage, lat, lng, heading,
                     fuel_level, device_odometer_km, fuel_consumption_avg, fuel_consumption_instant,
                     oil_pressure_kpa, oil_life_pct, intake_air_temp, cabin_temp, steering_angle,
-                    throttle_relative_pct, remaining_fuel_l, acc_signal, harsh_brake, dtc_codes
+                    throttle_relative_pct, remaining_fuel_l, acc_signal, harsh_brake, dtc_codes,
+                    brake_pedal_pct, accelerator_pedal_pct, shift_position, remote_control_signal, status_flags
              FROM Telemetry_Raw WHERE vehicle_id = ? ORDER BY recorded_at DESC LIMIT ?`,
             [id, limit]
         );
