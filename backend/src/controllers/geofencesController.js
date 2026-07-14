@@ -95,13 +95,20 @@ const createGeofence = async (req, res) => {
         const vl502Warning = device.model === 'VL502'
             ? ' (VL502: el comando 0x8600 se mandó, pero todavía NO está confirmado que la alarma de geocerca realmente llegue al cruzar el límite — falta esa prueba real.)'
             : '';
+        // [NUEVO 14/07/2026] sendFenceCommand devuelve "warning" cuando
+        // el comando se mandó pero con una limitación confirmada por
+        // logs reales (hoy: VL04 + modo BOTH → el equipo rechaza la
+        // alarma de salida, ver gt06Server.js). Sin esto, el mensaje
+        // decía "creada y enviada" sin avisar que la mitad no aplicó.
+        const deviceWarning = sendResult.warning ? ` (${sendResult.warning})` : '';
 
         res.json({
             id: result.insertId,
             message: sendResult.sent
-                ? `Geocerca creada y comando enviado al equipo.${vl502Warning}`
+                ? `Geocerca creada y comando enviado al equipo.${vl502Warning}${deviceWarning}`
                 : `Geocerca guardada, pero no se pudo enviar el comando al equipo ahora mismo: ${sendResult.reason}.`,
             device_synced: sendResult.sent,
+            warning: sendResult.warning || null,
         });
     } catch (error) {
         console.error('❌ Error creando geocerca:', error);
@@ -228,9 +235,11 @@ const updateGeofence = async (req, res) => {
             await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [id]);
         }
 
+        const deviceWarning = sendResult.warning ? ` (${sendResult.warning})` : '';
+
         res.json({
             message: sendResult.sent
-                ? 'Geocerca editada y comando reenviado al equipo.'
+                ? `Geocerca editada y comando reenviado al equipo.${deviceWarning}`
                 : `Geocerca editada en la base, pero no se pudo reenviar el comando ahora mismo: ${sendResult.reason}.`,
             device_synced: sendResult.sent,
         });

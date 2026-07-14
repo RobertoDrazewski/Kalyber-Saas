@@ -156,6 +156,26 @@ function parseLocationReport(body) {
     const accOn = !!(statusFlag & 0x01);        // bit0 = ACC, confirmado por spec
     const gpsFixed = !!(statusFlag & 0x02);     // bit1 = posicionado
 
+    // [NUEVO 14/07/2026] HALLAZGO CLAVE — confirmado cruzando GPS real
+    // contra una geocerca real: el VL502 SÍ soporta geocercas (el
+    // 0x8600 se manda y el equipo contesta "éxito"), pero la alarma de
+    // cruce NO llega como un mensaje 0x0900 subtipo 0x03 separado
+    // (que es lo único que este backend escuchaba hasta ahora) — llega
+    // como el BIT 20 del campo "Alarm flag" (offset 0) del propio
+    // reporte de posición 0x0200, según la Tabla 19 del manual oficial:
+    // "Bit 20: 1 = Entered or left geofence — Clear after receiving a
+    // response". Confirmado con un cruce real: la geocerca activa
+    // llegó a device_synced=1, el auto entró (0 tocado de la
+    // fluctuación de la geocerca, medido por GPS: pasó de 93.9m a
+    // 14.0m del centro de un radio de 20m), y en ningún momento
+    // apareció una alarma 0x21/0x22 vía 0x0900 — la señal estaba en
+    // este bit, sin usar. El bit no dice si fue entrada o salida (el
+    // propio nombre dice "entró O salió"), así que hay que inferir la
+    // dirección comparando contra la posición anterior conocida — eso
+    // se resuelve en gt06Server.js con la geometría de las geocercas
+    // que ya tenemos guardadas, no acá.
+    const geofenceEvent = !!(alarmFlag & (1 << 20));
+
     const latRaw = body.readUInt32BE(8);
     const lonRaw = body.readUInt32BE(12);
     // Mendoza = hemisferio sur/oeste. El campo de statusFlag debería
@@ -222,7 +242,7 @@ function parseLocationReport(body) {
     // exactamente lo que hacía que el histórico del cliente mostrara
     // basura tipo "JT808_TLV:ID=0x2a valor=0000|ID=0xe4 valor=...".
     // Ver gt06Server.js: ya no se pasa a ingestReading.
-    return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
+    return { accOn, gpsFixed, geofenceEvent, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
 }
 
 // El "ID de terminal" de JT808 (6 bytes) es el IMEI real del equipo,

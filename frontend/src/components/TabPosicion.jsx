@@ -195,7 +195,13 @@ export default function TabPosicion() {
       // aviso: si el equipo estaba offline, avisamos que hay que
       // reintentar el envío (hay botón para eso en la lista de abajo),
       // pero la geocerca ya está en la base y no hay que crearla de nuevo.
-      if (!res.device_synced) setFenceNotice(res.message);
+      // FIX 14/07/2026: antes esto solo se mostraba si device_synced
+      // era false. Pero ahora el backend puede devolver
+      // device_synced=true CON un warning igual (ej: VL04 en modo
+      // BOTH, donde la entrada sí se aplicó pero la salida quedó sin
+      // confirmar) — si solo miramos device_synced, ese aviso
+      // importante se perdía en silencio.
+      if (!res.device_synced || res.warning) setFenceNotice(res.message);
       loadGeofences();
     } catch (err) {
       setFenceError(err.message);

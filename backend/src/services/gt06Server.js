@@ -277,6 +277,74 @@ async function accumulateDeviceOdometer(imei, rawCounter) {
     return Number((prevKm + deltaKm).toFixed(3));
 }
 
+// ============================================================
+// [NUEVO 14/07/2026] Resuelve un cruce de geocerca real del VL502.
+//
+// Contexto — confirmado con un cruce real, cruzando GPS real contra
+// una geocerca real: el VL502 SÍ soporta geocercas (el 0x8600 se
+// manda y el equipo contesta "éxito"), pero NUNCA manda la alarma
+// como un mensaje 0x0900 subtipo 0x03 separado (que es lo único que
+// este backend escuchaba hasta ahora) — la manda como el BIT 20 del
+// campo "Alarm flag" del propio reporte de posición 0x0200 (Tabla 19
+// del manual: "Entered or left geofence"). Ver jt808Handler.js.
+//
+// Ese bit sirve como "algo relacionado a geocerca acaba de pasar",
+// pero el protocolo NO dice de qué geocerca ni en qué dirección
+// (entrada o salida) — hay que resolverlo nosotros con la geometría
+// que ya tenemos guardada: comparamos la posición ANTERIOR conocida
+// del vehículo (antes de que este ping la pise) contra la posición
+// ACTUAL, para cada geocerca activa de ese vehículo. Si antes estaba
+// afuera y ahora está adentro → entró; si era al revés → salió.
+//
+// prevLat/prevLng tienen que venir de ANTES de llamar a
+// telemetryIngestReal.ingestReading() para esa misma lectura (esa
+// función pisa Vehicles.lat/lng con la posición nueva).
+// ============================================================
+function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat, curLng) {
+    if (curLat == null || curLng == null) return;
+    const [fences] = await pool.query(
+        `SELECT id, name, lat, lng, radius_m, mode FROM Geofences WHERE vehicle_id = ? AND active = 1`,
+        [vehicleId]
+    );
+    if (!fences.length) return;
+
+    for (const fence of fences) {
+        const flat = parseFloat(fence.lat), flng = parseFloat(fence.lng), radius = fence.radius_m;
+        const isInsideNow = haversineMeters(curLat, curLng, flat, flng) <= radius;
+        // Sin posición anterior conocida (primera lectura de este
+        // equipo), no hay "antes" contra qué comparar — nos salteamos
+        // esta geocerca esta vez en vez de arriesgar un falso
+        // positivo/negativo.
+        if (prevLat == null || prevLng == null) continue;
+        const wasInsideBefore = haversineMeters(prevLat, prevLng, flat, flng) <= radius;
+        if (isInsideNow === wasInsideBefore) continue; // no cruzó esta geocerca puntual
+
+        const entered = isInsideNow && !wasInsideBefore;
+        const alertsForThisDirection = entered
+            ? (fence.mode === 'IN' || fence.mode === 'BOTH')
+            : (fence.mode === 'OUT' || fence.mode === 'BOTH');
+        if (!alertsForThisDirection) continue; // cruzó, pero esta geocerca no avisa para ese sentido
+
+        const fenceLabel = fence.name || `Geocerca #${fence.id}`;
+        const label = entered ? `Entró a la geocerca: ${fenceLabel}` : `Salió de la geocerca: ${fenceLabel}`;
+        console.log(`[JT808] 🚧 ${label} — IMEI=${imei}`);
+        await telemetryIngestReal.ingestAlarm(imei, {
+            id: entered ? 0x22 : 0x21, // mismos IDs que ALARM_IDS de jt808Handler (0x21=salió, 0x22=entró)
+            label,
+            desc: `radio=${radius}m centro=${flat},${flng}`,
+        }, { lat: curLat, lon: curLng });
+    }
+}
+
 // CRC-16/X-25 (CRC-ITU) — el checksum estándar de GT06.
 function crcX25(buffer) {
     let crc = 0xFFFF;
@@ -448,19 +516,34 @@ async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit
     // VL04: mismo comando de texto que ya está confirmado funcionando
     // — el "0" es el ÍNDICE DE SLOT del comando FENCE (no el id de
     // nuestra base, que puede ser cualquier número), y el confirmado
-    // funcionando es justo el slot 0. Para 'BOTH' usamos el slot 0
-    // (entrada) y el slot 1 (salida) como dos áreas separadas en el
-    // mismo punto — sin tocar el slot 0 tal cual venía para el caso
-    // normal (IN u OUT solos), que sigue exactamente igual que antes.
+    // funcionando es justo el slot 0.
+    //
+    // [ACTUALIZADO 14/07/2026] CONFIRMADO ROTO, con evidencia dura de
+    // logs reales: mandamos "FENCE,ON,1,lat,lon,radio,OUT,0#" tres
+    // veces en una sesión real, y las TRES el equipo contestó
+    // literalmente "Error: Parameter 6!" (parámetro 6 = el campo
+    // IN/OUT). El manual solo documenta un ejemplo con "IN", nunca con
+    // "OUT" — este firmware puntual del VL04 no acepta ese valor tal
+    // cual, así que dejamos de mandarlo (ya no tiene sentido gastar un
+    // comando que sabemos que va a fallar y puede dejar el equipo en
+    // un estado raro). 'BOTH' en VL04 por ahora es, en los hechos,
+    // solo 'IN' — se lo decimos claro a quien llama para que no
+    // muestre un "listo" falso. Si en algún momento el fabricante
+    // confirma el valor correcto para "salida" en este firmware,
+    // volvemos a mandar el segundo comando con ese valor.
     if (mode === 'BOTH') {
         const cmdIn = `FENCE,ON,0,${lat},${lng},${radiusM},IN,0#`;
-        const cmdOut = `FENCE,ON,1,${lat},${lng},${radiusM},OUT,0#`;
         const inPkt = buildCommandPacket(cmdIn);
-        const outPkt = buildCommandPacket(cmdOut);
         socket.write(inPkt.packet);
-        socket.write(outPkt.packet);
-        console.log(`[GT06] ➡️  Geocerca BOTH enviada a IMEI=${imei} como 2 comandos: "${cmdIn}" y "${cmdOut}" (SIN CONFIRMAR contra cruce real)`);
-        return { sent: true, correlationId: `${inPkt.correlationId},${outPkt.correlationId}` };
+        console.log(`[GT06] ➡️  Geocerca BOTH pedida para IMEI=${imei}, pero en este equipo solo se manda IN (OUT confirmado roto — "Error: Parameter 6!"): "${cmdIn}"`);
+        return {
+            sent: true,
+            correlationId: inPkt.correlationId,
+            warning: 'Este equipo (VL04) rechaza la alarma de SALIDA de geocerca ("Error: Parameter 6!" confirmado con el fabricante pendiente) — quedó configurada solo la alarma de ENTRADA.',
+        };
+    }
+    if (mode === 'OUT') {
+        console.warn(`[GT06] ⚠️  Geocerca modo OUT pedida para IMEI=${imei} — este firmware VL04 la rechaza ("Error: Parameter 6!" confirmado). Se manda igual por si el equipo/firmware cambió, pero no va a funcionar hasta confirmar el valor correcto con el fabricante.`);
     }
 
     const command = `FENCE,ON,0,${lat},${lng},${radiusM},${mode},0#`;
@@ -657,6 +740,19 @@ function startGt06Server() {
                             if (!device) {
                                 console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixLookup}`);
                             } else {
+                                // [NUEVO 14/07/2026] Guardamos la posición ANTERIOR
+                                // conocida ANTES de que ingestReading la pise con la
+                                // nueva — la necesitamos para resolveGeofenceCrossing
+                                // (saber si "antes" estaba adentro o afuera de cada
+                                // geocerca). Si el bit de geocerca no vino prendido en
+                                // este paquete puntual, ni siquiera hace falta esta
+                                // consulta extra — la pedimos solo cuando importa.
+                                let prevLat = null, prevLng = null;
+                                if (loc.geofenceEvent && device.vehicle_id) {
+                                    const [[prevPos]] = await pool.query('SELECT lat, lng FROM Vehicles WHERE id = ?', [device.vehicle_id]);
+                                    if (prevPos) { prevLat = parseFloat(prevPos.lat); prevLng = parseFloat(prevPos.lng); }
+                                }
+
                                 await telemetryIngestReal.ingestReading(device.imei, {
                                     lat: loc.lat,
                                     lng: loc.lon,
@@ -682,6 +778,18 @@ function startGt06Server() {
                                     // ensuciar ningún dato que el cliente vea.
                                     dtc_codes: null,
                                 });
+
+                                // Recién acá, con la posición nueva YA guardada,
+                                // resolvemos si ese "algo pasó con una geocerca"
+                                // (bit 20) fue una entrada o una salida, y de cuál.
+                                if (loc.geofenceEvent && device.vehicle_id) {
+                                    console.log(`[JT808] 🚧 Bit de geocerca (Alarm flag bit20) prendido, IMEI=${device.imei} — resolviendo contra geometría guardada`);
+                                    try {
+                                        await resolveGeofenceCrossing(device.vehicle_id, device.imei, prevLat, prevLng, loc.lat, loc.lon);
+                                    } catch (err) {
+                                        console.error('[JT808] Error resolviendo cruce de geocerca:', err.message);
+                                    }
+                                }
                             }
                         }
                     } else if (header.msgId === 0x0900) {
