@@ -143,15 +143,55 @@ const ALARM_CODES = {
     0x32: { label: 'device_unplugged', desc: 'Equipo desconectado de la alimentación' },
     // [SIN CONFIRMAR — 13/07/2026] Apareció una sola vez, justo después de
     // un ciclo real device_unplugged(0x32) -> reconexión de alimentación.
-    // Hipótesis por orden temporal: "alimentación restaurada / equipo
-    // reconectado". NO está en el manual Concox que decodificamos ni en
-    // el diccionario de Flespi — no hay fuente que lo respalde, solo la
-    // secuencia observada UNA vez. Falta ver si se repite consistente en
-    // la próxima desconexión/reconexión antes de confiar en esto.
-    0x72: { label: 'power_restored_unconfirmed', desc: 'Alimentación restaurada / equipo reconectado (SIN CONFIRMAR)' },
+    // [ACTUALIZADO 14/07/2026] CONFIRMADO por segunda vez con otro
+    // ciclo real device_unplugged(0x32)/power_cut(0x02) -> reconexión
+    // (prueba de Mauro desconectando y reconectando el equipo a
+    // propósito) — el mismo patrón temporal se repitió: corte de
+    // energía real, seguido de este código 0x72 al reconectar. Sigue
+    // sin estar en el manual Concox oficial ni en el diccionario de
+    // Flespi, pero con dos ocurrencias reales e independientes
+    // mostrando el mismo patrón, la confianza en esta interpretación
+    // subió bastante — aun así lo dejamos marcado como no oficial.
+    0x72: { label: 'power_restored_unconfirmed', desc: 'Alimentación restaurada / equipo reconectado (confirmado 2 veces, no está en el manual oficial)' },
     0xFE: { label: 'acc_on', desc: 'ACC encendido' },
     0xFF: { label: 'acc_off', desc: 'ACC apagado' },
 };
+
+// ============================================================
+// [NUEVO 14/07/2026] Correlación de manipulación — confirmado con un
+// caso real (Mauro desconectó y reconectó el equipo a propósito para
+// una prueba): en la ventana de ese manoseo físico, el equipo mandó
+// VARIAS alarmas de "colisión" (0x2C) que obviamente no eran choques
+// reales — eran el golpeteo normal de desenchufar/enchufar el
+// conector. Sin esto, el cliente vería "¡Colisión detectada!" varias
+// veces seguidas por algo que fue simplemente una desconexión de
+// mantenimiento.
+//
+// Guardamos el timestamp del último power_cut(0x02)/device_unplugged
+// (0x32) por IMEI en memoria (no hace falta persistirlo — es una
+// ventana de correlación corta, no un historial). Si un código de
+// "golpe" (colisión, aceleración/giro brusco, vibración) llega dentro
+// de los TAMPER_WINDOW_MS siguientes, se re-etiqueta como
+// "manipulación probable" en vez de la alarma original.
+//
+// TAMPER_WINDOW_MS en 90s: confirmado con el caso real, las alarmas
+// de golpe espurias aparecieron entre 0 y ~50s después del power_cut.
+// No es una ciencia exacta — si en el futuro aparecen falsos negativos
+// (colisiones reales que quedan mal re-etiquetadas porque coincidieron
+// con una desconexión) o falsos positivos (golpes de manipulación
+// fuera de esta ventana), este valor es el primer lugar para ajustar.
+// ============================================================
+const TAMPER_WINDOW_MS = 90 * 1000;
+const lastPowerEventByImei = new Map();
+
+function registerPowerEvent(imei) {
+    lastPowerEventByImei.set(imei, Date.now());
+}
+
+function isLikelyTamperShock(imei) {
+    const lastEvent = lastPowerEventByImei.get(imei);
+    return lastEvent != null && (Date.now() - lastEvent) <= TAMPER_WINDOW_MS;
+}
 
 // Paquete de Alarma GT06 (protocolo 0x26 = geocerca única, 0x27 =
 // multi-geocerca — ver manual Concox). Reusa el mismo bloque de
@@ -1141,15 +1181,39 @@ function startGt06Server() {
                             const known = ALARM_CODES[parsed.alarmCode];
                             if (known) {
                                 const fenceSuffix = hasFenceByte && parsed.fenceNo != null ? ` (geocerca #${parsed.fenceNo + 1})` : '';
-                                console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${known.label} (0x${parsed.alarmCode.toString(16)}) ${known.desc}${fenceSuffix}`);
+
+                                // [NUEVO 14/07/2026] Correlación de manipulación —
+                                // confirmado con un caso real: al desconectar y
+                                // reconectar el equipo (Mauro, prueba real), el
+                                // manoseo físico dispara varias alarmas de
+                                // "colisión"/vibración/giro brusco FALSAS en la
+                                // misma ventana que el corte de energía real. Si
+                                // una de estas llega poco después de un
+                                // power_cut(0x02) o device_unplugged(0x32),
+                                // la re-etiquetamos como manipulación en vez de
+                                // asustar al cliente con una "colisión" que nunca
+                                // pasó. Ver registerPowerEvent()/isLikelyTamperShock()
+                                // más abajo.
+                                const shockCodes = new Set([0x2C, 0x29, 0x2A, 0x2B, 0x03]); // colisión, aceleración/giro/vibración bruscos
+                                const isTamperShock = shockCodes.has(parsed.alarmCode) && isLikelyTamperShock(currentImei);
+                                const effectiveLabel = isTamperShock ? 'tamper_suspected_shock' : known.label;
+                                const effectiveDesc = isTamperShock
+                                    ? `Posible manipulación del equipo (golpe/vibración justo después de un corte de energía — no se cuenta como choque real)`
+                                    : known.desc + fenceSuffix;
+
+                                if (parsed.alarmCode === 0x02 || parsed.alarmCode === 0x32) {
+                                    registerPowerEvent(currentImei);
+                                }
+
+                                console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${effectiveLabel} (0x${parsed.alarmCode.toString(16)}) ${effectiveDesc}${isTamperShock ? ' [reclasificado, original: ' + known.label + ']' : ''}`);
 
                                 // ACC ON/OFF ya se sigue por el heartbeat 0x13 —
                                 // no lo duplicamos como fila en Telemetry_Alarms.
                                 if (parsed.alarmCode !== 0xFE && parsed.alarmCode !== 0xFF) {
                                     await telemetryIngestReal.ingestAlarm(currentImei, {
                                         id: parsed.alarmCode,
-                                        label: known.label,
-                                        desc: known.desc + fenceSuffix,
+                                        label: effectiveLabel,
+                                        desc: effectiveDesc,
                                     }, { lat: parsed.lat, lon: parsed.lon });
                                 }
                             } else {
