@@ -96,4 +96,27 @@ async function sendParamsCommand(imei, params) {
     }
 }
 
-module.exports = { sendCommandToDevice, sendFenceCommand, sendParamsCommand };
+async function sendQueryParamsCommand(imei, paramIds) {
+    if (!INTERNAL_URL) {
+        return { sent: false, reason: 'Falta configurar GT06_INTERNAL_URL en las variables de entorno de este servicio.' };
+    }
+    try {
+        const res = await fetch(`${INTERNAL_URL}/internal/send-query-params`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(INTERNAL_SECRET ? { 'x-internal-secret': INTERNAL_SECRET } : {}),
+            },
+            body: JSON.stringify({ imei, paramIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            return { sent: false, reason: data.error || `El servicio gt06-standalone respondió ${res.status}` };
+        }
+        return data;
+    } catch (err) {
+        return { sent: false, reason: `No se pudo contactar al servicio gt06-standalone (${INTERNAL_URL}): ${err.message}` };
+    }
+}
+
+module.exports = { sendCommandToDevice, sendFenceCommand, sendParamsCommand, sendQueryParamsCommand };

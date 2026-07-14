@@ -621,6 +621,38 @@ async function sendParamsCommand(imei, params) {
     }
 }
 
+// [NUEVO 14/07/2026] Consulta de parámetros — SOLO VL502 (JT808 0x8106,
+// "Query parameter of specific terminal"). A diferencia de
+// sendParamsCommand (que CONFIGURA), esto solo LEE lo que el equipo
+// tiene guardado ahora mismo — para diagnosticar sin arriesgarse a
+// cambiar nada. La respuesta real llega por 0x0104, ver el handler
+// más arriba en el switch de mensajes JT808, que actualiza CommandLog
+// con los valores reales apenas contesta el equipo.
+async function sendQueryParamsCommand(imei, paramIds) {
+    const socket = activeSockets.get(imei);
+    if (!socket || socket.destroyed) {
+        return {
+            sent: false,
+            reason: `IMEI ${imei} no tiene una conexión TCP activa en este momento (equipo apagado o sin señal)`,
+        };
+    }
+
+    const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
+    if (!device || device.model !== 'VL502') {
+        return { sent: false, reason: 'La consulta de parámetros por 0x8106 solo aplica a equipos VL502 (JT808) — el VL04 no tiene un equivalente confirmado todavía.' };
+    }
+
+    try {
+        const { packet, correlationId } = jt808.buildQueryTerminalParams(imei, paramIds);
+        socket.write(packet);
+        const idsText = paramIds.map(id => `0x${id.toString(16).toUpperCase()}`).join(', ');
+        console.log(`[JT808] ➡️  Consulta de parámetros (0x8106) enviada a IMEI=${imei} (correlationId=${correlationId}): ${idsText}`);
+        return { sent: true, correlationId, protocol: '0x8106 (JT808 Query parameter of specific terminal)' };
+    } catch (err) {
+        return { sent: false, reason: err.message };
+    }
+}
+
 // Extrae el primer frame completo del buffer acumulado, si ya llegó
 // entero. Devuelve null si hay que esperar más datos.
 function extractFrame(buf) {
@@ -985,6 +1017,42 @@ function startGt06Server() {
                             if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog:', err.message);
                         }
 
+                    } else if (header.msgId === 0x0104) {
+                        // [NUEVO 14/07/2026] Respuesta a 0x8106 (Query parameter
+                        // of specific terminal) — Tabla 14 del manual. Nunca se
+                        // había leído esta respuesta; sin esto, sendQueryParams
+                        // mandaba la consulta pero no había forma de ver qué
+                        // contestó el equipo salvo mirando el hex crudo a mano.
+                        const responseSeqNum = header.body.readUInt16BE(0);
+                        const numParams = header.body[2];
+                        let offset = 3;
+                        const params = [];
+                        for (let i = 0; i < numParams && offset + 3 <= header.body.length; i++) {
+                            const paramId = header.body.readUInt16BE(offset);
+                            const paramLen = header.body[offset + 2];
+                            offset += 3;
+                            if (offset + paramLen > header.body.length) break;
+                            let value;
+                            if (paramLen === 1) value = header.body.readUInt8(offset);
+                            else if (paramLen === 2) value = header.body.readUInt16BE(offset);
+                            else if (paramLen === 4) value = header.body.readUInt32BE(offset);
+                            else value = header.body.slice(offset, offset + paramLen).toString('hex');
+                            offset += paramLen;
+                            params.push({ paramId, value });
+                        }
+                        const paramsText = params.map(p => `0x${p.paramId.toString(16).toUpperCase()}=${p.value}`).join(', ') || '(sin parámetros en la respuesta)';
+                        const correlationId = `jt808-${responseSeqNum}`;
+                        console.log(`[JT808] ⬅️  Respuesta a consulta de parámetros ID=${terminalIdHex} (correlationId=${correlationId}): ${paramsText}`);
+                        try {
+                            await pool.query(
+                                `UPDATE CommandLog SET status = 'acked', response_text = ?, responded_at = NOW()
+                                 WHERE correlation_id = ? AND status = 'sent'`,
+                                [paramsText, correlationId]
+                            );
+                        } catch (err) {
+                            if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog (consulta de parámetros):', err.message);
+                        }
+
                     } else {
                         console.log(`[JT808] Mensaje no manejado todavía, ID=0x${header.msgId.toString(16)} ID_terminal=${terminalIdHex} body=${header.body.toString('hex')}`);
                     }
@@ -1343,6 +1411,34 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     const secret = process.env.GT06_INTERNAL_SECRET || '';
 
     const server = http.createServer((req, res) => {
+        if (req.method === 'POST' && req.url === '/internal/send-query-params') {
+            if (secret && req.headers['x-internal-secret'] !== secret) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No autorizado' }));
+                return;
+            }
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const { imei, paramIds } = JSON.parse(body || '{}');
+                    if (!imei || !Array.isArray(paramIds) || paramIds.length === 0) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Faltan imei o paramIds (array) en el body' }));
+                        return;
+                    }
+                    const result = await sendQueryParamsCommand(imei, paramIds);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (err) {
+                    console.error('[GT06 internal API] Error en send-query-params:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Error interno enviando la consulta de parámetros' }));
+                }
+            });
+            return;
+        }
+
         if (req.method === 'POST' && req.url === '/internal/send-params') {
             if (secret && req.headers['x-internal-secret'] !== secret) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1438,4 +1534,4 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     return server;
 }
 
-module.exports = { startGt06Server, sendCommandToDevice, sendFenceCommand, sendParamsCommand, startInternalCommandApi };
+module.exports = { startGt06Server, sendCommandToDevice, sendFenceCommand, sendParamsCommand, sendQueryParamsCommand, startInternalCommandApi };

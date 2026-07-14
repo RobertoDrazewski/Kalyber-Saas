@@ -129,6 +129,30 @@ function ParamsPanelVL502({ imei, onSent }) {
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
 
+    // [NUEVO 14/07/2026] Consulta de umbrales de manejo (0x8106) — solo
+    // LEE, no cambia nada. Pedido puntual: el Focus manejó 46 minutos
+    // reales y nunca mandó una sola alarma de frenada/giro/colisión —
+    // esto sirve para ver si los umbrales están en un valor que nunca
+    // se alcanza manejando normal.
+    const [queryingThresholds, setQueryingThresholds] = useState(false);
+    const [thresholdsError, setThresholdsError] = useState('');
+    const [thresholdsNotice, setThresholdsNotice] = useState('');
+
+    async function queryThresholds() {
+        setQueryingThresholds(true);
+        setThresholdsError('');
+        setThresholdsNotice('');
+        try {
+            const res = await fetchAPI(`/devices/${imei}/query-driving-thresholds`, { method: 'POST' });
+            setThresholdsNotice(res.message);
+            onSent();
+        } catch (err) {
+            setThresholdsError(err.message);
+        } finally {
+            setQueryingThresholds(false);
+        }
+    }
+
     async function send() {
         const params = {};
         if (reportIntervalSec !== '') params.reportIntervalSec = Number(reportIntervalSec);
@@ -200,6 +224,30 @@ function ParamsPanelVL502({ imei, onSent }) {
             >
                 <Send size={15} /> {sending ? 'Enviando...' : 'Enviar configuración'}
             </button>
+
+            {/* [NUEVO 14/07/2026] Consulta de umbrales de manejo — separado
+                del form de arriba a propósito: esto NO configura nada,
+                solo pregunta. Ver nota en devicesController.js. */}
+            <div className="pt-4 mt-4 border-t border-slate-800 space-y-3">
+                <p className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Radio size={15} className="text-amber-400" /> Umbrales de frenada/giro/aceleración brusca (JT808 0x8106)
+                </p>
+                <p className="text-[11px] text-slate-500">
+                    Solo consulta lo que el equipo tiene guardado ahora mismo — no cambia nada. Útil si las alarmas de manejo nunca aparecen: puede ser que el umbral esté configurado demasiado alto.
+                </p>
+                <ErrorBanner message={thresholdsError} />
+                {thresholdsNotice && <div className="bg-amber-500/10 border border-amber-500/40 text-amber-300 p-2.5 rounded-lg text-xs">{thresholdsNotice}</div>}
+                <button
+                    onClick={queryThresholds}
+                    disabled={queryingThresholds}
+                    className="w-full bg-transparent border border-amber-500/50 hover:bg-amber-500/10 text-amber-400 text-sm font-bold py-2.5 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    <Send size={15} /> {queryingThresholds ? 'Consultando...' : 'Consultar umbrales reales del equipo'}
+                </button>
+                <p className="text-[11px] text-slate-600">
+                    La respuesta real (con los valores) aparece en el "Historial de comandos" de abajo en unos segundos, no acá arriba.
+                </p>
+            </div>
         </div>
     );
 }

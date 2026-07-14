@@ -373,6 +373,56 @@ const sendDeviceParams = async (req, res) => {
     }
 };
 
+// ============================================================
+// [NUEVO 14/07/2026] Consulta de umbrales de manejo — SOLO VL502
+// (0x8106). Pedido puntual: el Ford Focus manejó ~46 minutos reales
+// con giros/frenadas/arranques y JAMÁS mandó un solo paquete de
+// alarma de manejo (subtipo 0x03) — ni frenada brusca, ni giro
+// brusco, ni colisión propia del acelerómetro. Esto consulta los
+// umbrales reales que tiene guardado el equipo ahora mismo, para
+// saber si están configurados en un valor que nunca se alcanza
+// manejando normal, sin arriesgarse a cambiar nada (0x8106 solo LEE,
+// no escribe — a diferencia de sendDeviceParams que sí configura).
+const DRIVING_THRESHOLD_PARAM_IDS = [0xF20B, 0xF20C, 0xF20D, 0xF016, 0xF017];
+const sendDeviceQueryDrivingThresholds = async (req, res) => {
+    const { imei } = req.params;
+    try {
+        const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.model !== 'VL502') {
+            return res.status(400).json({ error: 'La consulta de umbrales de manejo (0x8106) solo aplica a VL502 — el VL04 no tiene un equivalente confirmado todavía.' });
+        }
+
+        const result = await gt06Internal.sendQueryParamsCommand(imei, DRIVING_THRESHOLD_PARAM_IDS);
+        const commandLabel = `QUERY_PARAMS(0x8106): 0xF20B (accel), 0xF20C (frenada), 0xF20D (giro), 0xF016/0xF017 (comunicación OBD)`;
+
+        if (!result.sent) {
+            await pool.query(
+                `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+                 VALUES (?, ?, ?, ?, 'failed', ?)`,
+                [device.id, imei, commandLabel, `failed-${Date.now()}`, req.user.id]
+            ).catch(() => {});
+            return res.status(409).json({ error: result.reason });
+        }
+
+        await pool.query(
+            `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+             VALUES (?, ?, ?, ?, 'sent', ?)`,
+            [device.id, imei, commandLabel, result.correlationId, req.user.id]
+        ).catch(err => {
+            if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+        });
+
+        res.json({
+            message: `Consulta enviada a IMEI ${imei}. Mirá el historial de comandos en unos segundos — cuando conteste, vas a ver los valores reales de cada umbral en la respuesta.`,
+            correlation_id: result.correlationId,
+        });
+    } catch (error) {
+        console.error('❌ Error consultando umbrales de manejo:', error);
+        res.status(500).json({ error: 'Error consultando los umbrales de manejo' });
+    }
+};
+
 // [NUEVO] Historial de comandos mandados a un equipo puntual, con su
 // estado real (sent = esperando respuesta, acked = el equipo
 // confirmó, failed = no se pudo mandar). El panel hace polling de
@@ -395,4 +445,4 @@ const getDeviceCommandLog = async (req, res) => {
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, getDeviceCommandLog };
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, getDeviceCommandLog };
