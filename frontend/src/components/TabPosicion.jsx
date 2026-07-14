@@ -1,11 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair } from 'lucide-react';
+import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair, Pencil } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
+import { forwardFillSeries } from '../utils/chartFill';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -111,6 +112,9 @@ export default function TabPosicion() {
   const [fenceError, setFenceError] = useState('');
   const [fenceNotice, setFenceNotice] = useState(''); // aviso benigno (guardado pero sin sync), no es un error real
   const [resyncingId, setResyncingId] = useState(null);
+  // [NUEVO 14/07/2026] Edición de geocercas ya creadas — antes solo se
+  // podían crear o borrar, no editar nombre/radio/modo.
+  const [editingFenceId, setEditingFenceId] = useState(null);
 
   const load = () => fetchAPI('/vehicles').then(setVehicles).catch(err => setLoadError(err.message));
 
@@ -135,7 +139,27 @@ export default function TabPosicion() {
     setPendingCenter(null);
     setFenceError('');
     setFenceNotice('');
+    setEditingFenceId(null);
   }, [selected?.id]);
+
+  function startEditFence(f) {
+    setEditingFenceId(f.id);
+    setPendingCenter([Number(f.lat), Number(f.lng)]);
+    setFenceName(f.name || '');
+    setFenceRadius(f.radius_m);
+    setFenceMode(f.mode);
+    setPlacingFence(false);
+    setFenceError('');
+    setFenceNotice('');
+  }
+
+  function cancelFenceForm() {
+    setPendingCenter(null);
+    setFenceName('');
+    setFenceRadius(150);
+    setFenceMode('OUT');
+    setEditingFenceId(null);
+  }
 
   async function confirmFence() {
     if (!selected || !pendingCenter) return;
@@ -143,21 +167,30 @@ export default function TabPosicion() {
     setFenceError('');
     setFenceNotice('');
     try {
-      const res = await fetchAPI('/geofences', {
-        method: 'POST',
-        body: JSON.stringify({
-          vehicle_id: selected.id,
-          name: fenceName || null,
-          lat: pendingCenter[0],
-          lng: pendingCenter[1],
-          radius_m: fenceRadius,
-          mode: fenceMode,
-        }),
-      });
-      setPendingCenter(null);
+      const res = editingFenceId
+        ? await fetchAPI(`/geofences/${editingFenceId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              name: fenceName || null,
+              lat: pendingCenter[0],
+              lng: pendingCenter[1],
+              radius_m: fenceRadius,
+              mode: fenceMode,
+            }),
+          })
+        : await fetchAPI('/geofences', {
+            method: 'POST',
+            body: JSON.stringify({
+              vehicle_id: selected.id,
+              name: fenceName || null,
+              lat: pendingCenter[0],
+              lng: pendingCenter[1],
+              radius_m: fenceRadius,
+              mode: fenceMode,
+            }),
+          });
+      cancelFenceForm();
       setPlacingFence(false);
-      setFenceName('');
-      setFenceRadius(150);
       // Se guardó bien en los dos casos — esto NO es un error, es un
       // aviso: si el equipo estaba offline, avisamos que hay que
       // reintentar el envío (hay botón para eso en la lista de abajo),
@@ -265,6 +298,16 @@ export default function TabPosicion() {
 
   const tripSegments = segmentTripsForDisplay(series);
 
+  // FIX: este useMemo estaba antes metido directo adentro del JSX del
+  // gráfico (dentro de un bloque "{selected && (...)}"), lo que viola
+  // las Reglas de los Hooks — un hook no puede llamarse condicionalmente,
+  // porque React cuenta los hooks en el orden en que se ejecutan en cada
+  // render, y ese bloque no siempre se ejecuta. Eso tiraba "Rendered more
+  // hooks than during the previous render" apenas se deseleccionaba un
+  // auto. Ahora se calcula acá arriba, sin condición, y el JSX de abajo
+  // solo lo referencia.
+  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm']), [series]);
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-white">Mapa en Tiempo Real</h2>
@@ -316,8 +359,8 @@ export default function TabPosicion() {
                 center={[Number(f.lat), Number(f.lng)]}
                 radius={f.radius_m}
                 pathOptions={{
-                  color: f.mode === 'OUT' ? '#F59E0B' : '#6366F1',
-                  fillColor: f.mode === 'OUT' ? '#F59E0B' : '#6366F1',
+                  color: f.mode === 'OUT' ? '#F59E0B' : f.mode === 'BOTH' ? '#EC4899' : '#6366F1',
+                  fillColor: f.mode === 'OUT' ? '#F59E0B' : f.mode === 'BOTH' ? '#EC4899' : '#6366F1',
                   fillOpacity: 0.12,
                   weight: 2,
                   dashArray: f.device_synced ? undefined : '6 6', // punteado = todavía no confirmamos que llegó al equipo
@@ -326,7 +369,7 @@ export default function TabPosicion() {
                 <Popup>
                   <div className="text-black text-xs space-y-1">
                     <p className="font-bold">{f.name || `Geocerca #${f.id}`}</p>
-                    <p>Radio: {f.radius_m}m · Modo: {f.mode === 'OUT' ? 'Avisa si sale' : 'Avisa si entra'}</p>
+                    <p>Radio: {f.radius_m}m · Modo: {f.mode === 'OUT' ? 'Avisa si sale' : f.mode === 'BOTH' ? 'Avisa si entra o sale' : 'Avisa si entra'}</p>
                     <p>{f.device_synced ? '✅ Comando enviado al equipo' : '⚠️ Sin confirmar en el equipo'}</p>
                     <button onClick={() => removeFence(f.id)} className="text-red-600 font-semibold underline mt-1">Borrar</button>
                   </div>
@@ -436,7 +479,7 @@ export default function TabPosicion() {
 
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series}>
+              <LineChart data={chartSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="recorded_at" tickFormatter={t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} stroke="#64748b" fontSize={11} />
                 <YAxis yAxisId="left" stroke="#10B981" fontSize={11} domain={[0, 200]} allowDataOverflow={false} />
@@ -444,7 +487,7 @@ export default function TabPosicion() {
                 <Tooltip contentStyle={{ background: '#0B1120', border: '1px solid #334155', borderRadius: 8 }} labelFormatter={t => new Date(t).toLocaleTimeString('es-AR')} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={false} />
+                <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={true} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -476,11 +519,12 @@ export default function TabPosicion() {
               <p className="text-xs text-slate-500 mb-2">Hacé click en el mapa de arriba para elegir el centro. <button onClick={() => setPlacingFence(false)} className="text-slate-400 underline">Cancelar</button></p>
             )}
 
-            {/* Form de confirmación, aparece apenas se elige un punto en el mapa */}
+            {/* Form de confirmación, aparece apenas se elige un punto en el mapa (o al editar una geocerca existente) */}
             {pendingCenter && (
               <div className="bg-[#0B1120] border border-[#10B981]/30 rounded-xl p-4 mb-3 space-y-3">
-                <p className="text-xs text-slate-400">
-                  Centro elegido: <span className="font-mono text-slate-300">{pendingCenter[0].toFixed(6)}, {pendingCenter[1].toFixed(6)}</span>
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  {editingFenceId && <Pencil size={11} className="text-[#818CF8]" />}
+                  {editingFenceId ? 'Editando geocerca — c' : 'C'}entro: <span className="font-mono text-slate-300">{pendingCenter[0].toFixed(6)}, {pendingCenter[1].toFixed(6)}</span>
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -513,6 +557,7 @@ export default function TabPosicion() {
                   >
                     <option value="OUT">Sale del área (ej: se movió de donde lo dejé)</option>
                     <option value="IN">Entra al área (ej: llegó a destino)</option>
+                    <option value="BOTH">Entra Y sale del área (avisa las dos veces)</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -521,10 +566,10 @@ export default function TabPosicion() {
                     disabled={savingFence || !fenceRadius}
                     className="flex-1 bg-[#10B981] hover:bg-[#0ea371] text-white text-sm font-bold py-2 rounded-lg disabled:opacity-50"
                   >
-                    {savingFence ? 'Guardando...' : 'Guardar y enviar al equipo'}
+                    {savingFence ? 'Guardando...' : editingFenceId ? 'Guardar cambios y reenviar al equipo' : 'Guardar y enviar al equipo'}
                   </button>
                   <button
-                    onClick={() => { setPendingCenter(null); setFenceName(''); }}
+                    onClick={cancelFenceForm}
                     className="px-4 text-sm text-slate-400 hover:text-white"
                   >
                     Cancelar
@@ -543,7 +588,7 @@ export default function TabPosicion() {
                     <div className="min-w-0">
                       <p className="text-sm text-white font-medium truncate">{f.name || `Geocerca #${f.id}`}</p>
                       <p className="text-[11px] text-slate-500">
-                        {f.radius_m}m · {f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · {f.device_synced ? '✅ en el equipo' : '⚠️ sin confirmar'}
+                        {f.radius_m}m · {f.mode === 'BOTH' ? 'avisa al entrar y al salir' : f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · {f.device_synced ? '✅ en el equipo' : '⚠️ sin confirmar'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -556,7 +601,10 @@ export default function TabPosicion() {
                           {resyncingId === f.id ? 'Enviando...' : 'Reintentar'}
                         </button>
                       )}
-                      <button onClick={() => removeFence(f.id)} className="text-slate-500 hover:text-red-400">
+                      <button onClick={() => startEditFence(f)} className="text-slate-500 hover:text-[#818CF8]" title="Editar geocerca">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => removeFence(f.id)} className="text-slate-500 hover:text-red-400" title="Borrar geocerca">
                         <Trash2 size={16} />
                       </button>
                     </div>

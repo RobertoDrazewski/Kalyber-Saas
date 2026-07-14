@@ -212,6 +212,16 @@ function parseLocationReport(body) {
         .filter(([id]) => !idsConocidos.includes(Number(id)))
         .map(([id, value]) => `ID=0x${Number(id).toString(16)} valor=${value.toString('hex')}`);
 
+    // OJO 14/07/2026: "sinIdentificar" es SOLO para consola/diagnóstico
+    // interno (log de Railway) — es información adicional propietaria
+    // del fabricante fuera del estándar JT/T808 (ej. ID=0x2a/0xe4 que
+    // vienen en TODOS los paquetes de posición reales, siempre sin
+    // decodificar). NO ES un DTC ni un evento y no tiene que terminar
+    // en ningún campo que el cliente vea (antes se estaba guardando en
+    // dtc_codes de Telemetry_Raw con el prefijo "JT808_TLV:", que es
+    // exactamente lo que hacía que el histórico del cliente mostrara
+    // basura tipo "JT808_TLV:ID=0x2a valor=0000|ID=0xe4 valor=...".
+    // Ver gt06Server.js: ya no se pasa a ingestReading.
     return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
 }
 
@@ -630,16 +640,21 @@ function buildTextCommandPacket(imei, commandText) {
 // alarma de geocerca (0x21=salió / 0x22=entró, ver ALARM_IDS) en el
 // próximo 0x0900 subtipo 0x03. Recién ahí se puede confiar en esto.
 // ============================================================
-function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
+function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode, isEdit = false }) {
     const terminalId = imeiToTerminalId(imei);
 
-    const settingAttr = Buffer.from([0x00]); // 0 = actualizar (reemplaza cualquier área previa con este ID)
+    const settingAttr = Buffer.from([isEdit ? 0x02 : 0x00]); // 0=actualizar (crear/reemplazar) | 2=modificar (Tabla 55)
     const totalAreas = uint16be(1);
 
     const areaId = Buffer.alloc(4);
     areaId.writeUInt32BE(fenceId, 0);
 
-    const areaAttr = uint16be(mode === 'IN' ? 0x0008 : 0x0020); // bit3=alarma al entrar, bit5=alarma al salir
+    // bit3=alarma al entrar, bit5=alarma al salir (Tabla 57, confirmado
+    // contra el manual oficial VL502) — 'BOTH' prende los dos bits.
+    let areaAttrValue = 0x0000;
+    if (mode === 'IN' || mode === 'BOTH') areaAttrValue |= 0x0008;
+    if (mode === 'OUT' || mode === 'BOTH') areaAttrValue |= 0x0020;
+    const areaAttr = uint16be(areaAttrValue);
 
     const latBuf = Buffer.alloc(4);
     latBuf.writeUInt32BE(Math.round(Math.abs(lat) * 1_000_000), 0);
@@ -653,6 +668,33 @@ function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
     const serialNo = Math.floor(Math.random() * 0xFFFF);
     const packet = buildFrame(0x8600, terminalId, serialNo, body);
 
+    return { packet, correlationId: `jt808-${serialNo}` };
+}
+
+// ============================================================
+// [NUEVO 14/07/2026] Mensaje 0x8106 ("Query parameter of specific
+// terminal", Tabla 13) — para diagnosticar por qué el VL502 nunca
+// manda odómetro total (tag 0x0528) ni presión de aceite (tag
+// 0x053B): confirmado con logs reales que ESTOS DOS campos vienen
+// SIEMPRE null en el 0x0900F0, mientras que RPM/temp/batería/
+// combustible sí llegan bien. El offset y el tag están correctos
+// contra la Tabla 25 — no es un bug de parseo. Las dos causas
+// posibles: a) el parámetro 0xF016 (control de comunicación OBD)
+// está deshabilitado, o b) el auto de prueba no expone esos datos
+// por el CAN estándar (odómetro total y presión de aceite NO son
+// PIDs OBD-II estándar — dependen de que el VL502 haya hecho "CAN
+// learning" específico para ese modelo de auto). Mandar esto con
+// paramIds=[0xF016, 0xF017] y mirar la respuesta 0x0104: si están en
+// 0x01 (habilitado) y el dato sigue sin llegar, el problema es (b).
+// ============================================================
+function buildQueryTerminalParams(imei, paramIds) {
+    const terminalId = imeiToTerminalId(imei);
+    const body = Buffer.concat([
+        Buffer.from([paramIds.length]),
+        ...paramIds.map(id => uint16be(id)),
+    ]);
+    const serialNo = Math.floor(Math.random() * 0xFFFF);
+    const packet = buildFrame(0x8106, terminalId, serialNo, body);
     return { packet, correlationId: `jt808-${serialNo}` };
 }
 
@@ -737,6 +779,7 @@ module.exports = {
     buildTextCommandPacket,
     buildSetCircularFence,
     buildSetTerminalParams,
+    buildQueryTerminalParams,
     TERMINAL_PARAMS,
     imeiToTerminalId,
 };

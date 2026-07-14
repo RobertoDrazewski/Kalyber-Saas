@@ -22,6 +22,13 @@ const getVehicles = async (req, res) => {
         const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
+        // [14/07/2026] Antes esto tragaba el error real y solo devolvía
+        // un mensaje genérico — así fue mucho más difícil diagnosticar
+        // el 500 que rompió esta pantalla. Lo logueamos completo (sin
+        // cambiar la respuesta al cliente) para que la próxima vez que
+        // algo falle acá, aparezca en los logs de Railway al toque en
+        // vez de tener que reproducirlo a ciegas.
+        console.error('❌ Error en getVehicles:', error.message);
         res.status(500).json({ error: 'Error obteniendo flota' });
     }
 };

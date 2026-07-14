@@ -44,7 +44,7 @@ async function sendCommandToDevice(imei, command) {
     }
 }
 
-async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
+async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit = false }) {
     if (!INTERNAL_URL) {
         return {
             sent: false,
@@ -58,7 +58,7 @@ async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
                 'Content-Type': 'application/json',
                 ...(INTERNAL_SECRET ? { 'x-internal-secret': INTERNAL_SECRET } : {}),
             },
-            body: JSON.stringify({ imei, fenceId, lat, lng, radiusM, mode }),
+            body: JSON.stringify({ imei, fenceId, lat, lng, radiusM, mode, isEdit }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {

@@ -47,7 +47,10 @@ const createGeofence = async (req, res) => {
     if (!Number.isFinite(radiusNum) || radiusNum < 10 || radiusNum > 50000) {
         return res.status(400).json({ error: 'El radio tiene que ser un número entre 10 y 50000 metros' });
     }
-    const fenceMode = mode === 'IN' ? 'IN' : 'OUT';
+    // [NUEVO 14/07/2026] Ahora acepta 'BOTH' (avisa al entrar Y al
+    // salir), además de 'IN'/'OUT' — antes solo se podía elegir una de
+    // las dos por geocerca.
+    const fenceMode = ['IN', 'OUT', 'BOTH'].includes(mode) ? mode : 'OUT';
 
     try {
         if (!(await assertVehicleAccess(req, vehicle_id))) {
@@ -171,4 +174,70 @@ const resyncGeofence = async (req, res) => {
     }
 };
 
-module.exports = { getVehicleGeofences, createGeofence, deleteGeofence, resyncGeofence };
+// [NUEVO 14/07/2026] Edita una geocerca ya creada (nombre, radio,
+// modo y/o centro) y le vuelve a mandar el comando al equipo — para
+// VL502 con "atributo de configuración"=2 (modificar, Tabla 55) en
+// vez de 0 (crear), para VL04 simplemente reenvía FENCE,ON con el
+// mismo slot (ya pisa la config anterior, mismo mecanismo que crear).
+// Antes no existía forma de editar: había que borrar y crear de
+// nuevo, perdiendo el histórico de "device_synced" y el ID.
+const updateGeofence = async (req, res) => {
+    const { id } = req.params;
+    const { name, lat, lng, radius_m, mode } = req.body;
+
+    try {
+        const [[existing]] = await pool.query('SELECT * FROM Geofences WHERE id = ?', [id]);
+        if (!existing) return res.status(404).json({ error: 'Geocerca no encontrada' });
+        if (!(await assertVehicleAccess(req, existing.vehicle_id))) {
+            return res.status(403).json({ error: 'Esa geocerca no pertenece a tu flota' });
+        }
+
+        const newLat = lat != null ? lat : existing.lat;
+        const newLng = lng != null ? lng : existing.lng;
+        const newName = name !== undefined ? (name || null) : existing.name;
+
+        let newRadius = existing.radius_m;
+        if (radius_m != null) {
+            const radiusNum = parseInt(radius_m, 10);
+            if (!Number.isFinite(radiusNum) || radiusNum < 10 || radiusNum > 50000) {
+                return res.status(400).json({ error: 'El radio tiene que ser un número entre 10 y 50000 metros' });
+            }
+            newRadius = radiusNum;
+        }
+
+        const newMode = ['IN', 'OUT', 'BOTH'].includes(mode) ? mode : existing.mode;
+
+        await pool.query(
+            `UPDATE Geofences SET name = ?, lat = ?, lng = ?, radius_m = ?, mode = ?, device_synced = 0 WHERE id = ?`,
+            [newName, newLat, newLng, newRadius, newMode, id]
+        );
+
+        const [[device]] = await pool.query(
+            `SELECT d.imei, d.model FROM Devices d WHERE d.vehicle_id = ? AND d.status = 'paired'`,
+            [existing.vehicle_id]
+        );
+        if (!device) {
+            return res.json({ message: 'Geocerca editada en la base, pero ese vehículo no tiene un equipo GPS pareado para reenviar el comando.', device_synced: false });
+        }
+
+        const sendResult = await gt06Internal.sendFenceCommand(device.imei, {
+            fenceId: existing.id, lat: newLat, lng: newLng, radiusM: newRadius, mode: newMode, isEdit: true,
+        });
+
+        if (sendResult.sent) {
+            await pool.query('UPDATE Geofences SET device_synced = 1 WHERE id = ?', [id]);
+        }
+
+        res.json({
+            message: sendResult.sent
+                ? 'Geocerca editada y comando reenviado al equipo.'
+                : `Geocerca editada en la base, pero no se pudo reenviar el comando ahora mismo: ${sendResult.reason}.`,
+            device_synced: sendResult.sent,
+        });
+    } catch (error) {
+        console.error('❌ Error editando geocerca:', error);
+        res.status(500).json({ error: 'Error editando la geocerca' });
+    }
+};
+
+module.exports = { getVehicleGeofences, createGeofence, updateGeofence, deleteGeofence, resyncGeofence };

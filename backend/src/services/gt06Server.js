@@ -411,7 +411,23 @@ async function sendCommandToDevice(imei, commandText) {
 // JT808 0x8600 ("Set Circular Area") — el 0x8300 de texto NO configura
 // nada real, ver advertencia en jt808Handler.js. Todavía SIN CONFIRMAR
 // contra un cruce de geocerca real del lado VL502.
-async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
+//
+// [ACTUALIZADO 14/07/2026]
+//  - mode ahora acepta 'BOTH' (avisa al entrar Y al salir), además de
+//    'IN'/'OUT'. Para VL502 es un solo comando 0x8600 con los dos bits
+//    de la Tabla 57 prendidos (ver jt808Handler.js). El manual del
+//    VL04 (comandos AT tipo FENCE) SOLO documenta IN u OUT como valor
+//    de ese campo — no hay un tercer valor "BOTH" confirmado — así que
+//    para 'BOTH' en VL04 mandamos DOS comandos FENCE, uno con modo IN
+//    y otro con modo OUT, usando slots consecutivos (fenceId y
+//    fenceId+1) para que el equipo los trate como dos áreas separadas
+//    en el mismo punto. SIN CONFIRMAR contra un cruce real todavía —
+//    misma cautela que ya se usaba para el resto de geocercas VL04.
+//  - isEdit: si es true, VL502 manda "atributo de configuración" = 2
+//    (modificar, Tabla 55) en vez de 0 (crear/reemplazar). VL04 no
+//    tiene esa distinción en el comando de texto — reenviar FENCE,ON
+//    con el mismo índice ya pisa la config anterior.
+async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit = false }) {
     const socket = activeSockets.get(imei);
     if (!socket || socket.destroyed) {
         return {
@@ -423,17 +439,34 @@ async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
     const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
 
     if (device && device.model === 'VL502') {
-        const { packet, correlationId } = jt808.buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode });
+        const { packet, correlationId } = jt808.buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode, isEdit });
         socket.write(packet);
-        console.log(`[JT808] ➡️  Geocerca (0x8600) enviada a IMEI=${imei} (correlationId=${correlationId}): centro=${lat},${lng} radio=${radiusM}m modo=${mode}`);
+        console.log(`[JT808] ➡️  Geocerca (0x8600, ${isEdit ? 'modificar' : 'crear'}) enviada a IMEI=${imei} (correlationId=${correlationId}): centro=${lat},${lng} radio=${radiusM}m modo=${mode}`);
         return { sent: true, correlationId, protocol: '0x8600 (JT808 Set Circular Area) — SIN CONFIRMAR contra prueba real todavía' };
     }
 
-    // VL04: mismo comando de texto que ya está confirmado funcionando.
+    // VL04: mismo comando de texto que ya está confirmado funcionando
+    // — el "0" es el ÍNDICE DE SLOT del comando FENCE (no el id de
+    // nuestra base, que puede ser cualquier número), y el confirmado
+    // funcionando es justo el slot 0. Para 'BOTH' usamos el slot 0
+    // (entrada) y el slot 1 (salida) como dos áreas separadas en el
+    // mismo punto — sin tocar el slot 0 tal cual venía para el caso
+    // normal (IN u OUT solos), que sigue exactamente igual que antes.
+    if (mode === 'BOTH') {
+        const cmdIn = `FENCE,ON,0,${lat},${lng},${radiusM},IN,0#`;
+        const cmdOut = `FENCE,ON,1,${lat},${lng},${radiusM},OUT,0#`;
+        const inPkt = buildCommandPacket(cmdIn);
+        const outPkt = buildCommandPacket(cmdOut);
+        socket.write(inPkt.packet);
+        socket.write(outPkt.packet);
+        console.log(`[GT06] ➡️  Geocerca BOTH enviada a IMEI=${imei} como 2 comandos: "${cmdIn}" y "${cmdOut}" (SIN CONFIRMAR contra cruce real)`);
+        return { sent: true, correlationId: `${inPkt.correlationId},${outPkt.correlationId}` };
+    }
+
     const command = `FENCE,ON,0,${lat},${lng},${radiusM},${mode},0#`;
     const { packet, correlationId } = buildCommandPacket(command);
     socket.write(packet);
-    console.log(`[GT06] ➡️  Geocerca enviada a IMEI=${imei} (correlationId=${correlationId}): "${command}"`);
+    console.log(`[GT06] ➡️  Geocerca ${isEdit ? '(edición) ' : ''}enviada a IMEI=${imei} (correlationId=${correlationId}): "${command}"`);
     return { sent: true, correlationId };
 }
 
@@ -634,7 +667,20 @@ function startGt06Server() {
                                     coolant_temp: null,
                                     battery_voltage: null,
                                     harsh_brake: false,
-                                    dtc_codes: loc.sinIdentificar.length ? `JT808_TLV:${loc.sinIdentificar.join('|')}` : null,
+                                    // FIX 14/07/2026: acá antes se guardaba
+                                    // `JT808_TLV:ID=0x2a valor=...|ID=0xe4 valor=...`
+                                    // en dtc_codes — información adicional
+                                    // PROPIETARIA sin decodificar del reporte
+                                    // de posición (NO es un DTC ni un evento),
+                                    // y terminaba apareciendo tal cual en las
+                                    // tablas de diagnóstico. dtc_codes ahora
+                                    // solo se usa para eventos con nombre real
+                                    // (ALARM:..., ver más abajo); lo sin
+                                    // identificar sigue viendo la luz en el log
+                                    // de consola de arriba (loc.sinIdentificar)
+                                    // para seguir investigando qué es, sin
+                                    // ensuciar ningún dato que el cliente vea.
+                                    dtc_codes: null,
                                 });
                             }
                         }
@@ -901,9 +947,16 @@ function startGt06Server() {
                         const tailInfo = decodeLbsExtendedTail(content);
 
                         // El resto de los bytes sigue sin identificar (fuera de LBS
-                        // + ACC + odómetro, ya confirmados) — se guarda crudo por si
-                        // sirve para seguir investigando, sin atribuirle significado.
+                        // + ACC + odómetro, ya confirmados) — se loguea crudo para
+                        // seguir investigando qué es, SIN guardarlo en dtc_codes
+                        // (FIX 14/07/2026 — antes esto aparecía como
+                        // "RAW_TAIL:..." en las tablas de diagnóstico del cliente,
+                        // mismo problema que el JT808_TLV de más arriba: bytes sin
+                        // decodificar no son un evento ni un DTC real).
                         const tailHex = content.length > 16 ? content.slice(16).toString('hex') : null;
+                        if (tailHex) {
+                            console.log(`[GT06] 0x37 cola sin identificar IMEI=${currentImei}: ${tailHex}`);
+                        }
 
                         // Odómetro real del equipo — ver accumulateDeviceOdometer().
                         const deviceOdometerKm = tailInfo
@@ -920,7 +973,7 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
-                            dtc_codes: tailHex ? `RAW_TAIL:${tailHex}` : null,
+                            dtc_codes: null,
                             acc_signal: tailInfo ? tailInfo.accOn : null,
                             device_odometer_km: deviceOdometerKm,
                         });
@@ -1116,13 +1169,13 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
             req.on('data', chunk => { body += chunk; });
             req.on('end', async () => {
                 try {
-                    const { imei, fenceId, lat, lng, radiusM, mode } = JSON.parse(body || '{}');
+                    const { imei, fenceId, lat, lng, radiusM, mode, isEdit } = JSON.parse(body || '{}');
                     if (!imei || fenceId == null || lat == null || lng == null || !radiusM) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: 'Faltan imei, fenceId, lat, lng o radiusM en el body' }));
                         return;
                     }
-                    const result = await sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode });
+                    const result = await sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit: !!isEdit });
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify(result));
                 } catch (err) {

@@ -1,22 +1,37 @@
+// ============================================================
+// FIX 14/07/2026 — BUG PREEXISTENTE (no introducido por los cambios
+// de hoy, pero encontrado a partir del reporte "mis conductores
+// desaparecieron del panel aunque siguen en la base").
+//
+// Este archivo era, byte a byte, casi una copia de deviceRoutes.js:
+// montaba '/api/drivers' pero enrutaba TODO a devicesController
+// (addDevice, getDevices, pairDevice, updateDevice, deleteDevice...)
+// en vez de a driversController (getDrivers, updateDriver,
+// deleteDriver), que ya existía en el proyecto pero nunca estuvo
+// conectado a ninguna ruta real.
+//
+// Efecto real: GET /api/drivers devolvía filas de la tabla Devices
+// (equipos GPS) con esa forma (imei, model, vehicle_id...) en vez de
+// filas de Drivers (full_name, dni, license_number...). El front
+// (TabConductores.jsx, y el selector de "asignar conductor" de
+// TabFlota.jsx) esperaba d.id/d.full_name — con la forma equivocada,
+// esos campos venían undefined, así que la lista se veía vacía o con
+// entradas en blanco, aunque los conductores seguían intactos en la
+// tabla Drivers (por eso aparecían bien haciendo SELECT directo a la
+// base, pero no en el panel).
+// ============================================================
 const express = require('express');
 const router = express.Router();
-const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, getDeviceCommandLog } = require('../controllers/devicesController');
+const { getDrivers, updateDriver, deleteDriver } = require('../controllers/driversController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 
-router.get('/', verifyToken, requireRole('super_admin', 'admin'), getDevices);
-// Alta de equipos por IMEI: SOLO super_admin (Puma Code programa los
-// equipos y les da el ID listo). El admin cliente nunca da de alta,
-// solo pares (ver /pair).
-router.post('/', verifyToken, requireRole('super_admin'), addDevice);
-router.post('/pair', verifyToken, requireRole('super_admin', 'admin'), pairDevice);
-router.delete('/:imei/pair', verifyToken, requireRole('super_admin', 'admin'), unpairDevice);
-router.get('/:id/raw', verifyToken, requireRole('super_admin', 'admin'), getDeviceRawData);
-router.patch('/:id', verifyToken, requireRole('super_admin', 'admin'), updateDevice);
-router.delete('/:id', verifyToken, requireRole('super_admin'), deleteDevice);
-// [NUEVO 13/07/2026] Enviar comando crudo al equipo (AT command sobre
-// TCP, protocolo 0x80) — SOLO super_admin. Ver nota en devicesController.js.
-router.post('/:imei/command', verifyToken, requireRole('super_admin'), sendDeviceCommand);
-router.get('/:imei/commands', verifyToken, requireRole('super_admin'), getDeviceCommandLog);
+// Alta de choferes: por diseño NO se hace acá (ver nota en
+// driversController.js) — se hace desde Usuarios
+// (usersController.createUser con role='driver'). Esta ruta solo
+// lista, edita y borra.
+router.get('/', verifyToken, requireRole('super_admin', 'admin'), getDrivers);
+router.patch('/:id', verifyToken, requireRole('super_admin', 'admin'), updateDriver);
+router.delete('/:id', verifyToken, requireRole('super_admin', 'admin'), deleteDriver);
 
 module.exports = router;

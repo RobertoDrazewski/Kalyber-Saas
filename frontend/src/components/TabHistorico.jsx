@@ -3,8 +3,9 @@ import { fetchAPI } from '../services/api';
 import { MapContainer, TileLayer, Polyline, Marker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { History, Clock, MapPin, Gauge, X, RefreshCw } from 'lucide-react';
+import { History, Clock, MapPin, Gauge, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
+import { getEventIcon } from '../utils/eventIcons';
 
 const dotIcon = (color) => L.divIcon({
   className: '',
@@ -35,6 +36,10 @@ export default function TabHistorico() {
   const [reconstructing, setReconstructing] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [tripTrail, setTripTrail] = useState([]);
+  // [NUEVO 14/07/2026] Eventos/alarmas reales del tramo del viaje
+  // seleccionado, con ícono por tipo — antes la bitácora del cliente
+  // no mostraba ningún evento, solo distancia/duración/velocidad.
+  const [tripEvents, setTripEvents] = useState([]);
 
   const load = () => fetchAPI('/trips').then(setTrips).catch(err => setLoadError(err.message));
 
@@ -71,6 +76,25 @@ export default function TabHistorico() {
         setTripTrail(points);
       })
       .catch(() => setTripTrail([]));
+  }, [selectedTrip]);
+
+  // Eventos/alarmas reales dentro de la ventana del viaje — mismo
+  // endpoint que ya usa TabTelemetria (/telemetry/vehicle/:id/alarms),
+  // filtrado acá por tiempo para mostrar solo lo que pasó DURANTE ese
+  // viaje puntual, no todo el histórico del auto.
+  useEffect(() => {
+    if (!selectedTrip) { setTripEvents([]); return; }
+    fetchAPI(`/telemetry/vehicle/${selectedTrip.vehicle_id}/alarms?limit=200`)
+      .then(rows => {
+        const start = new Date(selectedTrip.start_time).getTime();
+        const end = new Date(selectedTrip.end_time || Date.now()).getTime();
+        const inWindow = rows.filter(a => {
+          const t = new Date(a.recorded_at).getTime();
+          return t >= start - 60000 && t <= end + 60000;
+        });
+        setTripEvents(inWindow);
+      })
+      .catch(() => setTripEvents([]));
   }, [selectedTrip]);
 
   const filteredTrips = useMemo(() => {
@@ -214,6 +238,31 @@ export default function TabHistorico() {
                 <p className="text-white font-bold">{selectedTrip.max_speed_kmh ?? '—'}</p>
                 <p className="text-[11px] text-slate-500">km/h máx.</p>
               </div>
+            </div>
+
+            {/* Eventos del tramo — con ícono por tipo, para que el
+                cliente entienda de un vistazo qué pasó en el viaje sin
+                tener que descifrar códigos crudos. */}
+            <div className="p-4 border-t border-slate-800">
+              <p className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-amber-400" /> Eventos de este viaje
+              </p>
+              {tripEvents.length === 0 ? (
+                <p className="text-slate-600 text-xs">Sin eventos registrados en este tramo.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {tripEvents.map(ev => {
+                    const { Icon, cls } = getEventIcon(ev);
+                    return (
+                      <div key={ev.id} className="flex items-center gap-2 text-xs text-slate-300">
+                        <Icon size={13} className={`shrink-0 ${cls}`} />
+                        <span className="truncate">{ev.label}</span>
+                        <span className="text-slate-600 ml-auto shrink-0">{formatTime(ev.recorded_at)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

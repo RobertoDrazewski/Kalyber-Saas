@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ErrorBanner from './ErrorBanner';
+import { getEventIcon, AccIcon } from '../utils/eventIcons';
+import { forwardFillSeries } from '../utils/chartFill';
 
 const AVANZADO = 'VL502';
 
@@ -157,10 +159,11 @@ function AlarmTimeline({ alarms }) {
     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
       {alarms.map(a => {
         const sev = severityColor(a);
+        const { Icon, cls } = getEventIcon(a);
         return (
           <div key={a.id} className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${sev.cls}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${sev.dot}`}></span>
+              <Icon size={14} className={`shrink-0 ${cls}`} />
               <span className="text-sm font-medium truncate">{a.label}</span>
             </div>
             <span className="text-[11px] shrink-0 opacity-80">{fmtHora(a.recorded_at)}</span>
@@ -205,6 +208,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
   ) || {};
   const statusFlags = parseStatusFlags(vehicle.last_status_flags) || parseStatusFlags(lastObd.status_flags) || parseStatusFlags(last.status_flags);
   const hasRpmData = series.some(s => s.engine_rpm != null);
+  // FIX 14/07/2026: ver utils/chartFill.js — sostiene el último RPM
+  // real conocido en vez de dejar el hueco que partía la línea del
+  // gráfico ("saltos, no se ve completo").
+  const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm']), [series]);
 
   return (
     <div className="space-y-6">
@@ -251,7 +258,7 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           <p className="text-sm text-slate-400 mb-3">RPM y velocidad — últimas lecturas</p>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series}>
+              <LineChart data={chartSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="recorded_at" tickFormatter={t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} stroke="#64748b" fontSize={11} />
                 <YAxis yAxisId="left" stroke="#10B981" fontSize={11} domain={[0, 200]} allowDataOverflow={false} />
@@ -259,7 +266,7 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
                 <Tooltip contentStyle={{ background: '#0B1120', border: '1px solid #334155', borderRadius: 8 }} labelFormatter={t => new Date(t).toLocaleTimeString('es-AR')} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Line yAxisId="left" type="monotone" dataKey="speed_kmh" name="Velocidad (km/h)" stroke="#10B981" dot={false} strokeWidth={2} />
-                {hasRpmData && <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={false} />}
+                {hasRpmData && <Line yAxisId="right" type="monotone" dataKey="engine_rpm" name="RPM" stroke="#6366F1" dot={false} strokeWidth={2} connectNulls={true} />}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -307,12 +314,22 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
                 return (
                   <div key={d.id} className="px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-400">Sistema {d.system_id}</span>
+                      <span className="text-slate-400 flex items-center gap-1.5"><ShieldAlert size={12} className="text-red-400" /> Sistema 0x{Number(d.system_id).toString(16).padStart(8, '0')}</span>
                       <span className="text-slate-500">{fmtHora(d.recorded_at)}</span>
                     </div>
+                    {/* NOTA: el manual del VL502 dice que cada código de 16
+                        bytes sigue "la definición de Trouble Codes del ARM
+                        Interface Protocol" pero no publica esa estructura
+                        interna acá — mostrar esto como si fuera un DTC tipo
+                        P0301 sería inventar un decodificado sin confirmarlo
+                        contra una falla real. Se muestra agrupado en bytes
+                        (más legible que un bloque de hex pegado) hasta que
+                        aparezca la primera falla real de la ECU para cruzarlo. */}
                     <div className="flex flex-wrap gap-1.5">
                       {codes.map((c, i) => (
-                        <span key={i} className="font-mono text-[11px] text-red-300 bg-red-500/10 px-2 py-0.5 rounded">{c}</span>
+                        <span key={i} className="font-mono text-[11px] text-red-300 bg-red-500/10 px-2 py-0.5 rounded tracking-wider">
+                          {String(c).match(/.{1,2}/g)?.join(' ') || c}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -447,7 +464,19 @@ export default function TabTelemetria() {
 
   const load = () => fetchAPI('/telemetry/live').then(rows => {
     setData(rows);
-    if (!selectedId && rows.length > 0) setSelectedId(rows[0].vehicle_id);
+    // FIX 14/07/2026: acá antes se chequeaba "if (!selectedId && ...)"
+    // usando el "selectedId" del cierre (closure) de este mismo
+    // useEffect con deps=[] — ese cierre se crea UNA sola vez al
+    // montar el componente y queda con selectedId="null" PARA SIEMPRE,
+    // sin importar que el usuario haya clickeado un plan después. Como
+    // resultado, cada 8s (el intervalo de abajo) la condición volvía a
+    // evaluar "null" como si nunca se hubiera elegido nada, y pisaba
+    // la selección del usuario con rows[0].vehicle_id — eso era
+    // exactamente el bug de "elijo un plan y a los pocos segundos
+    // salta solo al otro". El setState funcional (prev => ...) lee el
+    // estado ACTUAL de React en el momento en que corre, no el que
+    // había cuando se creó el cierre, así que ya no se resetea solo.
+    setSelectedId(prev => prev ?? (rows.length > 0 ? rows[0].vehicle_id : null));
   }).catch(err => setLoadError(err.message));
 
   useEffect(() => {
