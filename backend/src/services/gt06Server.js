@@ -827,6 +827,13 @@ function startGt06Server() {
                                         label: 'device_reconnected',
                                         desc: 'Conexión restablecida con el equipo',
                                     });
+                                    // [FIX 16/07/2026] Faltaba este log — el
+                                    // bloque de arriba ya andaba bien (el
+                                    // evento se guardaba en Telemetry_Alarms),
+                                    // pero como nunca imprimía nada acá,
+                                    // parecía en los logs crudos que nunca se
+                                    // había disparado.
+                                    console.log(`[JT808] 🔌 Reconexión detectada y guardada, IMEI=${currentImei}`);
                                 } catch (err) {
                                     console.error('[JT808] Error guardando evento de reconexión:', err.message);
                                 }
@@ -1559,6 +1566,11 @@ function startGt06Server() {
                     id: 0xF2, // uso interno nuestro (0xF2) — mismo criterio que 0xF1 arriba
                     label: 'device_disconnected',
                     desc: 'Se perdió la conexión con el equipo',
+                }).then(() => {
+                    // [FIX 16/07/2026] Mismo motivo que en el bloque de
+                    // reconexión — sin esto, quedaba invisible en los logs
+                    // crudos aunque se guardara bien.
+                    console.log(`[JT808] 🔌 Desconexión detectada y guardada, IMEI=${currentImei}`);
                 }).catch(err => console.error('[GT06] Error guardando evento de desconexión:', err.message));
             }
         });
