@@ -15,10 +15,24 @@
 import {
   AlertOctagon, Gauge, CornerDownRight, MapPinOff, MapPin, LogIn, LogOut,
   BatteryWarning, Unplug, ShieldAlert, DoorOpen, Fuel, Siren, Zap, X,
-  Wind, RadioTower, HelpCircle,
+  Wind, RadioTower, HelpCircle, PlugZap, WifiOff,
 } from 'lucide-react';
 
 const RULES = [
+  // [NUEVO 14/07/2026] Contacto ON/OFF como evento puntual — antes
+  // caía al ícono por defecto (triángulo de alerta), que asusta sin
+  // motivo para algo tan normal como prender el motor. Van ANTES que
+  // la regla de colisión/etc a propósito, para no pisarlos por
+  // coincidencia de palabras en la descripción.
+  { keys: ['acc_on', 'contacto encendido'], Icon: Zap, cls: 'text-[#10B981]' },
+  { keys: ['acc_off', 'contacto apagado'], Icon: X, cls: 'text-slate-400' },
+  // [NUEVO 14/07/2026] Conexión del equipo perdida/restablecida — VL502
+  // (ver gt06Server.js, detección propia por TCP, no depende del
+  // equipo). "Reconectado" tiene que ir ANTES que "desconectado" en la
+  // lista de reglas de abajo porque si no, "se reconectó después de
+  // estar desconectado" matchearía la palabra "desconectado" primero.
+  { keys: ['reconect', 'conexión restablecida'], Icon: PlugZap, cls: 'text-[#10B981]' },
+  { keys: ['conexión perdida', 'se desconectó', 'sin conexión'], Icon: WifiOff, cls: 'text-red-400' },
   { keys: ['collision', 'colisi'], Icon: AlertOctagon, cls: 'text-red-400' },
   { keys: ['vuelco', 'rollover'], Icon: AlertOctagon, cls: 'text-red-400' },
   { keys: ['sos', 'emergencia'], Icon: Siren, cls: 'text-red-400' },

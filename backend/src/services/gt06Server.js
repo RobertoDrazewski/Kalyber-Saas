@@ -96,12 +96,30 @@ function parseComboGpsBlock(content) {
     // Offset 16-17 del 0x37/0x26 — es el campo estándar GT06 de "curso + banderas de estado" (rumbo 0-360° en los 10 bits bajos)
     const courseStatusInt = content.readUInt16BE(16);
     const course = courseStatusInt & 0x03FF;
-    
+
+    // [NUEVO 14/07/2026] CONFIRMADO contra el manual (JM-VL03, sección
+    // "Status and course details"): BYTE_1 bit4 = "Positioned or Not"
+    // (1 = el GPS tiene fix real, 0 = no). Como leemos los 2 bytes como
+    // un entero de 16 bits big-endian, BYTE_1 es el byte alto, así que
+    // ese bit queda en la posición 12 del entero completo (8+4). Hasta
+    // ahora este bit se leía y se tiraba — nunca se usaba para nada, lo
+    // que dejaba pasar posiciones SIN fix real (el equipo puede mandar
+    // una estimación por antena celular en esos casos, que puede estar
+    // a cientos de metros o kilómetros de la posición real) como si
+    // fueran una lectura de GPS válida. Eso es lo que causaba las
+    // líneas rectas absurdas en el trazo del mapa que reportó el
+    // cliente — cada vez que el equipo se reiniciaba (por el cable
+    // suelto) y tardaba en recuperar el fix de GPS, mandaba una
+    // posición estimada rarísima que se guardaba y dibujaba en el
+    // trazo como si fuera real.
+    const gpsFixed = !!(courseStatusInt & 0x1000);
+
     return {
         lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
         lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
         speed_kmh: content[15] ?? 0,
         course: course,
+        gpsFixed,
     };
 }
 
@@ -746,6 +764,7 @@ function startGt06Server() {
     const server = net.createServer((socket) => {
         let buffer = Buffer.alloc(0);
         let currentImei = null;
+        let currentDeviceModel = null;
         const remote = `${socket.remoteAddress}:${socket.remotePort}`;
         console.log(`[GT06] Conexión nueva desde ${remote}`);
 
@@ -767,12 +786,38 @@ function startGt06Server() {
                     // [NUEVO] Registrar el socket activo para poder mandarle comandos al VL502
                     if (!currentImei) {
                         const [[dbDevice]] = await pool.query(
-                            `SELECT imei FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
+                            `SELECT imei, model FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
                             [`${imeiPrefix}%`]
                         );
                         if (dbDevice) {
                             currentImei = dbDevice.imei;
+                            currentDeviceModel = dbDevice.model;
                             activeSockets.set(currentImei, socket);
+                            // [NUEVO 14/07/2026] Evento de reconexión — SOLO
+                            // para VL502. El VL04 reconecta seguido como
+                            // parte de su operación normal (confirmado en
+                            // logs reales, cada pocos minutos aunque no pase
+                            // nada raro), así que loguear esto para VL04
+                            // llenaría "Eventos de manejo" de ruido sin
+                            // valor — para eso ya tiene sus propias alarmas
+                            // de corte/reconexión de energía (0x02/0x32/0x72,
+                            // más significativas porque las reporta el
+                            // equipo mismo). El VL502 en cambio no tiene
+                            // ningún equivalente propio (confirmado con
+                            // evidencia real, ver conversación), así que acá
+                            // sí aporta: es la única forma que tenemos de
+                            // saber que el equipo estuvo offline.
+                            if (dbDevice.model === 'VL502') {
+                                try {
+                                    await telemetryIngestReal.ingestAlarm(currentImei, {
+                                        id: 0xF1, // uso interno nuestro (0xF1) — no es un código real del protocolo JT808, elegido bajo 256 por las dudas de que la columna alarm_id sea TINYINT
+                                        label: 'device_reconnected',
+                                        desc: 'Conexión restablecida con el equipo',
+                                    });
+                                } catch (err) {
+                                    console.error('[JT808] Error guardando evento de reconexión:', err.message);
+                                }
+                            }
                         }
                     } else if (currentImei && !activeSockets.has(currentImei)) {
                         activeSockets.set(currentImei, socket);
@@ -1179,9 +1224,18 @@ function startGt06Server() {
                             ? await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter)
                             : null;
 
+                        // [NUEVO 14/07/2026] Mismo criterio que en el
+                        // handler de 0x26/0x27 — ver esa nota completa. Acá
+                        // es donde más importaba el fix, porque el 0x37 es
+                        // el paquete que más seguido manda el equipo (cada
+                        // posición normal de manejo), así que era la fuente
+                        // principal de las líneas rectas absurdas en el
+                        // trazo del mapa después de cada reinicio.
+                        const gpsUsable = gps && gps.gpsFixed;
+
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: gps?.lat ?? null,
-                            lng: gps?.lon ?? null,
+                            lat: gpsUsable ? gps.lat : null,
+                            lng: gpsUsable ? gps.lon : null,
                             speed_kmh: gps?.speed_kmh ?? null,
                             heading: gps?.course ?? null,
                             engine_rpm: null,
@@ -1194,7 +1248,9 @@ function startGt06Server() {
                             device_odometer_km: deviceOdometerKm,
                         });
 
-                        if (gps) {
+                        if (gps && !gps.gpsFixed) {
+                            console.log(`[GT06] ⚠️  Posición (0x37) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);
+                        } else if (gps) {
                             console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
 
                             if (tailInfo) {
@@ -1232,9 +1288,22 @@ function startGt06Server() {
                         // antes (mismo INSERT, misma forma), solo que ahora
                         // harsh_brake se completa con el código real en vez de
                         // ir siempre en false.
+                        //
+                        // [NUEVO 14/07/2026] Si el GPS no tiene fix real
+                        // (parsed.gpsFixed=false, confirmado contra el
+                        // manual — bit 4 del primer byte de "curso+estado"),
+                        // NO guardamos lat/lng — el equipo puede estar
+                        // mandando una estimación por antena celular en vez
+                        // de una posición real, y eso es justo lo que
+                        // generaba las líneas rectas absurdas en el trazo
+                        // del mapa después de cada reinicio del equipo. La
+                        // velocidad/rumbo tampoco son confiables sin fix,
+                        // pero los dejamos pasar igual porque no afectan el
+                        // trazo del mapa — lo único que rompía la vista era
+                        // la posición.
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: parsed.lat,
-                            lng: parsed.lon,
+                            lat: parsed.gpsFixed ? parsed.lat : null,
+                            lng: parsed.gpsFixed ? parsed.lon : null,
                             speed_kmh: parsed.speed_kmh,
                             heading: parsed.course,
                             engine_rpm: null,
@@ -1243,7 +1312,11 @@ function startGt06Server() {
                             battery_voltage: null,
                             harsh_brake: parsed.alarmCode === 0x30,
                         });
-                        console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
+                        if (parsed.gpsFixed) {
+                            console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
+                        } else {
+                            console.log(`[GT06] ⚠️  Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);
+                        }
 
                         if (parsed.alarmCode != null && parsed.alarmCode !== 0x00) {
                             const known = ALARM_CODES[parsed.alarmCode];
@@ -1376,6 +1449,15 @@ function startGt06Server() {
         socket.on('close', () => {
             if (currentImei && activeSockets.get(currentImei) === socket) activeSockets.delete(currentImei);
             console.log(`[GT06] Conexión cerrada: ${remote} (IMEI=${currentImei || 'desconocido'})`);
+            // [NUEVO 14/07/2026] Ver nota completa donde se loguea el
+            // evento de reconexión, arriba — mismo criterio, solo VL502.
+            if (currentImei && currentDeviceModel === 'VL502') {
+                telemetryIngestReal.ingestAlarm(currentImei, {
+                    id: 0xF2, // uso interno nuestro (0xF2) — mismo criterio que 0xF1 arriba
+                    label: 'device_disconnected',
+                    desc: 'Se perdió la conexión con el equipo',
+                }).catch(err => console.error('[GT06] Error guardando evento de desconexión:', err.message));
+            }
         });
     });
 

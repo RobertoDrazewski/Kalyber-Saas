@@ -5,6 +5,18 @@
 const pool = require('../config/database');
 const mlService = require('./mlService');
 
+// [NUEVO 14/07/2026] Eventos puntuales de contacto ON/OFF — pedido
+// puntual: además del ícono de estado actual (que ya andaba), el
+// cliente quiere VER el encendido/apagado como evento en la lista de
+// "Eventos de manejo", con hora y lugar. Antes el ACC solo se guardaba
+// como el campo continuo acc_signal en cada lectura de Telemetry_Raw,
+// nunca como una fila en Telemetry_Alarms. Guardamos acá (en memoria,
+// mismo proceso que gt06Server.js) el último valor conocido por IMEI
+// para detectar el CAMBIO — no queremos un evento cada 10 segundos,
+// solo cuando de verdad pasó de ON a OFF o viceversa. Funciona para
+// los dos equipos porque los dos pasan por ingestReading().
+const lastAccByImei = new Map();
+
 function haversineKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -31,6 +43,26 @@ async function ingestReading(imei, reading) {
     }
 
     const statusFlagsJson = reading.statusFlags ? JSON.stringify(reading.statusFlags) : null;
+
+    // Detección de cambio de contacto — ver nota de lastAccByImei más
+    // arriba. Se hace ANTES del insert de Telemetry_Raw a propósito,
+    // sin bloquear ese insert si esto llegara a fallar por cualquier
+    // motivo (try/catch propio, no se lleva puesta la lectura real).
+    if (reading.acc_signal != null) {
+        const prevAcc = lastAccByImei.get(imei);
+        if (prevAcc !== undefined && prevAcc !== reading.acc_signal) {
+            try {
+                await ingestAlarm(imei, {
+                    id: reading.acc_signal ? 0xFE : 0xFF,
+                    label: reading.acc_signal ? 'acc_on' : 'acc_off',
+                    desc: reading.acc_signal ? 'Contacto encendido' : 'Contacto apagado',
+                }, { lat: reading.lat, lon: reading.lng });
+            } catch (err) {
+                console.error(`[telemetryIngestReal] Error guardando evento de contacto (IMEI ${imei}):`, err.message);
+            }
+        }
+        lastAccByImei.set(imei, reading.acc_signal);
+    }
 
     // 1. Insert en Telemetry_Raw (funciona OK)
     await pool.query(
