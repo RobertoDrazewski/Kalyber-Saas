@@ -907,6 +907,19 @@ function startGt06Server() {
                                     coolant_temp: null,
                                     battery_voltage: null,
                                     harsh_brake: false,
+                                    // [FIX 16/07/2026] Faltaba esto — sin
+                                    // pasarlo, la detección de cambio de
+                                    // contacto (lastAccByImei en
+                                    // telemetryIngestReal.js) nunca recibía
+                                    // el valor real, así que NUNCA se disparó
+                                    // ni un solo evento de "Contacto
+                                    // encendido/apagado" para el VL502,
+                                    // aunque el dato ACC=ON/OFF sí llegaba
+                                    // bien (se veía correcto en el log de
+                                    // consola de la línea de abajo, que lee
+                                    // loc.accOn directo — el problema era
+                                    // solo que no viajaba hasta acá).
+                                    acc_signal: loc.accOn,
                                     // FIX 14/07/2026: acá antes se guardaba
                                     // `JT808_TLV:ID=0x2a valor=...|ID=0xe4 valor=...`
                                     // en dtc_codes — información adicional
@@ -1419,6 +1432,12 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: parsed.alarmCode === 0x30,
+                            // [FIX 16/07/2026] Mismo problema que se encontró
+                            // y arregló en el handler del VL502 — faltaba
+                            // pasar esto para que la detección de cambio de
+                            // contacto funcione también en los paquetes de
+                            // alarma (0x26/0x27), no solo en el 0x37.
+                            acc_signal: parsed.accOn,
                         });
                         if (!parsed.gpsFixed) {
                             console.log(`[GT06] ⚠️  Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);

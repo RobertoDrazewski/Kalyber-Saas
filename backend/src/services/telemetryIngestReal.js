@@ -57,6 +57,10 @@ async function ingestReading(imei, reading) {
                     label: reading.acc_signal ? 'acc_on' : 'acc_off',
                     desc: reading.acc_signal ? 'Contacto encendido' : 'Contacto apagado',
                 }, { lat: reading.lat, lon: reading.lng });
+                // [FIX 16/07/2026] Mismo motivo que el fix de reconexión en
+                // gt06Server.js — sin esto, quedaba invisible en los logs
+                // crudos aunque se guardara bien.
+                console.log(`[telemetryIngestReal] 🔑 Contacto ${reading.acc_signal ? 'ENCENDIDO' : 'APAGADO'} detectado y guardado (IMEI ${imei})`);
             } catch (err) {
                 console.error(`[telemetryIngestReal] Error guardando evento de contacto (IMEI ${imei}):`, err.message);
             }
