@@ -1227,6 +1227,20 @@ function startGt06Server() {
                             continue;
                         }
 
+                        // --- NUEVO: UNIFICACIÓN DE DETECCIÓN DE PAQUETE VIEJO ---
+                        let packetAgeSec = null;
+                        if (content.length >= 6) {
+                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
+                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
+                        }
+                        
+                        const STALE_THRESHOLD_SEC = 90;
+                        if (packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC) {
+                            console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada por completo (odómetro y posición) — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar)`);
+                            continue; // Salimos antes de procesar posición u odómetro
+                        }
+                        // --------------------------------------------------------
+
                         const gps = parseComboGpsBlock(content);
                         const tailInfo = decodeLbsExtendedTail(content);
 
@@ -1242,38 +1256,9 @@ function startGt06Server() {
                             console.log(`[GT06] 0x37 cola sin identificar IMEI=${currentImei}: ${tailHex}`);
                         }
 
-                        // [NUEVO 15/07/2026] BUG REAL encontrado: cada vez que el
-                        // equipo reconecta, reenvía una ráfaga de paquetes 0x37
-                        // VIEJOS guardados en su buffer interno (confirmado un
-                        // montón de veces en esta conversación — siempre el mismo
-                        // bloque de ~8 posiciones repetido en cada reconexión).
-                        // accumulateDeviceOdometer() actualizaba su base de
-                        // comparación con CADA paquete que le llegaba, viejo o
-                        // nuevo — así que cuando llegaba esa ráfaga vieja, la base
-                        // quedaba pisada con un valor de contador desactualizado.
-                        // Después, cuando llegaba el dato real y fresco, se
-                        // comparaba contra esa base corrompida y podía salir un
-                        // salto de odómetro enorme y falso (o, en el otro sentido,
-                        // perderse kilómetros reales sin sumar). Los primeros 6
-                        // bytes del paquete son la fecha real que el equipo dice
-                        // tener en ese momento (confirmado: año-2000, mes, día,
-                        // hora, minuto, segundo — todos como enteros, no BCD) —
-                        // la usamos para detectar si el paquete es viejo (ráfaga
-                        // de reconexión) o realmente reciente, y solo tocamos el
-                        // odómetro con paquetes recientes de verdad.
                         let deviceOdometerKm = null;
                         if (tailInfo) {
-                            let packetAgeSec = null;
-                            if (content.length >= 6) {
-                                const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
-                                if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
-                            }
-                            const STALE_THRESHOLD_SEC = 90;
-                            if (packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC) {
-                                console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada para el odómetro — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar, no dato en vivo)`);
-                            } else {
-                                deviceOdometerKm = await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter);
-                            }
+                            deviceOdometerKm = await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter);
                         }
 
                         // [NUEVO 14/07/2026] Mismo criterio que en el
@@ -1353,6 +1338,20 @@ function startGt06Server() {
                             console.warn(`[GT06] IMEI ${currentImei} no está pareado a ningún vehículo — se descarta el paquete`);
                             continue;
                         }
+
+                        // --- NUEVO: UNIFICACIÓN DE DETECCIÓN DE PAQUETE VIEJO (ALARMAS) ---
+                        let packetAgeSec = null;
+                        if (content.length >= 6) {
+                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
+                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
+                        }
+                        
+                        const STALE_THRESHOLD_SEC = 90;
+                        if (packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC) {
+                            console.log(`[GT06] ⏳ Alarma (0x${protocolNumber.toString(16)}) IMEI=${currentImei} descartada — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar)`);
+                            continue;
+                        }
+                        // --------------------------------------------------------
 
                         const hasFenceByte = protocolNumber === PROTOCOL.ALARM_MULTI_FENCE;
                         const parsed = parseAlarmPacket(content, hasFenceByte);
