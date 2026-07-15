@@ -1227,20 +1227,6 @@ function startGt06Server() {
                             continue;
                         }
 
-                        // --- NUEVO: UNIFICACIÓN DE DETECCIÓN DE PAQUETE VIEJO ---
-                        let packetAgeSec = null;
-                        if (content.length >= 6) {
-                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
-                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
-                        }
-                        
-                        const STALE_THRESHOLD_SEC = 90;
-                        if (packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC) {
-                            console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada por completo (odómetro y posición) — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar)`);
-                            continue; // Salimos antes de procesar posición u odómetro
-                        }
-                        // --------------------------------------------------------
-
                         const gps = parseComboGpsBlock(content);
                         const tailInfo = decodeLbsExtendedTail(content);
 
@@ -1256,19 +1242,57 @@ function startGt06Server() {
                             console.log(`[GT06] 0x37 cola sin identificar IMEI=${currentImei}: ${tailHex}`);
                         }
 
+                        // [NUEVO 15/07/2026] BUG REAL encontrado: cada vez que el
+                        // equipo reconecta, reenvía una ráfaga de paquetes 0x37
+                        // VIEJOS guardados en su buffer interno (confirmado un
+                        // montón de veces en esta conversación — siempre el mismo
+                        // bloque de ~8 posiciones repetido en cada reconexión, a
+                        // veces con hasta 18 HORAS de antigüedad real, confirmado
+                        // con un caso real de 65117 segundos). Los primeros 6
+                        // bytes del paquete son la fecha real que el equipo dice
+                        // tener en ese momento (confirmado: año-2000, mes, día,
+                        // hora, minuto, segundo — todos como enteros, no BCD) —
+                        // la usamos para detectar si el paquete es viejo (ráfaga
+                        // de reconexión) o realmente reciente.
+                        //
+                        // [ACTUALIZADO 15/07/2026] Al principio esto solo
+                        // protegía el odómetro — pero un caso real mostró que
+                        // un paquete de 18hs de antigüedad, con el bit de GPS
+                        // fijo en 1 (o sea, con una posición VÁLIDA pero VIEJA),
+                        // se seguía guardando igual como si fuera la posición
+                        // actual del auto. Es la MISMA causa de las líneas
+                        // rectas del mapa que el fix del bit "Positioned" —
+                        // solo que por otra vía: acá el GPS sí tenía fix, el
+                        // problema es que el dato es viejo, no en vivo. Ahora
+                        // "paquete viejo" descarta tanto el odómetro COMO la
+                        // posición/geocerca — un solo criterio para las dos
+                        // protecciones, evita que se desalineen entre sí.
+                        let packetAgeSec = null;
+                        if (content.length >= 6) {
+                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
+                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
+                        }
+                        const STALE_THRESHOLD_SEC = 90;
+                        const isStalePacket = packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC;
+
                         let deviceOdometerKm = null;
                         if (tailInfo) {
-                            deviceOdometerKm = await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter);
+                            if (isStalePacket) {
+                                console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada para el odómetro — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar, no dato en vivo)`);
+                            } else {
+                                deviceOdometerKm = await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter);
+                            }
                         }
 
-                        // [NUEVO 14/07/2026] Mismo criterio que en el
-                        // handler de 0x26/0x27 — ver esa nota completa. Acá
-                        // es donde más importaba el fix, porque el 0x37 es
-                        // el paquete que más seguido manda el equipo (cada
-                        // posición normal de manejo), así que era la fuente
-                        // principal de las líneas rectas absurdas en el
-                        // trazo del mapa después de cada reinicio.
-                        const gpsUsable = gps && gps.gpsFixed;
+                        // [ACTUALIZADO 15/07/2026] Mismo criterio que en el
+                        // handler de 0x26/0x27, ahora sumado a isStalePacket
+                        // (ver nota arriba) — un paquete solo cuenta como
+                        // posición real si el GPS tiene fix Y además el
+                        // paquete no es una ráfaga vieja de reconexión.
+                        const gpsUsable = gps && gps.gpsFixed && !isStalePacket;
+                        if (gps && gps.gpsFixed && isStalePacket) {
+                            console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada para el mapa/geocerca — mismo paquete viejo de ${Math.round(packetAgeSec)}s (GPS con fix, pero dato no es en vivo)`);
+                        }
 
                         // [NUEVO 15/07/2026] Detección de SALIDA de geocerca
                         // para el VL04 — reusando exactamente el mismo
@@ -1339,20 +1363,6 @@ function startGt06Server() {
                             continue;
                         }
 
-                        // --- NUEVO: UNIFICACIÓN DE DETECCIÓN DE PAQUETE VIEJO (ALARMAS) ---
-                        let packetAgeSec = null;
-                        if (content.length >= 6) {
-                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
-                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
-                        }
-                        
-                        const STALE_THRESHOLD_SEC = 90;
-                        if (packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC) {
-                            console.log(`[GT06] ⏳ Alarma (0x${protocolNumber.toString(16)}) IMEI=${currentImei} descartada — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar)`);
-                            continue;
-                        }
-                        // --------------------------------------------------------
-
                         const hasFenceByte = protocolNumber === PROTOCOL.ALARM_MULTI_FENCE;
                         const parsed = parseAlarmPacket(content, hasFenceByte);
                         if (!parsed) continue;
@@ -1374,9 +1384,22 @@ function startGt06Server() {
                         // pero los dejamos pasar igual porque no afectan el
                         // trazo del mapa — lo único que rompía la vista era
                         // la posición.
+                        // [NUEVO 15/07/2026] Mismo criterio unificado que en
+                        // el handler de 0x37 — ver esa nota completa. Un
+                        // paquete con fix de GPS pero con fecha vieja
+                        // (ráfaga de reconexión) tampoco cuenta como posición
+                        // real acá.
+                        let packetAgeSec = null;
+                        if (content.length >= 6) {
+                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
+                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
+                        }
+                        const isStalePacket = packetAgeSec !== null && packetAgeSec > 90;
+                        const posUsable = parsed.gpsFixed && !isStalePacket;
+
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: parsed.gpsFixed ? parsed.lat : null,
-                            lng: parsed.gpsFixed ? parsed.lon : null,
+                            lat: posUsable ? parsed.lat : null,
+                            lng: posUsable ? parsed.lon : null,
                             speed_kmh: parsed.speed_kmh,
                             heading: parsed.course,
                             engine_rpm: null,
@@ -1385,10 +1408,12 @@ function startGt06Server() {
                             battery_voltage: null,
                             harsh_brake: parsed.alarmCode === 0x30,
                         });
-                        if (parsed.gpsFixed) {
-                            console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
-                        } else {
+                        if (!parsed.gpsFixed) {
                             console.log(`[GT06] ⚠️  Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);
+                        } else if (isStalePacket) {
+                            console.log(`[GT06] ⏳ Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} descartada — paquete viejo de ${Math.round(packetAgeSec)}s (GPS con fix, pero dato no es en vivo)`);
+                        } else {
+                            console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
                         }
 
                         if (parsed.alarmCode != null && parsed.alarmCode !== 0x00) {
