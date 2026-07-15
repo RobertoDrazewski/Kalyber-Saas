@@ -367,7 +367,17 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat, curLng) {
+// [ACTUALIZADO 15/07/2026] Ahora también la usa el VL04, en modo
+// "solo salida" — ver parámetro onlyDirection abajo. El VL04 SÍ
+// detecta la entrada solo (alarm code 0x04, nativo del equipo,
+// confirmado funcionando), así que si dejáramos que esta función
+// también resolviera la entrada para el VL04, apareceria duplicada:
+// una vez por el alarm code nativo, otra vez por este cálculo
+// nuestro. onlyDirection='exit' hace que se ignore silenciosamente
+// cualquier transición de entrada, y solo se ocupe de la salida (que
+// es justo lo que al VL04 le falta, porque el equipo rechaza el
+// comando de salida — ver nota en geofencesController.js).
+async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat, curLng, onlyDirection = null) {
     if (curLat == null || curLng == null) return;
     const [fences] = await pool.query(
         `SELECT id, name, lat, lng, radius_m, mode FROM Geofences WHERE vehicle_id = ? AND active = 1`,
@@ -387,6 +397,9 @@ async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat
         if (isInsideNow === wasInsideBefore) continue; // no cruzó esta geocerca puntual
 
         const entered = isInsideNow && !wasInsideBefore;
+        if (onlyDirection === 'exit' && entered) continue; // VL04: la entrada ya la avisa el equipo mismo
+        if (onlyDirection === 'enter' && !entered) continue;
+
         const alertsForThisDirection = entered
             ? (fence.mode === 'IN' || fence.mode === 'BOTH')
             : (fence.mode === 'OUT' || fence.mode === 'BOTH');
@@ -394,7 +407,7 @@ async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat
 
         const fenceLabel = fence.name || `Geocerca #${fence.id}`;
         const label = entered ? `Entró a la geocerca: ${fenceLabel}` : `Salió de la geocerca: ${fenceLabel}`;
-        console.log(`[JT808] 🚧 ${label} — IMEI=${imei}`);
+        console.log(`[GT06/JT808] 🚧 ${label} — IMEI=${imei}`);
         await telemetryIngestReal.ingestAlarm(imei, {
             id: entered ? 0x22 : 0x21, // mismos IDs que ALARM_IDS de jt808Handler (0x21=salió, 0x22=entró)
             label,
@@ -1272,6 +1285,20 @@ function startGt06Server() {
                         // trazo del mapa después de cada reinicio.
                         const gpsUsable = gps && gps.gpsFixed;
 
+                        // [NUEVO 15/07/2026] Detección de SALIDA de geocerca
+                        // para el VL04 — reusando exactamente el mismo
+                        // mecanismo que ya armamos para el VL502 (ver
+                        // resolveGeofenceCrossing arriba), en modo "solo
+                        // salida" porque la entrada ya la avisa el equipo
+                        // mismo (alarm code 0x04, confirmado funcionando).
+                        // Necesitamos la posición ANTERIOR guardada antes de
+                        // que ingestReading la pise con la nueva.
+                        let prevLatVL04 = null, prevLngVL04 = null;
+                        if (gpsUsable && vehicleId) {
+                            const [[prevPosVL04]] = await pool.query('SELECT lat, lng FROM Vehicles WHERE id = ?', [vehicleId]);
+                            if (prevPosVL04) { prevLatVL04 = parseFloat(prevPosVL04.lat); prevLngVL04 = parseFloat(prevPosVL04.lng); }
+                        }
+
                         await telemetryIngestReal.ingestReading(currentImei, {
                             lat: gpsUsable ? gps.lat : null,
                             lng: gpsUsable ? gps.lon : null,
@@ -1286,6 +1313,14 @@ function startGt06Server() {
                             acc_signal: tailInfo ? tailInfo.accOn : null,
                             device_odometer_km: deviceOdometerKm,
                         });
+
+                        if (gpsUsable && vehicleId) {
+                            try {
+                                await resolveGeofenceCrossing(vehicleId, currentImei, prevLatVL04, prevLngVL04, gps.lat, gps.lon, 'exit');
+                            } catch (err) {
+                                console.error('[GT06] Error resolviendo salida de geocerca:', err.message);
+                            }
+                        }
 
                         if (gps && !gps.gpsFixed) {
                             console.log(`[GT06] ⚠️  Posición (0x37) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);

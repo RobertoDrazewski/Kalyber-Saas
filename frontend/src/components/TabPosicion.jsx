@@ -522,10 +522,14 @@ export default function TabPosicion() {
             </ResponsiveContainer>
           </div>
 
-          {/* [NUEVO 14/07/2026] Entradas y salidas de geocerca — VL502
-              (Plan Avanzado) trae las dos; VL04 (Plan Básico) solo
-              entradas confirmadas, la salida está rota en ese firmware
-              (ver nota debajo del panel). */}
+          {/* [ACTUALIZADO 15/07/2026] Entradas y salidas de geocerca —
+              ahora los DOS equipos muestran entrada y salida real. El
+              VL502 nunca las avisa por su cuenta (confirmado con un
+              cruce real, ver conversación) — las calculamos nosotros
+              con el GPS. El VL04 sí avisa la entrada solo (alarm code
+              nativo), pero rechaza el comando de salida — para la
+              salida usamos el mismo cálculo por GPS que el VL502, en
+              modo "solo salida" para no duplicar la entrada. */}
           <div className="mt-6 pt-5 border-t border-slate-800">
             <p className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
               <MapPinned size={15} className="text-[#F59E0B]" /> Entradas y salidas de geocerca
@@ -546,11 +550,6 @@ export default function TabPosicion() {
                 </div>
               </div>
             </div>
-            {selected.device_model !== 'VL502' && (
-              <p className="text-[11px] text-slate-500 mt-2">
-                Este equipo (Plan Básico) solo confirma entradas — la alarma de salida no la acepta este firmware todavía, así que "Salidas" va a quedar en 0 aunque el auto se haya ido de la zona.
-              </p>
-            )}
           </div>
 
           {/* Geocercas del auto */}
