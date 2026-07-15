@@ -153,6 +153,28 @@ function ParamsPanelVL502({ imei, onSent }) {
         }
     }
 
+    // [NUEVO 15/07/2026] Consulta de versión de hardware/firmware
+    // (0xF005/0xF006) — para saber si conviene esperar una
+    // actualización del fabricante antes de evaluar otro equipo.
+    const [queryingVersion, setQueryingVersion] = useState(false);
+    const [versionError, setVersionError] = useState('');
+    const [versionNotice, setVersionNotice] = useState('');
+
+    async function queryVersion() {
+        setQueryingVersion(true);
+        setVersionError('');
+        setVersionNotice('');
+        try {
+            const res = await fetchAPI(`/devices/${imei}/query-version`, { method: 'POST' });
+            setVersionNotice(res.message);
+            onSent();
+        } catch (err) {
+            setVersionError(err.message);
+        } finally {
+            setQueryingVersion(false);
+        }
+    }
+
     async function send() {
         const params = {};
         if (reportIntervalSec !== '') params.reportIntervalSec = Number(reportIntervalSec);
@@ -247,6 +269,28 @@ function ParamsPanelVL502({ imei, onSent }) {
                 <p className="text-[11px] text-slate-600">
                     La respuesta real (con los valores) aparece en el "Historial de comandos" de abajo en unos segundos, no acá arriba.
                 </p>
+            </div>
+
+            {/* [NUEVO 15/07/2026] Consulta de versión de hardware/firmware —
+                pedido puntual: antes de evaluar comprar otro equipo, saber
+                qué versión exacta tiene este VL502, por si el fabricante ya
+                sacó una actualización que resuelve lo que falta. */}
+            <div className="pt-4 mt-4 border-t border-slate-800 space-y-3">
+                <p className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Radio size={15} className="text-amber-400" /> Versión de hardware/firmware (JT808 0x8106)
+                </p>
+                <p className="text-[11px] text-slate-500">
+                    Consulta 0xF005 (hardware) y 0xF006 (firmware) — solo lectura. Sirve para saber si conviene pedirle al fabricante una actualización antes de gastar en otro equipo.
+                </p>
+                <ErrorBanner message={versionError} />
+                {versionNotice && <div className="bg-amber-500/10 border border-amber-500/40 text-amber-300 p-2.5 rounded-lg text-xs">{versionNotice}</div>}
+                <button
+                    onClick={queryVersion}
+                    disabled={queryingVersion}
+                    className="w-full bg-transparent border border-amber-500/50 hover:bg-amber-500/10 text-amber-400 text-sm font-bold py-2.5 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    <Send size={15} /> {queryingVersion ? 'Consultando...' : 'Consultar versión de hardware/firmware'}
+                </button>
             </div>
         </div>
     );

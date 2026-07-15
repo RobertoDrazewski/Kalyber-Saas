@@ -423,6 +423,54 @@ const sendDeviceQueryDrivingThresholds = async (req, res) => {
     }
 };
 
+// ============================================================
+// [NUEVO 15/07/2026] Consulta de versión de firmware/hardware —
+// SOLO VL502 (0x8106, parámetros 0xF005/0xF006, de solo lectura
+// según el manual). Pedido puntual: antes de decidir si vale la pena
+// evaluar otro equipo (GV500), primero hay que saber qué versión
+// exacta de firmware tiene el VL502 actual — puede que una
+// actualización del fabricante ya resuelva lo que hoy falta (DTC,
+// frenada brusca, geocerca nativa), sin gastar en hardware nuevo.
+const VERSION_PARAM_IDS = [0xF005, 0xF006];
+const sendDeviceQueryVersion = async (req, res) => {
+    const { imei } = req.params;
+    try {
+        const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.model !== 'VL502') {
+            return res.status(400).json({ error: 'La consulta de versión (0x8106) solo aplica a VL502 por ahora.' });
+        }
+
+        const result = await gt06Internal.sendQueryParamsCommand(imei, VERSION_PARAM_IDS);
+        const commandLabel = `QUERY_PARAMS(0x8106): 0xF005 (versión hardware), 0xF006 (versión firmware)`;
+
+        if (!result.sent) {
+            await pool.query(
+                `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+                 VALUES (?, ?, ?, ?, 'failed', ?)`,
+                [device.id, imei, commandLabel, `failed-${Date.now()}`, req.user.id]
+            ).catch(() => {});
+            return res.status(409).json({ error: result.reason });
+        }
+
+        await pool.query(
+            `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+             VALUES (?, ?, ?, ?, 'sent', ?)`,
+            [device.id, imei, commandLabel, result.correlationId, req.user.id]
+        ).catch(err => {
+            if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+        });
+
+        res.json({
+            message: `Consulta de versión enviada a IMEI ${imei}. Revisá el historial de comandos en unos segundos.`,
+            correlation_id: result.correlationId,
+        });
+    } catch (error) {
+        console.error('❌ Error consultando versión de firmware:', error);
+        res.status(500).json({ error: 'Error consultando la versión de firmware' });
+    }
+};
+
 // [NUEVO] Historial de comandos mandados a un equipo puntual, con su
 // estado real (sent = esperando respuesta, acked = el equipo
 // confirmó, failed = no se pudo mandar). El panel hace polling de
@@ -445,4 +493,4 @@ const getDeviceCommandLog = async (req, res) => {
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, getDeviceCommandLog };
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, sendDeviceQueryVersion, getDeviceCommandLog };

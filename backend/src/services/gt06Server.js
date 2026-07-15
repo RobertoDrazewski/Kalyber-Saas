@@ -1072,13 +1072,23 @@ function startGt06Server() {
                         const numParams = header.body[2];
                         let offset = 3;
                         const params = [];
+                        // [NUEVO 14/07/2026] Parámetros de tipo STRING según el
+                        // manual (Tabla 4) — sin este set, 0xF005/0xF006
+                        // (versión de hardware/software) se mostraban como
+                        // hexadecimal en vez de texto legible, porque el
+                        // parseo genérico de abajo solo distinguía por
+                        // largo (1/2/4 bytes = número, cualquier otro largo
+                        // = hex), sin saber que ESTOS IDs puntuales son
+                        // texto.
+                        const STRING_PARAM_IDS = new Set([0xF005, 0xF006, 0xF007, 0xF008, 0x0010, 0x0011, 0x0012, 0x0013]);
                         for (let i = 0; i < numParams && offset + 3 <= header.body.length; i++) {
                             const paramId = header.body.readUInt16BE(offset);
                             const paramLen = header.body[offset + 2];
                             offset += 3;
                             if (offset + paramLen > header.body.length) break;
                             let value;
-                            if (paramLen === 1) value = header.body.readUInt8(offset);
+                            if (STRING_PARAM_IDS.has(paramId)) value = header.body.slice(offset, offset + paramLen).toString('utf8');
+                            else if (paramLen === 1) value = header.body.readUInt8(offset);
                             else if (paramLen === 2) value = header.body.readUInt16BE(offset);
                             else if (paramLen === 4) value = header.body.readUInt32BE(offset);
                             else value = header.body.slice(offset, offset + paramLen).toString('hex');

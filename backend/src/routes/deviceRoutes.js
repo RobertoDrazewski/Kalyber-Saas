@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, getDeviceCommandLog } = require('../controllers/devicesController');
+const { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, sendDeviceQueryVersion, getDeviceCommandLog } = require('../controllers/devicesController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 
@@ -19,6 +19,7 @@ router.delete('/:id', verifyToken, requireRole('super_admin'), deleteDevice);
 router.post('/:imei/command', verifyToken, requireRole('super_admin'), sendDeviceCommand);
 router.post('/:imei/params', verifyToken, requireRole('super_admin'), sendDeviceParams);
 router.post('/:imei/query-driving-thresholds', verifyToken, requireRole('super_admin'), sendDeviceQueryDrivingThresholds);
+router.post('/:imei/query-version', verifyToken, requireRole('super_admin'), sendDeviceQueryVersion);
 router.get('/:imei/commands', verifyToken, requireRole('super_admin'), getDeviceCommandLog);
 
 module.exports = router;
