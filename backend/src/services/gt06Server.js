@@ -870,15 +870,22 @@ function startGt06Server() {
                             if (!device) {
                                 console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixLookup}`);
                             } else {
-                                // [NUEVO 14/07/2026] Guardamos la posición ANTERIOR
-                                // conocida ANTES de que ingestReading la pise con la
-                                // nueva — la necesitamos para resolveGeofenceCrossing
-                                // (saber si "antes" estaba adentro o afuera de cada
-                                // geocerca). Si el bit de geocerca no vino prendido en
-                                // este paquete puntual, ni siquiera hace falta esta
-                                // consulta extra — la pedimos solo cuando importa.
+                                // [ACTUALIZADO 16/07/2026 — RESTAURADO] Este
+                                // bloque había vuelto a depender de
+                                // loc.geofenceEvent (el bit 20 del alarmFlag)
+                                // para decidir si calcular la geocerca — ya
+                                // confirmamos con un cruce real, decodificando
+                                // los bytes a mano, que ese bit NUNCA se
+                                // prende en este firmware. Con esa condición,
+                                // resolveGeofenceCrossing prácticamente nunca
+                                // se llegaba a llamar — confirmado ahora con
+                                // un viaje real completo (19:28 a 19:42, con
+                                // ACC on/off correcto y kilometraje avanzando)
+                                // que no generó NI UN evento de geocerca.
+                                // Ahora resolvemos SIEMPRE, con cada posición
+                                // que llega — sin condición.
                                 let prevLat = null, prevLng = null;
-                                if (loc.geofenceEvent && device.vehicle_id) {
+                                if (device.vehicle_id) {
                                     const [[prevPos]] = await pool.query('SELECT lat, lng FROM Vehicles WHERE id = ?', [device.vehicle_id]);
                                     if (prevPos) { prevLat = parseFloat(prevPos.lat); prevLng = parseFloat(prevPos.lng); }
                                 }
@@ -909,11 +916,9 @@ function startGt06Server() {
                                     dtc_codes: null,
                                 });
 
-                                // Recién acá, con la posición nueva YA guardada,
-                                // resolvemos si ese "algo pasó con una geocerca"
-                                // (bit 20) fue una entrada o una salida, y de cuál.
-                                if (loc.geofenceEvent && device.vehicle_id) {
-                                    console.log(`[JT808] 🚧 Bit de geocerca (Alarm flag bit20) prendido, IMEI=${device.imei} — resolviendo contra geometría guardada`);
+                                // Resolvemos SIEMPRE — ya no depende del bit
+                                // (ver nota arriba).
+                                if (device.vehicle_id) {
                                     try {
                                         await resolveGeofenceCrossing(device.vehicle_id, device.imei, prevLat, prevLng, loc.lat, loc.lon);
                                     } catch (err) {
