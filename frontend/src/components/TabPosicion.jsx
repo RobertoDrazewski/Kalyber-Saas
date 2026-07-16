@@ -101,6 +101,18 @@ export default function TabPosicion() {
   const [loadError, setLoadError] = useState('');
   const [alerts, setAlerts] = useState([]);
 
+  // [NUEVO 16/07/2026] Ref con el ID del vehículo seleccionado AHORA
+  // MISMO — no el que estaba seleccionado cuando se disparó el fetch.
+  // Ver nota completa en loadSeries/loadFenceEvents más abajo: sin
+  // esto, cambiar de vehículo rápido (ej: Hilux -> Kangoo) podía dejar
+  // que la respuesta VIEJA (la de Hilux, que sí tiene RPM real) llegara
+  // DESPUÉS de la nueva y pisara los datos correctos de la Kangoo con
+  // los de otro auto — confirmado como la causa de los "picos de RPM"
+  // que no existen en la base para la Kangoo (Telemetry_Raw.engine_rpm
+  // es NULL en el 100% de sus filas reales).
+  const selectedIdRef = useRef(null);
+  useEffect(() => { selectedIdRef.current = selected?.id ?? null; }, [selected?.id]);
+
   // Geocercas del auto seleccionado + estado del flujo de creación.
   const [geofences, setGeofences] = useState([]);
   const [placingFence, setPlacingFence] = useState(false); // true = "tocá el mapa para elegir el centro"
@@ -245,7 +257,17 @@ export default function TabPosicion() {
 
   const loadSeries = () => {
     if (!selected) return;
-    fetchAPI(`/telemetry/vehicle/${selected.id}?limit=120`).then(setSeries).catch(console.error);
+    const requestedId = selected.id;
+    fetchAPI(`/telemetry/vehicle/${requestedId}?limit=120`)
+      .then(data => {
+        // [NUEVO 16/07/2026] Si el vehículo seleccionado cambió mientras
+        // esta request estaba en vuelo, esta respuesta ya es vieja —
+        // la descartamos en vez de pisar los datos del vehículo que
+        // está seleccionado ahora.
+        if (selectedIdRef.current !== requestedId) return;
+        setSeries(data);
+      })
+      .catch(console.error);
   };
 
   // [NUEVO 14/07/2026] Entradas y salidas de geocerca — pedido puntual:
@@ -259,8 +281,10 @@ export default function TabPosicion() {
   const [fenceEventCounts, setFenceEventCounts] = useState({ entradas: 0, salidas: 0 });
   const loadFenceEvents = () => {
     if (!selected) { setFenceEventCounts({ entradas: 0, salidas: 0 }); return; }
-    fetchAPI(`/telemetry/vehicle/${selected.id}/alarms?limit=200`)
+    const requestedId = selected.id;
+    fetchAPI(`/telemetry/vehicle/${requestedId}/alarms?limit=200`)
       .then(alarms => {
+        if (selectedIdRef.current !== requestedId) return; // respuesta atrasada de otro vehículo, descartar
         const entradas = alarms.filter(a => a.alarm_id === 0x22 || a.alarm_id === 0x04).length;
         const salidas = alarms.filter(a => a.alarm_id === 0x21 || a.alarm_id === 0x05).length;
         setFenceEventCounts({ entradas, salidas });
@@ -269,6 +293,12 @@ export default function TabPosicion() {
   };
 
   useEffect(() => {
+    // [NUEVO 16/07/2026] Limpieza inmediata al cambiar de auto — sin
+    // esto, mientras la respuesta nueva todavía no llegó, se seguía
+    // viendo en pantalla el gráfico/contador del auto ANTERIOR por un
+    // instante, aunque ya no hubiera ninguna carrera de datos real.
+    setSeries([]);
+    setFenceEventCounts({ entradas: 0, salidas: 0 });
     loadSeries();
     loadFenceEvents();
     if (!selected) return;

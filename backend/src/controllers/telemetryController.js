@@ -9,11 +9,19 @@ const { effectiveOwnerId } = require('../middlewares/requireRole');
 const getLiveTelemetry = async (req, res) => {
     try {
         const ownerId = effectiveOwnerId(req);
-        // [FIX 16/07/2026] Mismo criterio que getVehicleSeries — sin
-        // filtrar por source='real', un vehículo con lecturas viejas de
-        // demo/simulador podía traer acá esa fila en vez de la real (o
-        // tapar el hueco de un vehículo que sí tiene datos reales pero
-        // más antiguos que los de demo).
+        // [FIX 16/07/2026] Dos ajustes:
+        // 1) source='real' — mismo criterio que getVehicleSeries, para
+        //    no traer lecturas viejas de demo/simulador.
+        // 2) dev.id IS NOT NULL — un vehículo SIN equipo pareado
+        //    (Vehicles.device_id = NULL, ver unpairDevice) no tiene
+        //    nada que mostrar en "telemetría en vivo": el JOIN con
+        //    Devices da NULL y antes igual aparecía en la lista con la
+        //    última lectura vieja de cuando SÍ tenía equipo. Confirmado
+        //    con la Ford AB841QH, despareada pero seguía apareciendo acá.
+        //    OJO: esto es a propósito solo para ESTE endpoint (telemetría
+        //    en vivo) — TabFlota sigue usando /vehicles (sin este
+        //    filtro), porque ahí sí tiene sentido seguir viendo el auto
+        //    aunque no tenga equipo, para poder parearle uno nuevo.
         let query = `
             SELECT t.*, v.plate, v.source as vehicle_source, v.lat, v.lng, v.heading,
                    v.odometer_km, v.device_odometer_km, v.last_fuel_level, v.last_status_flags,
@@ -21,7 +29,7 @@ const getLiveTelemetry = async (req, res) => {
             FROM Telemetry_Heuristics t
             JOIN Vehicles v ON t.vehicle_id = v.id
             LEFT JOIN Devices dev ON v.device_id = dev.id
-            WHERE t.source = 'real' AND t.id IN (
+            WHERE t.source = 'real' AND dev.id IS NOT NULL AND t.id IN (
                 SELECT MAX(id) FROM Telemetry_Heuristics WHERE source = 'real' GROUP BY vehicle_id
             )
         `;
