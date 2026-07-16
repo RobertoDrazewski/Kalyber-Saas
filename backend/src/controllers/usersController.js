@@ -3,7 +3,26 @@ const crypto = require('crypto');
 const { Resend } = require('resend');
 const { sendAlert } = require('../services/whatsappService');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// [FIX 16/07/2026] Antes esto era `const resend = new Resend(process.env.RESEND_API_KEY);`
+// a nivel de módulo — si RESEND_API_KEY no estaba seteada en las env
+// vars de ESTE servicio de Railway (fleet-backend/Kalyber-Saas), el
+// SDK de Resend tira una excepción EN EL MOMENTO DEL require(), antes
+// de que Express llegue a levantar. Como usersController.js se importa
+// desde userRoutes.js, que se importa desde server.js, eso tumbaba TODO
+// el backend (auth, vehículos, telemetría, todo) en un crash-loop
+// infinito solo por un problema de la integración de mails — nada que
+// ver con el trabajo de separación de puertos VL04/VL502.
+// Ahora se crea una sola vez la PRIMERA VEZ que de verdad hace falta
+// mandar un mail (lazy init), y si falta la key se loguea un error
+// claro y se corta SOLO ese envío puntual, sin tumbar el resto de la API.
+let resendClient = null;
+function getResendClient() {
+    if (!process.env.RESEND_API_KEY) {
+        throw new Error('Falta configurar RESEND_API_KEY en las variables de entorno de este servicio (fleet-backend) — sin esto no se pueden mandar mails.');
+    }
+    if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+    return resendClient;
+}
 
 // Jerarquía de creación:
 //   super_admin puede crear -> admin (y otro super_admin si hace falta)
@@ -70,7 +89,7 @@ function genTempPassword() {
 async function sendCredentialsEmail({ to, name, role, email, password }) {
     const roleLabel = { admin: 'Administrador de flota', driver: 'Chofer', super_admin: 'Super Admin' }[role] || role;
     try {
-        await resend.emails.send({
+        await getResendClient().emails.send({
             from: 'Kalyber <accesos@kalyber.com.ar>',
             to: [to],
             subject: `Tu acceso a Kalyber (${roleLabel})`,
