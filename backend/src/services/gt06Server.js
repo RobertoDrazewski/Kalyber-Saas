@@ -503,8 +503,39 @@ async function sendQueryParamsCommand(imei, paramIds) {
     return { sent: true, correlationId };
 }
 
-// Extrae el primer frame completo del buffer acumulado, si ya llegó
-// entero. Devuelve null si hay que esperar más datos.
+// [NUEVO 16/07/2026] Último punto GPS "real" guardado por IMEI, para
+// detectar cuando el 0x37 repite la MISMA posición estancada muchas
+// veces seguidas (confirmado contra logs reales de la Kangoo: el
+// equipo manda el 0x37 con una posición vieja/cacheada mientras el
+// vehículo ya se movió, y el 0x26 sí trae la posición real en
+// movimiento — 91 paquetes 0x37 "estancados" contra 11 paquetes 0x26
+// reales en una sola ventana de 25 minutos). Sin este filtro, esos
+// puntos estancados dominan la ventana de "últimas N lecturas" que
+// arma la trayectoria del viaje en el mapa, y la polilínea termina
+// conectando el punto real en movimiento con el punto viejo estancado
+// una y otra vez — se ve como líneas rectas entrando/saliendo de esa
+// "zona" en vez del recorrido real.
+// No se descarta la LECTURA completa (odómetro/ACC siguen guardándose
+// igual) — solo se omite lat/lng/heading/speed cuando es un duplicado
+// de baja velocidad contra el último punto real ya guardado, para no
+// ensuciar la trayectoria ni el marcador de "última posición".
+const lastRealPositionByImei = new Map();
+function isStaleDuplicatePosition(imei, gps) {
+    if (!gps) return false;
+    const prev = lastRealPositionByImei.get(imei);
+    const isLowSpeed = (gps.speed_kmh ?? 0) <= 2;
+    if (prev && isLowSpeed && prev.speed_kmh <= 2) {
+        const latDiff = Math.abs(gps.lat - prev.lat);
+        const lngDiff = Math.abs(gps.lon - prev.lon);
+        // ~0.0003° ≈ 30m a esta latitud — suficiente para no confundir
+        // "sigue estacionado en el mismo lugar" con un movimiento real.
+        if (latDiff < 0.0003 && lngDiff < 0.0003) return true;
+    }
+    lastRealPositionByImei.set(imei, { lat: gps.lat, lon: gps.lon, speed_kmh: gps.speed_kmh ?? 0 });
+    return false;
+}
+
+
 function extractFrame(buf) {
     const startIdx = buf.indexOf(START);
     if (startIdx === -1) return null;
@@ -996,11 +1027,21 @@ function startGt06Server(port = PORT, { label = null, expectedProto = null } = {
                             ? await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter)
                             : null;
 
+                        // [NUEVO 16/07/2026] Si es un duplicado estancado (ver nota
+                        // arriba de isStaleDuplicatePosition), NO mandamos lat/lng —
+                        // así no ensucia la trayectoria del viaje ni pisa la última
+                        // posición real conocida, pero el resto de los datos de este
+                        // paquete (odómetro, ACC, tail crudo) se sigue guardando igual.
+                        const isStale = isStaleDuplicatePosition(currentImei, gps);
+                        if (isStale) {
+                            console.log(`[GT06] Posición (0x37) IMEI=${currentImei} descartada por duplicado estancado (misma posición, v≈0) — se guardan igual odómetro/ACC.`);
+                        }
+
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: gps?.lat ?? null,
-                            lng: gps?.lon ?? null,
-                            speed_kmh: gps?.speed_kmh ?? null,
-                            heading: gps?.course ?? null,
+                            lat: isStale ? null : (gps?.lat ?? null),
+                            lng: isStale ? null : (gps?.lon ?? null),
+                            speed_kmh: isStale ? null : (gps?.speed_kmh ?? null),
+                            heading: isStale ? null : (gps?.course ?? null),
                             engine_rpm: null,
                             engine_load: null,
                             coolant_temp: null,

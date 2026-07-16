@@ -9,6 +9,11 @@ const { effectiveOwnerId } = require('../middlewares/requireRole');
 const getLiveTelemetry = async (req, res) => {
     try {
         const ownerId = effectiveOwnerId(req);
+        // [FIX 16/07/2026] Mismo criterio que getVehicleSeries — sin
+        // filtrar por source='real', un vehículo con lecturas viejas de
+        // demo/simulador podía traer acá esa fila en vez de la real (o
+        // tapar el hueco de un vehículo que sí tiene datos reales pero
+        // más antiguos que los de demo).
         let query = `
             SELECT t.*, v.plate, v.source as vehicle_source, v.lat, v.lng, v.heading,
                    v.odometer_km, v.device_odometer_km, v.last_fuel_level, v.last_status_flags,
@@ -16,8 +21,8 @@ const getLiveTelemetry = async (req, res) => {
             FROM Telemetry_Heuristics t
             JOIN Vehicles v ON t.vehicle_id = v.id
             LEFT JOIN Devices dev ON v.device_id = dev.id
-            WHERE t.id IN (
-                SELECT MAX(id) FROM Telemetry_Heuristics GROUP BY vehicle_id
+            WHERE t.source = 'real' AND t.id IN (
+                SELECT MAX(id) FROM Telemetry_Heuristics WHERE source = 'real' GROUP BY vehicle_id
             )
         `;
         const params = [];
@@ -47,6 +52,21 @@ async function assertVehicleAccess(req, vehicleId) {
 // RPM/velocidad Y para dibujar la trayectoria en el mapa. Extendida
 // con TODOS los campos que el VL502 puede llegar a mandar, para que
 // el panel avanzado tenga de dónde graficar sin pedir nada más.
+//
+// [FIX 16/07/2026] Faltaba filtrar por source='real'. Sin esto, un
+// vehículo que en algún momento tuvo datos de DEMO/simulador cargados
+// (Telemetry_Raw.source='simulated' — típico de un auto que arrancó
+// como demo antes de instalarle el hardware real) mezclaba esas
+// lecturas viejas con las reales de hoy en el MISMO gráfico y en la
+// MISMA polilínea del mapa. Efecto visible confirmado en la Kangoo
+// (AE376ZB, VL04): el gráfico mostraba picos de RPM de hasta 8000,
+// algo que el VL04 real NUNCA manda (confirmado en gt06Server.js —
+// ese equipo siempre guarda engine_rpm=null), y el mapa dibujaba
+// líneas erráticas en forma de estrella — la polilínea conectando en
+// orden cronológico puntos reales de hoy con puntos simulados de otro
+// momento/ubicación. Filtrando por source='real' acá alcanza para
+// arreglar los dos síntomas a la vez, porque el chart Y la polyline
+// del mapa en TabPosicion.jsx toman los datos de este mismo endpoint.
 const getVehicleSeries = async (req, res) => {
     const { id } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 40, 200);
@@ -60,7 +80,7 @@ const getVehicleSeries = async (req, res) => {
                     oil_pressure_kpa, oil_life_pct, intake_air_temp, cabin_temp, steering_angle,
                     throttle_relative_pct, remaining_fuel_l, acc_signal, harsh_brake, dtc_codes,
                     brake_pedal_pct, accelerator_pedal_pct, shift_position, remote_control_signal, status_flags
-             FROM Telemetry_Raw WHERE vehicle_id = ? ORDER BY recorded_at DESC LIMIT ?`,
+             FROM Telemetry_Raw WHERE vehicle_id = ? AND source = 'real' ORDER BY recorded_at DESC LIMIT ?`,
             [id, limit]
         );
         res.json(rows.reverse());
