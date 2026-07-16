@@ -37,6 +37,9 @@ const MSG_ID = {
     PLATFORM_GENERAL_RESPONSE: 0x8001,
     TERMINAL_GENERAL_RESPONSE: 0x0001,
     TERMINAL_LOGOUT: 0x0003,
+    // [NUEVO 16/07/2026] Respuesta a la consulta de parámetros específicos
+    // (0x8106 → el equipo responde con 0x0104, Tabla 14 del manual).
+    PARAM_QUERY_RESPONSE: 0x0104,
 };
 
 // IDs de "información adicional" del reporte de posición (0x0200)
@@ -156,26 +159,6 @@ function parseLocationReport(body) {
     const accOn = !!(statusFlag & 0x01);        // bit0 = ACC, confirmado por spec
     const gpsFixed = !!(statusFlag & 0x02);     // bit1 = posicionado
 
-    // [NUEVO 14/07/2026] HALLAZGO CLAVE — confirmado cruzando GPS real
-    // contra una geocerca real: el VL502 SÍ soporta geocercas (el
-    // 0x8600 se manda y el equipo contesta "éxito"), pero la alarma de
-    // cruce NO llega como un mensaje 0x0900 subtipo 0x03 separado
-    // (que es lo único que este backend escuchaba hasta ahora) — llega
-    // como el BIT 20 del campo "Alarm flag" (offset 0) del propio
-    // reporte de posición 0x0200, según la Tabla 19 del manual oficial:
-    // "Bit 20: 1 = Entered or left geofence — Clear after receiving a
-    // response". Confirmado con un cruce real: la geocerca activa
-    // llegó a device_synced=1, el auto entró (0 tocado de la
-    // fluctuación de la geocerca, medido por GPS: pasó de 93.9m a
-    // 14.0m del centro de un radio de 20m), y en ningún momento
-    // apareció una alarma 0x21/0x22 vía 0x0900 — la señal estaba en
-    // este bit, sin usar. El bit no dice si fue entrada o salida (el
-    // propio nombre dice "entró O salió"), así que hay que inferir la
-    // dirección comparando contra la posición anterior conocida — eso
-    // se resuelve en gt06Server.js con la geometría de las geocercas
-    // que ya tenemos guardadas, no acá.
-    const geofenceEvent = !!(alarmFlag & (1 << 20));
-
     const latRaw = body.readUInt32BE(8);
     const lonRaw = body.readUInt32BE(12);
     // Mendoza = hemisferio sur/oeste. El campo de statusFlag debería
@@ -232,17 +215,7 @@ function parseLocationReport(body) {
         .filter(([id]) => !idsConocidos.includes(Number(id)))
         .map(([id, value]) => `ID=0x${Number(id).toString(16)} valor=${value.toString('hex')}`);
 
-    // OJO 14/07/2026: "sinIdentificar" es SOLO para consola/diagnóstico
-    // interno (log de Railway) — es información adicional propietaria
-    // del fabricante fuera del estándar JT/T808 (ej. ID=0x2a/0xe4 que
-    // vienen en TODOS los paquetes de posición reales, siempre sin
-    // decodificar). NO ES un DTC ni un evento y no tiene que terminar
-    // en ningún campo que el cliente vea (antes se estaba guardando en
-    // dtc_codes de Telemetry_Raw con el prefijo "JT808_TLV:", que es
-    // exactamente lo que hacía que el histórico del cliente mostrara
-    // basura tipo "JT808_TLV:ID=0x2a valor=0000|ID=0xe4 valor=...".
-    // Ver gt06Server.js: ya no se pasa a ingestReading.
-    return { accOn, gpsFixed, geofenceEvent, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
+    return { accOn, gpsFixed, lat, lon, altitude, speedKmh, direction, timeDigits, mileageKm, fuelLiters, gsmSignal, satellites, sinIdentificar };
 }
 
 // El "ID de terminal" de JT808 (6 bytes) es el IMEI real del equipo,
@@ -660,21 +633,16 @@ function buildTextCommandPacket(imei, commandText) {
 // alarma de geocerca (0x21=salió / 0x22=entró, ver ALARM_IDS) en el
 // próximo 0x0900 subtipo 0x03. Recién ahí se puede confiar en esto.
 // ============================================================
-function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode, isEdit = false }) {
+function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
     const terminalId = imeiToTerminalId(imei);
 
-    const settingAttr = Buffer.from([isEdit ? 0x02 : 0x00]); // 0=actualizar (crear/reemplazar) | 2=modificar (Tabla 55)
+    const settingAttr = Buffer.from([0x00]); // 0 = actualizar (reemplaza cualquier área previa con este ID)
     const totalAreas = uint16be(1);
 
     const areaId = Buffer.alloc(4);
     areaId.writeUInt32BE(fenceId, 0);
 
-    // bit3=alarma al entrar, bit5=alarma al salir (Tabla 57, confirmado
-    // contra el manual oficial VL502) — 'BOTH' prende los dos bits.
-    let areaAttrValue = 0x0000;
-    if (mode === 'IN' || mode === 'BOTH') areaAttrValue |= 0x0008;
-    if (mode === 'OUT' || mode === 'BOTH') areaAttrValue |= 0x0020;
-    const areaAttr = uint16be(areaAttrValue);
+    const areaAttr = uint16be(mode === 'IN' ? 0x0008 : 0x0020); // bit3=alarma al entrar, bit5=alarma al salir
 
     const latBuf = Buffer.alloc(4);
     latBuf.writeUInt32BE(Math.round(Math.abs(lat) * 1_000_000), 0);
@@ -688,33 +656,6 @@ function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode, isEdit 
     const serialNo = Math.floor(Math.random() * 0xFFFF);
     const packet = buildFrame(0x8600, terminalId, serialNo, body);
 
-    return { packet, correlationId: `jt808-${serialNo}` };
-}
-
-// ============================================================
-// [NUEVO 14/07/2026] Mensaje 0x8106 ("Query parameter of specific
-// terminal", Tabla 13) — para diagnosticar por qué el VL502 nunca
-// manda odómetro total (tag 0x0528) ni presión de aceite (tag
-// 0x053B): confirmado con logs reales que ESTOS DOS campos vienen
-// SIEMPRE null en el 0x0900F0, mientras que RPM/temp/batería/
-// combustible sí llegan bien. El offset y el tag están correctos
-// contra la Tabla 25 — no es un bug de parseo. Las dos causas
-// posibles: a) el parámetro 0xF016 (control de comunicación OBD)
-// está deshabilitado, o b) el auto de prueba no expone esos datos
-// por el CAN estándar (odómetro total y presión de aceite NO son
-// PIDs OBD-II estándar — dependen de que el VL502 haya hecho "CAN
-// learning" específico para ese modelo de auto). Mandar esto con
-// paramIds=[0xF016, 0xF017] y mirar la respuesta 0x0104: si están en
-// 0x01 (habilitado) y el dato sigue sin llegar, el problema es (b).
-// ============================================================
-function buildQueryTerminalParams(imei, paramIds) {
-    const terminalId = imeiToTerminalId(imei);
-    const body = Buffer.concat([
-        Buffer.from([paramIds.length]),
-        ...paramIds.map(id => uint16be(id)),
-    ]);
-    const serialNo = Math.floor(Math.random() * 0xFFFF);
-    const packet = buildFrame(0x8106, terminalId, serialNo, body);
     return { packet, correlationId: `jt808-${serialNo}` };
 }
 
@@ -782,6 +723,56 @@ function buildSetTerminalParams(imei, params) {
     return { packet, correlationId: `jt808-${serialNo}`, paramsSet: entries.map(([k]) => k) };
 }
 
+// ============================================================
+// [NUEVO 16/07/2026] Mensaje 0x8106 ("Query parameter of specific
+// terminal") — Tabla 13 del manual. Sirve para leer el valor ACTUAL
+// de cualquier parámetro guardado en el equipo, sin cambiarlo. Útil
+// para chequear 0xF00D (vehicle type code) en la Hilux: si nunca se
+// configuró, puede ser la razón por la que no llegan tags de motor
+// (RPM, temp. agua, carga) — solo batería, que es genérico y no
+// depende de decodificar el CAN bus del vehículo.
+//
+// Body: total de parámetros(1) + lista de IDs, cada uno WORD (2
+// bytes) — mismo formato de ID que ya corregimos en buildSetTerminalParams.
+// ============================================================
+function buildQueryTerminalParams(imei, paramIds) {
+    const terminalId = imeiToTerminalId(imei);
+    const count = Buffer.from([paramIds.length]);
+    const idBufs = paramIds.map(id => uint16be(id));
+    const body = Buffer.concat([count, ...idBufs]);
+
+    const serialNo = Math.floor(Math.random() * 0xFFFF);
+    const packet = buildFrame(0x8106, terminalId, serialNo, body);
+
+    return { packet, correlationId: `jt808-${serialNo}`, paramIds };
+}
+
+// Parsea la respuesta 0x0104 (Tabla 14): serial de la consulta
+// original(2) + cantidad de parámetros(1) + lista [ID(2)+Length(1)+
+// Value(n)] repetida. Devuelve un objeto { id: valorCrudoHex }, más
+// fácil de loguear/inspeccionar a mano que decidir de antemano qué
+// tipo es cada uno (varían entre BYTE/WORD/DWORD/STRING según la
+// Tabla 4).
+function parseParamQueryResponse(body) {
+    if (body.length < 3) return { respondingToSerial: null, params: {} };
+
+    const respondingToSerial = body.readUInt16BE(0);
+    const count = body[2];
+    let offset = 3;
+    const params = {};
+
+    for (let i = 0; i < count && offset + 3 <= body.length; i++) {
+        const id = body.readUInt16BE(offset);
+        const length = body[offset + 2];
+        if (offset + 3 + length > body.length) break;
+        const value = body.slice(offset + 3, offset + 3 + length);
+        params[`0x${id.toString(16).padStart(4, '0')}`] = value.toString('hex');
+        offset += 3 + length;
+    }
+
+    return { respondingToSerial, params };
+}
+
 module.exports = {
     MSG_ID,
     extractJT808Frame,
@@ -800,6 +791,7 @@ module.exports = {
     buildSetCircularFence,
     buildSetTerminalParams,
     buildQueryTerminalParams,
+    parseParamQueryResponse,
     TERMINAL_PARAMS,
     imeiToTerminalId,
 };

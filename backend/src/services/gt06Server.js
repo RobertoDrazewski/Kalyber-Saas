@@ -96,30 +96,12 @@ function parseComboGpsBlock(content) {
     // Offset 16-17 del 0x37/0x26 — es el campo estándar GT06 de "curso + banderas de estado" (rumbo 0-360° en los 10 bits bajos)
     const courseStatusInt = content.readUInt16BE(16);
     const course = courseStatusInt & 0x03FF;
-
-    // [NUEVO 14/07/2026] CONFIRMADO contra el manual (JM-VL03, sección
-    // "Status and course details"): BYTE_1 bit4 = "Positioned or Not"
-    // (1 = el GPS tiene fix real, 0 = no). Como leemos los 2 bytes como
-    // un entero de 16 bits big-endian, BYTE_1 es el byte alto, así que
-    // ese bit queda en la posición 12 del entero completo (8+4). Hasta
-    // ahora este bit se leía y se tiraba — nunca se usaba para nada, lo
-    // que dejaba pasar posiciones SIN fix real (el equipo puede mandar
-    // una estimación por antena celular en esos casos, que puede estar
-    // a cientos de metros o kilómetros de la posición real) como si
-    // fueran una lectura de GPS válida. Eso es lo que causaba las
-    // líneas rectas absurdas en el trazo del mapa que reportó el
-    // cliente — cada vez que el equipo se reiniciaba (por el cable
-    // suelto) y tardaba en recuperar el fix de GPS, mandaba una
-    // posición estimada rarísima que se guardaba y dibujaba en el
-    // trazo como si fuera real.
-    const gpsFixed = !!(courseStatusInt & 0x1000);
-
+    
     return {
         lat: -(latRaw / 30000 / 60),  // Mendoza = hemisferio sur
         lon: -(lonRaw / 30000 / 60),  // Mendoza = hemisferio oeste
         speed_kmh: content[15] ?? 0,
         course: course,
-        gpsFixed,
     };
 }
 
@@ -161,55 +143,15 @@ const ALARM_CODES = {
     0x32: { label: 'device_unplugged', desc: 'Equipo desconectado de la alimentación' },
     // [SIN CONFIRMAR — 13/07/2026] Apareció una sola vez, justo después de
     // un ciclo real device_unplugged(0x32) -> reconexión de alimentación.
-    // [ACTUALIZADO 14/07/2026] CONFIRMADO por segunda vez con otro
-    // ciclo real device_unplugged(0x32)/power_cut(0x02) -> reconexión
-    // (prueba de Mauro desconectando y reconectando el equipo a
-    // propósito) — el mismo patrón temporal se repitió: corte de
-    // energía real, seguido de este código 0x72 al reconectar. Sigue
-    // sin estar en el manual Concox oficial ni en el diccionario de
-    // Flespi, pero con dos ocurrencias reales e independientes
-    // mostrando el mismo patrón, la confianza en esta interpretación
-    // subió bastante — aun así lo dejamos marcado como no oficial.
-    0x72: { label: 'power_restored_unconfirmed', desc: 'Alimentación restaurada / equipo reconectado (confirmado 2 veces, no está en el manual oficial)' },
+    // Hipótesis por orden temporal: "alimentación restaurada / equipo
+    // reconectado". NO está en el manual Concox que decodificamos ni en
+    // el diccionario de Flespi — no hay fuente que lo respalde, solo la
+    // secuencia observada UNA vez. Falta ver si se repite consistente en
+    // la próxima desconexión/reconexión antes de confiar en esto.
+    0x72: { label: 'power_restored_unconfirmed', desc: 'Alimentación restaurada / equipo reconectado (SIN CONFIRMAR)' },
     0xFE: { label: 'acc_on', desc: 'ACC encendido' },
     0xFF: { label: 'acc_off', desc: 'ACC apagado' },
 };
-
-// ============================================================
-// [NUEVO 14/07/2026] Correlación de manipulación — confirmado con un
-// caso real (Mauro desconectó y reconectó el equipo a propósito para
-// una prueba): en la ventana de ese manoseo físico, el equipo mandó
-// VARIAS alarmas de "colisión" (0x2C) que obviamente no eran choques
-// reales — eran el golpeteo normal de desenchufar/enchufar el
-// conector. Sin esto, el cliente vería "¡Colisión detectada!" varias
-// veces seguidas por algo que fue simplemente una desconexión de
-// mantenimiento.
-//
-// Guardamos el timestamp del último power_cut(0x02)/device_unplugged
-// (0x32) por IMEI en memoria (no hace falta persistirlo — es una
-// ventana de correlación corta, no un historial). Si un código de
-// "golpe" (colisión, aceleración/giro brusco, vibración) llega dentro
-// de los TAMPER_WINDOW_MS siguientes, se re-etiqueta como
-// "manipulación probable" en vez de la alarma original.
-//
-// TAMPER_WINDOW_MS en 90s: confirmado con el caso real, las alarmas
-// de golpe espurias aparecieron entre 0 y ~50s después del power_cut.
-// No es una ciencia exacta — si en el futuro aparecen falsos negativos
-// (colisiones reales que quedan mal re-etiquetadas porque coincidieron
-// con una desconexión) o falsos positivos (golpes de manipulación
-// fuera de esta ventana), este valor es el primer lugar para ajustar.
-// ============================================================
-const TAMPER_WINDOW_MS = 90 * 1000;
-const lastPowerEventByImei = new Map();
-
-function registerPowerEvent(imei) {
-    lastPowerEventByImei.set(imei, Date.now());
-}
-
-function isLikelyTamperShock(imei) {
-    const lastEvent = lastPowerEventByImei.get(imei);
-    return lastEvent != null && (Date.now() - lastEvent) <= TAMPER_WINDOW_MS;
-}
 
 // Paquete de Alarma GT06 (protocolo 0x26 = geocerca única, 0x27 =
 // multi-geocerca — ver manual Concox). Reusa el mismo bloque de
@@ -333,87 +275,6 @@ async function accumulateDeviceOdometer(imei, rawCounter) {
     }
 
     return Number((prevKm + deltaKm).toFixed(3));
-}
-
-// ============================================================
-// [NUEVO 14/07/2026] Resuelve un cruce de geocerca real del VL502.
-//
-// Contexto — confirmado con un cruce real, cruzando GPS real contra
-// una geocerca real: el VL502 SÍ soporta geocercas (el 0x8600 se
-// manda y el equipo contesta "éxito"), pero NUNCA manda la alarma
-// como un mensaje 0x0900 subtipo 0x03 separado (que es lo único que
-// este backend escuchaba hasta ahora) — la manda como el BIT 20 del
-// campo "Alarm flag" del propio reporte de posición 0x0200 (Tabla 19
-// del manual: "Entered or left geofence"). Ver jt808Handler.js.
-//
-// Ese bit sirve como "algo relacionado a geocerca acaba de pasar",
-// pero el protocolo NO dice de qué geocerca ni en qué dirección
-// (entrada o salida) — hay que resolverlo nosotros con la geometría
-// que ya tenemos guardada: comparamos la posición ANTERIOR conocida
-// del vehículo (antes de que este ping la pise) contra la posición
-// ACTUAL, para cada geocerca activa de ese vehículo. Si antes estaba
-// afuera y ahora está adentro → entró; si era al revés → salió.
-//
-// prevLat/prevLng tienen que venir de ANTES de llamar a
-// telemetryIngestReal.ingestReading() para esa misma lectura (esa
-// función pisa Vehicles.lat/lng con la posición nueva).
-// ============================================================
-function haversineMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// [ACTUALIZADO 15/07/2026] Ahora también la usa el VL04, en modo
-// "solo salida" — ver parámetro onlyDirection abajo. El VL04 SÍ
-// detecta la entrada solo (alarm code 0x04, nativo del equipo,
-// confirmado funcionando), así que si dejáramos que esta función
-// también resolviera la entrada para el VL04, apareceria duplicada:
-// una vez por el alarm code nativo, otra vez por este cálculo
-// nuestro. onlyDirection='exit' hace que se ignore silenciosamente
-// cualquier transición de entrada, y solo se ocupe de la salida (que
-// es justo lo que al VL04 le falta, porque el equipo rechaza el
-// comando de salida — ver nota en geofencesController.js).
-async function resolveGeofenceCrossing(vehicleId, imei, prevLat, prevLng, curLat, curLng, onlyDirection = null) {
-    if (curLat == null || curLng == null) return;
-    const [fences] = await pool.query(
-        `SELECT id, name, lat, lng, radius_m, mode FROM Geofences WHERE vehicle_id = ? AND active = 1`,
-        [vehicleId]
-    );
-    if (!fences.length) return;
-
-    for (const fence of fences) {
-        const flat = parseFloat(fence.lat), flng = parseFloat(fence.lng), radius = fence.radius_m;
-        const isInsideNow = haversineMeters(curLat, curLng, flat, flng) <= radius;
-        // Sin posición anterior conocida (primera lectura de este
-        // equipo), no hay "antes" contra qué comparar — nos salteamos
-        // esta geocerca esta vez en vez de arriesgar un falso
-        // positivo/negativo.
-        if (prevLat == null || prevLng == null) continue;
-        const wasInsideBefore = haversineMeters(prevLat, prevLng, flat, flng) <= radius;
-        if (isInsideNow === wasInsideBefore) continue; // no cruzó esta geocerca puntual
-
-        const entered = isInsideNow && !wasInsideBefore;
-        if (onlyDirection === 'exit' && entered) continue; // VL04: la entrada ya la avisa el equipo mismo
-        if (onlyDirection === 'enter' && !entered) continue;
-
-        const alertsForThisDirection = entered
-            ? (fence.mode === 'IN' || fence.mode === 'BOTH')
-            : (fence.mode === 'OUT' || fence.mode === 'BOTH');
-        if (!alertsForThisDirection) continue; // cruzó, pero esta geocerca no avisa para ese sentido
-
-        const fenceLabel = fence.name || `Geocerca #${fence.id}`;
-        const label = entered ? `Entró a la geocerca: ${fenceLabel}` : `Salió de la geocerca: ${fenceLabel}`;
-        console.log(`[GT06/JT808] 🚧 ${label} — IMEI=${imei}`);
-        await telemetryIngestReal.ingestAlarm(imei, {
-            id: entered ? 0x22 : 0x21, // mismos IDs que ALARM_IDS de jt808Handler (0x21=salió, 0x22=entró)
-            label,
-            desc: `radio=${radius}m centro=${flat},${flng}`,
-        }, { lat: curLat, lon: curLng });
-    }
 }
 
 // CRC-16/X-25 (CRC-ITU) — el checksum estándar de GT06.
@@ -550,23 +411,7 @@ async function sendCommandToDevice(imei, commandText) {
 // JT808 0x8600 ("Set Circular Area") — el 0x8300 de texto NO configura
 // nada real, ver advertencia en jt808Handler.js. Todavía SIN CONFIRMAR
 // contra un cruce de geocerca real del lado VL502.
-//
-// [ACTUALIZADO 14/07/2026]
-//  - mode ahora acepta 'BOTH' (avisa al entrar Y al salir), además de
-//    'IN'/'OUT'. Para VL502 es un solo comando 0x8600 con los dos bits
-//    de la Tabla 57 prendidos (ver jt808Handler.js). El manual del
-//    VL04 (comandos AT tipo FENCE) SOLO documenta IN u OUT como valor
-//    de ese campo — no hay un tercer valor "BOTH" confirmado — así que
-//    para 'BOTH' en VL04 mandamos DOS comandos FENCE, uno con modo IN
-//    y otro con modo OUT, usando slots consecutivos (fenceId y
-//    fenceId+1) para que el equipo los trate como dos áreas separadas
-//    en el mismo punto. SIN CONFIRMAR contra un cruce real todavía —
-//    misma cautela que ya se usaba para el resto de geocercas VL04.
-//  - isEdit: si es true, VL502 manda "atributo de configuración" = 2
-//    (modificar, Tabla 55) en vez de 0 (crear/reemplazar). VL04 no
-//    tiene esa distinción en el comando de texto — reenviar FENCE,ON
-//    con el mismo índice ya pisa la config anterior.
-async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit = false }) {
+async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode }) {
     const socket = activeSockets.get(imei);
     if (!socket || socket.destroyed) {
         return {
@@ -578,49 +423,17 @@ async function sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit
     const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
 
     if (device && device.model === 'VL502') {
-        const { packet, correlationId } = jt808.buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode, isEdit });
+        const { packet, correlationId } = jt808.buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode });
         socket.write(packet);
-        console.log(`[JT808] ➡️  Geocerca (0x8600, ${isEdit ? 'modificar' : 'crear'}) enviada a IMEI=${imei} (correlationId=${correlationId}): centro=${lat},${lng} radio=${radiusM}m modo=${mode}`);
+        console.log(`[JT808] ➡️  Geocerca (0x8600) enviada a IMEI=${imei} (correlationId=${correlationId}): centro=${lat},${lng} radio=${radiusM}m modo=${mode}`);
         return { sent: true, correlationId, protocol: '0x8600 (JT808 Set Circular Area) — SIN CONFIRMAR contra prueba real todavía' };
     }
 
-    // VL04: mismo comando de texto que ya está confirmado funcionando
-    // — el "0" es el ÍNDICE DE SLOT del comando FENCE (no el id de
-    // nuestra base, que puede ser cualquier número), y el confirmado
-    // funcionando es justo el slot 0.
-    //
-    // [ACTUALIZADO 14/07/2026] CONFIRMADO ROTO, con evidencia dura de
-    // logs reales: mandamos "FENCE,ON,1,lat,lon,radio,OUT,0#" tres
-    // veces en una sesión real, y las TRES el equipo contestó
-    // literalmente "Error: Parameter 6!" (parámetro 6 = el campo
-    // IN/OUT). El manual solo documenta un ejemplo con "IN", nunca con
-    // "OUT" — este firmware puntual del VL04 no acepta ese valor tal
-    // cual, así que dejamos de mandarlo (ya no tiene sentido gastar un
-    // comando que sabemos que va a fallar y puede dejar el equipo en
-    // un estado raro). 'BOTH' en VL04 por ahora es, en los hechos,
-    // solo 'IN' — se lo decimos claro a quien llama para que no
-    // muestre un "listo" falso. Si en algún momento el fabricante
-    // confirma el valor correcto para "salida" en este firmware,
-    // volvemos a mandar el segundo comando con ese valor.
-    if (mode === 'BOTH') {
-        const cmdIn = `FENCE,ON,0,${lat},${lng},${radiusM},IN,0#`;
-        const inPkt = buildCommandPacket(cmdIn);
-        socket.write(inPkt.packet);
-        console.log(`[GT06] ➡️  Geocerca BOTH pedida para IMEI=${imei}, pero en este equipo solo se manda IN (OUT confirmado roto — "Error: Parameter 6!"): "${cmdIn}"`);
-        return {
-            sent: true,
-            correlationId: inPkt.correlationId,
-            warning: 'Este equipo (VL04) rechaza la alarma de SALIDA de geocerca ("Error: Parameter 6!" confirmado con el fabricante pendiente) — quedó configurada solo la alarma de ENTRADA.',
-        };
-    }
-    if (mode === 'OUT') {
-        console.warn(`[GT06] ⚠️  Geocerca modo OUT pedida para IMEI=${imei} — este firmware VL04 la rechaza ("Error: Parameter 6!" confirmado). Se manda igual por si el equipo/firmware cambió, pero no va a funcionar hasta confirmar el valor correcto con el fabricante.`);
-    }
-
+    // VL04: mismo comando de texto que ya está confirmado funcionando.
     const command = `FENCE,ON,0,${lat},${lng},${radiusM},${mode},0#`;
     const { packet, correlationId } = buildCommandPacket(command);
     socket.write(packet);
-    console.log(`[GT06] ➡️  Geocerca ${isEdit ? '(edición) ' : ''}enviada a IMEI=${imei} (correlationId=${correlationId}): "${command}"`);
+    console.log(`[GT06] ➡️  Geocerca enviada a IMEI=${imei} (correlationId=${correlationId}): "${command}"`);
     return { sent: true, correlationId };
 }
 
@@ -652,13 +465,11 @@ async function sendParamsCommand(imei, params) {
     }
 }
 
-// [NUEVO 14/07/2026] Consulta de parámetros — SOLO VL502 (JT808 0x8106,
-// "Query parameter of specific terminal"). A diferencia de
-// sendParamsCommand (que CONFIGURA), esto solo LEE lo que el equipo
-// tiene guardado ahora mismo — para diagnosticar sin arriesgarse a
-// cambiar nada. La respuesta real llega por 0x0104, ver el handler
-// más arriba en el switch de mensajes JT808, que actualiza CommandLog
-// con los valores reales apenas contesta el equipo.
+// [NUEVO 16/07/2026] Consulta de parámetros (0x8106) — para LEER un
+// valor guardado en el equipo sin modificarlo, a diferencia de
+// sendParamsCommand (0x8103) que sí escribe. Sirve por ejemplo para
+// chequear 0xF00D (vehicle type code) antes de asumir por qué no
+// llegan tags de motor en un vehículo nuevo recién pareado.
 async function sendQueryParamsCommand(imei, paramIds) {
     const socket = activeSockets.get(imei);
     if (!socket || socket.destroyed) {
@@ -670,18 +481,13 @@ async function sendQueryParamsCommand(imei, paramIds) {
 
     const [[device]] = await pool.query('SELECT model FROM Devices WHERE imei = ?', [imei]);
     if (!device || device.model !== 'VL502') {
-        return { sent: false, reason: 'La consulta de parámetros por 0x8106 solo aplica a equipos VL502 (JT808) — el VL04 no tiene un equivalente confirmado todavía.' };
+        return { sent: false, reason: 'Consulta por 0x8106 solo aplica a equipos VL502 (JT808).' };
     }
 
-    try {
-        const { packet, correlationId } = jt808.buildQueryTerminalParams(imei, paramIds);
-        socket.write(packet);
-        const idsText = paramIds.map(id => `0x${id.toString(16).toUpperCase()}`).join(', ');
-        console.log(`[JT808] ➡️  Consulta de parámetros (0x8106) enviada a IMEI=${imei} (correlationId=${correlationId}): ${idsText}`);
-        return { sent: true, correlationId, protocol: '0x8106 (JT808 Query parameter of specific terminal)' };
-    } catch (err) {
-        return { sent: false, reason: err.message };
-    }
+    const { packet, correlationId, paramIds: sentIds } = jt808.buildQueryTerminalParams(imei, paramIds);
+    socket.write(packet);
+    console.log(`[JT808] ➡️  Consulta de parámetros (0x8106) enviada a IMEI=${imei} (correlationId=${correlationId}): ${sentIds.map(id => '0x' + id.toString(16).padStart(4,'0')).join(', ')}`);
+    return { sent: true, correlationId };
 }
 
 // Extrae el primer frame completo del buffer acumulado, si ya llegó
@@ -777,7 +583,6 @@ function startGt06Server() {
     const server = net.createServer((socket) => {
         let buffer = Buffer.alloc(0);
         let currentImei = null;
-        let currentDeviceModel = null;
         const remote = `${socket.remoteAddress}:${socket.remotePort}`;
         console.log(`[GT06] Conexión nueva desde ${remote}`);
 
@@ -799,45 +604,12 @@ function startGt06Server() {
                     // [NUEVO] Registrar el socket activo para poder mandarle comandos al VL502
                     if (!currentImei) {
                         const [[dbDevice]] = await pool.query(
-                            `SELECT imei, model FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
+                            `SELECT imei FROM Devices WHERE imei LIKE ? AND status = 'paired'`,
                             [`${imeiPrefix}%`]
                         );
                         if (dbDevice) {
                             currentImei = dbDevice.imei;
-                            currentDeviceModel = dbDevice.model;
                             activeSockets.set(currentImei, socket);
-                            // [NUEVO 14/07/2026] Evento de reconexión — SOLO
-                            // para VL502. El VL04 reconecta seguido como
-                            // parte de su operación normal (confirmado en
-                            // logs reales, cada pocos minutos aunque no pase
-                            // nada raro), así que loguear esto para VL04
-                            // llenaría "Eventos de manejo" de ruido sin
-                            // valor — para eso ya tiene sus propias alarmas
-                            // de corte/reconexión de energía (0x02/0x32/0x72,
-                            // más significativas porque las reporta el
-                            // equipo mismo). El VL502 en cambio no tiene
-                            // ningún equivalente propio (confirmado con
-                            // evidencia real, ver conversación), así que acá
-                            // sí aporta: es la única forma que tenemos de
-                            // saber que el equipo estuvo offline.
-                            if (dbDevice.model === 'VL502') {
-                                try {
-                                    await telemetryIngestReal.ingestAlarm(currentImei, {
-                                        id: 0xF1, // uso interno nuestro (0xF1) — no es un código real del protocolo JT808, elegido bajo 256 por las dudas de que la columna alarm_id sea TINYINT
-                                        label: 'device_reconnected',
-                                        desc: 'Conexión restablecida con el equipo',
-                                    });
-                                    // [FIX 16/07/2026] Faltaba este log — el
-                                    // bloque de arriba ya andaba bien (el
-                                    // evento se guardaba en Telemetry_Alarms),
-                                    // pero como nunca imprimía nada acá,
-                                    // parecía en los logs crudos que nunca se
-                                    // había disparado.
-                                    console.log(`[JT808] 🔌 Reconexión detectada y guardada, IMEI=${currentImei}`);
-                                } catch (err) {
-                                    console.error('[JT808] Error guardando evento de reconexión:', err.message);
-                                }
-                            }
                         }
                     } else if (currentImei && !activeSockets.has(currentImei)) {
                         activeSockets.set(currentImei, socket);
@@ -877,26 +649,6 @@ function startGt06Server() {
                             if (!device) {
                                 console.warn(`[JT808] No se encontró ningún equipo pareado con IMEI que empiece con ${imeiPrefixLookup}`);
                             } else {
-                                // [ACTUALIZADO 16/07/2026 — RESTAURADO] Este
-                                // bloque había vuelto a depender de
-                                // loc.geofenceEvent (el bit 20 del alarmFlag)
-                                // para decidir si calcular la geocerca — ya
-                                // confirmamos con un cruce real, decodificando
-                                // los bytes a mano, que ese bit NUNCA se
-                                // prende en este firmware. Con esa condición,
-                                // resolveGeofenceCrossing prácticamente nunca
-                                // se llegaba a llamar — confirmado ahora con
-                                // un viaje real completo (19:28 a 19:42, con
-                                // ACC on/off correcto y kilometraje avanzando)
-                                // que no generó NI UN evento de geocerca.
-                                // Ahora resolvemos SIEMPRE, con cada posición
-                                // que llega — sin condición.
-                                let prevLat = null, prevLng = null;
-                                if (device.vehicle_id) {
-                                    const [[prevPos]] = await pool.query('SELECT lat, lng FROM Vehicles WHERE id = ?', [device.vehicle_id]);
-                                    if (prevPos) { prevLat = parseFloat(prevPos.lat); prevLng = parseFloat(prevPos.lng); }
-                                }
-
                                 await telemetryIngestReal.ingestReading(device.imei, {
                                     lat: loc.lat,
                                     lng: loc.lon,
@@ -907,44 +659,8 @@ function startGt06Server() {
                                     coolant_temp: null,
                                     battery_voltage: null,
                                     harsh_brake: false,
-                                    // [FIX 16/07/2026] Faltaba esto — sin
-                                    // pasarlo, la detección de cambio de
-                                    // contacto (lastAccByImei en
-                                    // telemetryIngestReal.js) nunca recibía
-                                    // el valor real, así que NUNCA se disparó
-                                    // ni un solo evento de "Contacto
-                                    // encendido/apagado" para el VL502,
-                                    // aunque el dato ACC=ON/OFF sí llegaba
-                                    // bien (se veía correcto en el log de
-                                    // consola de la línea de abajo, que lee
-                                    // loc.accOn directo — el problema era
-                                    // solo que no viajaba hasta acá).
-                                    acc_signal: loc.accOn,
-                                    // FIX 14/07/2026: acá antes se guardaba
-                                    // `JT808_TLV:ID=0x2a valor=...|ID=0xe4 valor=...`
-                                    // en dtc_codes — información adicional
-                                    // PROPIETARIA sin decodificar del reporte
-                                    // de posición (NO es un DTC ni un evento),
-                                    // y terminaba apareciendo tal cual en las
-                                    // tablas de diagnóstico. dtc_codes ahora
-                                    // solo se usa para eventos con nombre real
-                                    // (ALARM:..., ver más abajo); lo sin
-                                    // identificar sigue viendo la luz en el log
-                                    // de consola de arriba (loc.sinIdentificar)
-                                    // para seguir investigando qué es, sin
-                                    // ensuciar ningún dato que el cliente vea.
-                                    dtc_codes: null,
+                                    dtc_codes: loc.sinIdentificar.length ? `JT808_TLV:${loc.sinIdentificar.join('|')}` : null,
                                 });
-
-                                // Resolvemos SIEMPRE — ya no depende del bit
-                                // (ver nota arriba).
-                                if (device.vehicle_id) {
-                                    try {
-                                        await resolveGeofenceCrossing(device.vehicle_id, device.imei, prevLat, prevLng, loc.lat, loc.lon);
-                                    } catch (err) {
-                                        console.error('[JT808] Error resolviendo cruce de geocerca:', err.message);
-                                    }
-                                }
                             }
                         }
                     } else if (header.msgId === 0x0900) {
@@ -1039,8 +755,16 @@ function startGt06Server() {
                             // combustible — ahora cualquier campo nuevo
                             // (aunque no venga RPM en ese paquete puntual)
                             // dispara el guardado, para no perder datos.
+                            // FIX 16/07/2026: faltaban battery_voltage, coolant_temp y
+                            // engine_load en esta lista. Confirmado contra la sesión real
+                            // de la Hilux (868935060187604): 52 de 91 paquetes periódicos
+                            // traían SOLO el tag de batería (0530) — como battery_voltage
+                            // no estaba acá, hasAnyData daba false y esos paquetes se
+                            // descartaban enteros sin loguear ni guardar nada, aunque el
+                            // equipo sí estaba mandando datos válidos.
                             const hasAnyData = [
-                                parsed.rpm, parsed.fuel_level, parsed.device_odometer_km, parsed.fuel_consumption_avg,
+                                parsed.rpm, parsed.battery_voltage, parsed.coolant_temp, parsed.engine_load,
+                                parsed.fuel_level, parsed.device_odometer_km, parsed.fuel_consumption_avg,
                                 parsed.fuel_consumption_instant, parsed.oil_pressure_kpa, parsed.oil_life_pct,
                                 parsed.intake_air_temp, parsed.cabin_temp, parsed.steering_angle, parsed.throttle_relative_pct,
                                 parsed.remaining_fuel_l, parsed.acc_signal, parsed.shift_position, parsed.statusFlags,
@@ -1078,6 +802,22 @@ function startGt06Server() {
                             }
                         }
 
+                    } else if (header.msgId === jt808.MSG_ID.PARAM_QUERY_RESPONSE) {
+                        // --- [NUEVO 16/07/2026] Respuesta a un 0x8106 (query de
+                        // parámetros) que le mandamos por sendQueryParamsCommand. ---
+                        const { respondingToSerial, params } = jt808.parseParamQueryResponse(header.body);
+                        const correlationId = `jt808-${respondingToSerial}`;
+                        console.log(`[JT808] ⬅️  Respuesta a consulta de parámetros ID=${terminalIdHex} (correlationId=${correlationId}): ${JSON.stringify(params)}`);
+                        try {
+                            await pool.query(
+                                `UPDATE CommandLog SET status = 'acked', response_text = ?, responded_at = NOW()
+                                 WHERE correlation_id = ? AND status = 'sent'`,
+                                [JSON.stringify(params), correlationId]
+                            );
+                        } catch (err) {
+                            if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog:', err.message);
+                        }
+
                     } else if (header.msgId === jt808.MSG_ID.TERMINAL_GENERAL_RESPONSE) {
                         // --- [NUEVO 13/07/2026] Respuesta del equipo a un
                         // comando 0x8600/0x8300 que le mandamos (sendFenceCommand
@@ -1098,52 +838,6 @@ function startGt06Server() {
                             );
                         } catch (err) {
                             if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog:', err.message);
-                        }
-
-                    } else if (header.msgId === 0x0104) {
-                        // [NUEVO 14/07/2026] Respuesta a 0x8106 (Query parameter
-                        // of specific terminal) — Tabla 14 del manual. Nunca se
-                        // había leído esta respuesta; sin esto, sendQueryParams
-                        // mandaba la consulta pero no había forma de ver qué
-                        // contestó el equipo salvo mirando el hex crudo a mano.
-                        const responseSeqNum = header.body.readUInt16BE(0);
-                        const numParams = header.body[2];
-                        let offset = 3;
-                        const params = [];
-                        // [NUEVO 14/07/2026] Parámetros de tipo STRING según el
-                        // manual (Tabla 4) — sin este set, 0xF005/0xF006
-                        // (versión de hardware/software) se mostraban como
-                        // hexadecimal en vez de texto legible, porque el
-                        // parseo genérico de abajo solo distinguía por
-                        // largo (1/2/4 bytes = número, cualquier otro largo
-                        // = hex), sin saber que ESTOS IDs puntuales son
-                        // texto.
-                        const STRING_PARAM_IDS = new Set([0xF005, 0xF006, 0xF007, 0xF008, 0x0010, 0x0011, 0x0012, 0x0013]);
-                        for (let i = 0; i < numParams && offset + 3 <= header.body.length; i++) {
-                            const paramId = header.body.readUInt16BE(offset);
-                            const paramLen = header.body[offset + 2];
-                            offset += 3;
-                            if (offset + paramLen > header.body.length) break;
-                            let value;
-                            if (STRING_PARAM_IDS.has(paramId)) value = header.body.slice(offset, offset + paramLen).toString('utf8');
-                            else if (paramLen === 1) value = header.body.readUInt8(offset);
-                            else if (paramLen === 2) value = header.body.readUInt16BE(offset);
-                            else if (paramLen === 4) value = header.body.readUInt32BE(offset);
-                            else value = header.body.slice(offset, offset + paramLen).toString('hex');
-                            offset += paramLen;
-                            params.push({ paramId, value });
-                        }
-                        const paramsText = params.map(p => `0x${p.paramId.toString(16).toUpperCase()}=${p.value}`).join(', ') || '(sin parámetros en la respuesta)';
-                        const correlationId = `jt808-${responseSeqNum}`;
-                        console.log(`[JT808] ⬅️  Respuesta a consulta de parámetros ID=${terminalIdHex} (correlationId=${correlationId}): ${paramsText}`);
-                        try {
-                            await pool.query(
-                                `UPDATE CommandLog SET status = 'acked', response_text = ?, responded_at = NOW()
-                                 WHERE correlation_id = ? AND status = 'sent'`,
-                                [paramsText, correlationId]
-                            );
-                        } catch (err) {
-                            if (err.code !== 'ER_NO_SUCH_TABLE') console.error('[JT808] Error actualizando CommandLog (consulta de parámetros):', err.message);
                         }
 
                     } else {
@@ -1256,86 +950,18 @@ function startGt06Server() {
                         const tailInfo = decodeLbsExtendedTail(content);
 
                         // El resto de los bytes sigue sin identificar (fuera de LBS
-                        // + ACC + odómetro, ya confirmados) — se loguea crudo para
-                        // seguir investigando qué es, SIN guardarlo en dtc_codes
-                        // (FIX 14/07/2026 — antes esto aparecía como
-                        // "RAW_TAIL:..." en las tablas de diagnóstico del cliente,
-                        // mismo problema que el JT808_TLV de más arriba: bytes sin
-                        // decodificar no son un evento ni un DTC real).
+                        // + ACC + odómetro, ya confirmados) — se guarda crudo por si
+                        // sirve para seguir investigando, sin atribuirle significado.
                         const tailHex = content.length > 16 ? content.slice(16).toString('hex') : null;
-                        if (tailHex) {
-                            console.log(`[GT06] 0x37 cola sin identificar IMEI=${currentImei}: ${tailHex}`);
-                        }
 
-                        // [NUEVO 15/07/2026] BUG REAL encontrado: cada vez que el
-                        // equipo reconecta, reenvía una ráfaga de paquetes 0x37
-                        // VIEJOS guardados en su buffer interno (confirmado un
-                        // montón de veces en esta conversación — siempre el mismo
-                        // bloque de ~8 posiciones repetido en cada reconexión, a
-                        // veces con hasta 18 HORAS de antigüedad real, confirmado
-                        // con un caso real de 65117 segundos). Los primeros 6
-                        // bytes del paquete son la fecha real que el equipo dice
-                        // tener en ese momento (confirmado: año-2000, mes, día,
-                        // hora, minuto, segundo — todos como enteros, no BCD) —
-                        // la usamos para detectar si el paquete es viejo (ráfaga
-                        // de reconexión) o realmente reciente.
-                        //
-                        // [ACTUALIZADO 15/07/2026] Al principio esto solo
-                        // protegía el odómetro — pero un caso real mostró que
-                        // un paquete de 18hs de antigüedad, con el bit de GPS
-                        // fijo en 1 (o sea, con una posición VÁLIDA pero VIEJA),
-                        // se seguía guardando igual como si fuera la posición
-                        // actual del auto. Es la MISMA causa de las líneas
-                        // rectas del mapa que el fix del bit "Positioned" —
-                        // solo que por otra vía: acá el GPS sí tenía fix, el
-                        // problema es que el dato es viejo, no en vivo. Ahora
-                        // "paquete viejo" descarta tanto el odómetro COMO la
-                        // posición/geocerca — un solo criterio para las dos
-                        // protecciones, evita que se desalineen entre sí.
-                        let packetAgeSec = null;
-                        if (content.length >= 6) {
-                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
-                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
-                        }
-                        const STALE_THRESHOLD_SEC = 90;
-                        const isStalePacket = packetAgeSec !== null && packetAgeSec > STALE_THRESHOLD_SEC;
-
-                        let deviceOdometerKm = null;
-                        if (tailInfo) {
-                            if (isStalePacket) {
-                                console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada para el odómetro — paquete viejo de ${Math.round(packetAgeSec)}s (parece ráfaga de buffer al reconectar, no dato en vivo)`);
-                            } else {
-                                deviceOdometerKm = await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter);
-                            }
-                        }
-
-                        // [ACTUALIZADO 15/07/2026] Mismo criterio que en el
-                        // handler de 0x26/0x27, ahora sumado a isStalePacket
-                        // (ver nota arriba) — un paquete solo cuenta como
-                        // posición real si el GPS tiene fix Y además el
-                        // paquete no es una ráfaga vieja de reconexión.
-                        const gpsUsable = gps && gps.gpsFixed && !isStalePacket;
-                        if (gps && gps.gpsFixed && isStalePacket) {
-                            console.log(`[GT06] ⏳ Posición (0x37) IMEI=${currentImei} descartada para el mapa/geocerca — mismo paquete viejo de ${Math.round(packetAgeSec)}s (GPS con fix, pero dato no es en vivo)`);
-                        }
-
-                        // [NUEVO 15/07/2026] Detección de SALIDA de geocerca
-                        // para el VL04 — reusando exactamente el mismo
-                        // mecanismo que ya armamos para el VL502 (ver
-                        // resolveGeofenceCrossing arriba), en modo "solo
-                        // salida" porque la entrada ya la avisa el equipo
-                        // mismo (alarm code 0x04, confirmado funcionando).
-                        // Necesitamos la posición ANTERIOR guardada antes de
-                        // que ingestReading la pise con la nueva.
-                        let prevLatVL04 = null, prevLngVL04 = null;
-                        if (gpsUsable && vehicleId) {
-                            const [[prevPosVL04]] = await pool.query('SELECT lat, lng FROM Vehicles WHERE id = ?', [vehicleId]);
-                            if (prevPosVL04) { prevLatVL04 = parseFloat(prevPosVL04.lat); prevLngVL04 = parseFloat(prevPosVL04.lng); }
-                        }
+                        // Odómetro real del equipo — ver accumulateDeviceOdometer().
+                        const deviceOdometerKm = tailInfo
+                            ? await accumulateDeviceOdometer(currentImei, tailInfo.odometerCounter)
+                            : null;
 
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: gpsUsable ? gps.lat : null,
-                            lng: gpsUsable ? gps.lon : null,
+                            lat: gps?.lat ?? null,
+                            lng: gps?.lon ?? null,
                             speed_kmh: gps?.speed_kmh ?? null,
                             heading: gps?.course ?? null,
                             engine_rpm: null,
@@ -1343,22 +969,12 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: false,
-                            dtc_codes: null,
+                            dtc_codes: tailHex ? `RAW_TAIL:${tailHex}` : null,
                             acc_signal: tailInfo ? tailInfo.accOn : null,
                             device_odometer_km: deviceOdometerKm,
                         });
 
-                        if (gpsUsable && vehicleId) {
-                            try {
-                                await resolveGeofenceCrossing(vehicleId, currentImei, prevLatVL04, prevLngVL04, gps.lat, gps.lon, 'exit');
-                            } catch (err) {
-                                console.error('[GT06] Error resolviendo salida de geocerca:', err.message);
-                            }
-                        }
-
-                        if (gps && !gps.gpsFixed) {
-                            console.log(`[GT06] ⚠️  Posición (0x37) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);
-                        } else if (gps) {
+                        if (gps) {
                             console.log(`[GT06] Posición (0x37) IMEI=${currentImei} lat=${gps.lat.toFixed(5)} lng=${gps.lon.toFixed(5)} v=${gps.speed_kmh}km/h heading=${gps.course}°`);
 
                             if (tailInfo) {
@@ -1396,35 +1012,9 @@ function startGt06Server() {
                         // antes (mismo INSERT, misma forma), solo que ahora
                         // harsh_brake se completa con el código real en vez de
                         // ir siempre en false.
-                        //
-                        // [NUEVO 14/07/2026] Si el GPS no tiene fix real
-                        // (parsed.gpsFixed=false, confirmado contra el
-                        // manual — bit 4 del primer byte de "curso+estado"),
-                        // NO guardamos lat/lng — el equipo puede estar
-                        // mandando una estimación por antena celular en vez
-                        // de una posición real, y eso es justo lo que
-                        // generaba las líneas rectas absurdas en el trazo
-                        // del mapa después de cada reinicio del equipo. La
-                        // velocidad/rumbo tampoco son confiables sin fix,
-                        // pero los dejamos pasar igual porque no afectan el
-                        // trazo del mapa — lo único que rompía la vista era
-                        // la posición.
-                        // [NUEVO 15/07/2026] Mismo criterio unificado que en
-                        // el handler de 0x37 — ver esa nota completa. Un
-                        // paquete con fix de GPS pero con fecha vieja
-                        // (ráfaga de reconexión) tampoco cuenta como posición
-                        // real acá.
-                        let packetAgeSec = null;
-                        if (content.length >= 6) {
-                            const packetDate = Date.UTC(2000 + content[0], content[1] - 1, content[2], content[3], content[4], content[5]);
-                            if (!Number.isNaN(packetDate)) packetAgeSec = (Date.now() - packetDate) / 1000;
-                        }
-                        const isStalePacket = packetAgeSec !== null && packetAgeSec > 90;
-                        const posUsable = parsed.gpsFixed && !isStalePacket;
-
                         await telemetryIngestReal.ingestReading(currentImei, {
-                            lat: posUsable ? parsed.lat : null,
-                            lng: posUsable ? parsed.lon : null,
+                            lat: parsed.lat,
+                            lng: parsed.lon,
                             speed_kmh: parsed.speed_kmh,
                             heading: parsed.course,
                             engine_rpm: null,
@@ -1432,98 +1022,22 @@ function startGt06Server() {
                             coolant_temp: null,
                             battery_voltage: null,
                             harsh_brake: parsed.alarmCode === 0x30,
-                            // [FIX 16/07/2026] Mismo problema que se encontró
-                            // y arregló en el handler del VL502 — faltaba
-                            // pasar esto para que la detección de cambio de
-                            // contacto funcione también en los paquetes de
-                            // alarma (0x26/0x27), no solo en el 0x37.
-                            acc_signal: parsed.accOn,
                         });
-                        if (!parsed.gpsFixed) {
-                            console.log(`[GT06] ⚠️  Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} SIN FIX DE GPS (bit "Positioned"=0) — se descarta la posición, no se guarda lat/lng`);
-                        } else if (isStalePacket) {
-                            console.log(`[GT06] ⏳ Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} descartada — paquete viejo de ${Math.round(packetAgeSec)}s (GPS con fix, pero dato no es en vivo)`);
-                        } else {
-                            console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
-                        }
+                        console.log(`[GT06] Posición (0x${protocolNumber.toString(16)}) IMEI=${currentImei} lat=${parsed.lat.toFixed(5)} lng=${parsed.lon.toFixed(5)} v=${parsed.speed_kmh}km/h heading=${parsed.course}°`);
 
                         if (parsed.alarmCode != null && parsed.alarmCode !== 0x00) {
                             const known = ALARM_CODES[parsed.alarmCode];
                             if (known) {
                                 const fenceSuffix = hasFenceByte && parsed.fenceNo != null ? ` (geocerca #${parsed.fenceNo + 1})` : '';
-
-                                // [NUEVO 14/07/2026] Correlación de manipulación —
-                                // confirmado con un caso real: al desconectar y
-                                // reconectar el equipo (Mauro, prueba real), el
-                                // manoseo físico dispara varias alarmas de
-                                // "colisión"/vibración/giro brusco FALSAS en la
-                                // misma ventana que el corte de energía real. Si
-                                // una de estas llega poco después de un
-                                // power_cut(0x02) o device_unplugged(0x32),
-                                // la re-etiquetamos como manipulación en vez de
-                                // asustar al cliente con una "colisión" que nunca
-                                // pasó. Ver registerPowerEvent()/isLikelyTamperShock()
-                                // más abajo.
-                                //
-                                // [NUEVO 14/07/2026] Segunda causa de falso
-                                // positivo, distinta de la anterior: este equipo
-                                // puntual quedó instalado con un cable extensor
-                                // suelto atrás del tablero, así que se puede mover
-                                // solo con el auto estacionado. Un golpe/vibración
-                                // brusca con velocidad 0 casi seguro es el equipo
-                                // bailando en su soporte, no un choque real —
-                                // aceleración/giro brusco a 0km/h directamente no
-                                // tiene sentido físico (no se puede "acelerar
-                                // fuerte" ni "girar brusco" estando parado).
-                                //
-                                // OJO — esto es un trade-off a propósito: un choque
-                                // real contra el auto ESTACIONADO (alguien lo choca
-                                // de atrás en el semáforo, por ejemplo) también
-                                // quedaría marcado como manipulación con esta
-                                // regla, no como colisión. Se prioriza no asustar
-                                // en falso por sobre no perderse ese caso puntual,
-                                // porque con el cable suelto los falsos positivos
-                                // eran muchísimo más frecuentes. Si se arregla el
-                                // montaje del equipo (cable fijo) y/o se ajusta la
-                                // sensibilidad con el comando LEVEL, conviene
-                                // sacar esta condición o hacerla más estricta
-                                // (por ejemplo, exigir también ACC apagado).
-                                const shockCodes = new Set([0x2C, 0x29, 0x2A, 0x2B, 0x03]); // colisión, aceleración/giro/vibración bruscos
-                                const isShockCode = shockCodes.has(parsed.alarmCode);
-                                const isStoppedShock = isShockCode && (parsed.speed_kmh ?? 0) === 0;
-                                const isPowerEventShock = isShockCode && isLikelyTamperShock(currentImei);
-                                const isTamperShock = isStoppedShock || isPowerEventShock;
-                                const effectiveLabel = isTamperShock ? 'tamper_suspected_shock' : known.label;
-                                const tamperReason = isStoppedShock
-                                    ? 'golpe con el vehículo detenido (velocidad 0) — el equipo está con un cable suelto y se mueve en su soporte, no es un choque real'
-                                    : 'golpe/vibración justo después de un corte de energía — no se cuenta como choque real';
-                                const effectiveDesc = isTamperShock
-                                    ? `Posible manipulación del equipo (${tamperReason})`
-                                    : known.desc + fenceSuffix;
-
-                                if (parsed.alarmCode === 0x02 || parsed.alarmCode === 0x32 || parsed.alarmCode === 0x72) {
-                                    registerPowerEvent(currentImei);
-                                    // Corrección retroactiva — ver telemetryIngestReal.js:
-                                    // las alarmas de golpe suelen llegar ANTES que
-                                    // el propio corte/reconexión en la ráfaga real,
-                                    // así que además de marcar hacia adelante
-                                    // corregimos lo que ya se guardó hace poco.
-                                    try {
-                                        await telemetryIngestReal.relabelRecentShockAsTamper(currentImei, TAMPER_WINDOW_MS);
-                                    } catch (err) {
-                                        console.error('[GT06] Error reclasificando alarmas de golpe como manipulación:', err.message);
-                                    }
-                                }
-
-                                console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${effectiveLabel} (0x${parsed.alarmCode.toString(16)}) ${effectiveDesc}${isTamperShock ? ' [reclasificado, original: ' + known.label + ']' : ''}`);
+                                console.log(`[GT06] 🚨 ALARMA IMEI=${currentImei}: ${known.label} (0x${parsed.alarmCode.toString(16)}) ${known.desc}${fenceSuffix}`);
 
                                 // ACC ON/OFF ya se sigue por el heartbeat 0x13 —
                                 // no lo duplicamos como fila en Telemetry_Alarms.
                                 if (parsed.alarmCode !== 0xFE && parsed.alarmCode !== 0xFF) {
                                     await telemetryIngestReal.ingestAlarm(currentImei, {
                                         id: parsed.alarmCode,
-                                        label: effectiveLabel,
-                                        desc: effectiveDesc,
+                                        label: known.label,
+                                        desc: known.desc + fenceSuffix,
                                     }, { lat: parsed.lat, lon: parsed.lon });
                                 }
                             } else {
@@ -1578,20 +1092,6 @@ function startGt06Server() {
         socket.on('close', () => {
             if (currentImei && activeSockets.get(currentImei) === socket) activeSockets.delete(currentImei);
             console.log(`[GT06] Conexión cerrada: ${remote} (IMEI=${currentImei || 'desconocido'})`);
-            // [NUEVO 14/07/2026] Ver nota completa donde se loguea el
-            // evento de reconexión, arriba — mismo criterio, solo VL502.
-            if (currentImei && currentDeviceModel === 'VL502') {
-                telemetryIngestReal.ingestAlarm(currentImei, {
-                    id: 0xF2, // uso interno nuestro (0xF2) — mismo criterio que 0xF1 arriba
-                    label: 'device_disconnected',
-                    desc: 'Se perdió la conexión con el equipo',
-                }).then(() => {
-                    // [FIX 16/07/2026] Mismo motivo que en el bloque de
-                    // reconexión — sin esto, quedaba invisible en los logs
-                    // crudos aunque se guardara bien.
-                    console.log(`[JT808] 🔌 Desconexión detectada y guardada, IMEI=${currentImei}`);
-                }).catch(err => console.error('[GT06] Error guardando evento de desconexión:', err.message));
-            }
         });
     });
 
@@ -1627,34 +1127,6 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
     const secret = process.env.GT06_INTERNAL_SECRET || '';
 
     const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/internal/send-query-params') {
-            if (secret && req.headers['x-internal-secret'] !== secret) {
-                res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'No autorizado' }));
-                return;
-            }
-            let body = '';
-            req.on('data', chunk => { body += chunk; });
-            req.on('end', async () => {
-                try {
-                    const { imei, paramIds } = JSON.parse(body || '{}');
-                    if (!imei || !Array.isArray(paramIds) || paramIds.length === 0) {
-                        res.writeHead(400, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({ error: 'Faltan imei o paramIds (array) en el body' }));
-                        return;
-                    }
-                    const result = await sendQueryParamsCommand(imei, paramIds);
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify(result));
-                } catch (err) {
-                    console.error('[GT06 internal API] Error en send-query-params:', err.message);
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Error interno enviando la consulta de parámetros' }));
-                }
-            });
-            return;
-        }
-
         if (req.method === 'POST' && req.url === '/internal/send-params') {
             if (secret && req.headers['x-internal-secret'] !== secret) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1693,17 +1165,45 @@ function startInternalCommandApi(port = process.env.GT06_INTERNAL_PORT || 9001) 
             req.on('data', chunk => { body += chunk; });
             req.on('end', async () => {
                 try {
-                    const { imei, fenceId, lat, lng, radiusM, mode, isEdit } = JSON.parse(body || '{}');
+                    const { imei, fenceId, lat, lng, radiusM, mode } = JSON.parse(body || '{}');
                     if (!imei || fenceId == null || lat == null || lng == null || !radiusM) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: 'Faltan imei, fenceId, lat, lng o radiusM en el body' }));
                         return;
                     }
-                    const result = await sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode, isEdit: !!isEdit });
+                    const result = await sendFenceCommand(imei, { fenceId, lat, lng, radiusM, mode });
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify(result));
                 } catch (err) {
                     console.error('[GT06 internal API] Error en send-fence:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
+            return;
+        }
+
+        if (req.method === 'POST' && req.url === '/internal/query-params') {
+            if (secret && req.headers['x-internal-secret'] !== secret) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No autorizado' }));
+                return;
+            }
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const { imei, paramIds } = JSON.parse(body || '{}');
+                    if (!imei || !Array.isArray(paramIds) || paramIds.length === 0) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Faltan imei o paramIds (array de números) en el body' }));
+                        return;
+                    }
+                    const result = await sendQueryParamsCommand(imei, paramIds);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (err) {
+                    console.error('[GT06 internal API] Error en query-params:', err.message);
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: err.message }));
                 }
