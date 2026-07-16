@@ -684,12 +684,45 @@ function buildSetCircularFence(imei, { fenceId, lat, lng, radiusM, mode }) {
 // efectivamente cambió mirando la frecuencia real de los 0x0200 que
 // llegan después).
 // ============================================================
+// [NUEVO 16/07/2026] serverAddr/apn son STRING (longitud variable);
+// serverPort sigue siendo DWORD. Se agregaron para poder reconfigurar
+// el servidor del VL502 SIN DEPENDER DE SMS: la vía SMS por ICCID (sin
+// número de teléfono asociado a la SIM) no garantiza entrega ni
+// autenticación contra el equipo (muchos Concox/Jimi solo aceptan SMS
+// de un número "maestro" preconfigurado), pero el equipo YA tiene una
+// conexión TCP activa y confirmada — el estándar JT/T808-2013 prevé
+// justamente estos 3 parámetros para reconfigurar el servidor por el
+// mismo canal de datos, sin pasar por SMS.
 const TERMINAL_PARAMS = {
     heartbeatIntervalSec: 0x0001,
     reportIntervalSec: 0x0020,
     sleepIntervalSec: 0x0021,
     alarmIntervalSec: 0x0022,
     reportDistanceM: 0x0027,
+    apn: 0x0010,        // STRING — APN de la SIM
+    serverAddr: 0x0013, // STRING — IP o dominio del servidor
+    serverPort: 0x0018, // DWORD  — puerto TCP del servidor
+    // [NUEVO 16/07/2026] Vehicle Type Code — Tabla 5 del manual VL502.
+    // SIN este parámetro configurado, el equipo no sabe qué protocolo
+    // OBD usar para decodificar la marca/modelo puntual del vehículo,
+    // y por eso solo llega el tag de batería (medido por el propio
+    // equipo, no depende del OBD) mientras RPM/ACC/combustible/temp
+    // quedan siempre null — confirmado byte a byte contra la sesión
+    // real de la Hilux (868935060187604): en 56 paquetes 0x0900
+    // reales, NUNCA apareció ningún tag de motor, solo 0530 (batería).
+    vehicleTypeCode: 0xF00D, // DWORD — ver Tabla 5 del manual (marca+combustible)
+};
+
+const TERMINAL_PARAM_TYPES = {
+    heartbeatIntervalSec: 'dword',
+    reportIntervalSec: 'dword',
+    sleepIntervalSec: 'dword',
+    alarmIntervalSec: 'dword',
+    reportDistanceM: 'dword',
+    apn: 'string',
+    serverAddr: 'string',
+    serverPort: 'dword',
+    vehicleTypeCode: 'dword',
 };
 
 function buildSetTerminalParams(imei, params) {
@@ -709,6 +742,15 @@ function buildSetTerminalParams(imei, params) {
         // heartbeatIntervalSec y con reportIntervalSec probados por
         // separado esta noche.
         const paramId = uint16be(TERMINAL_PARAMS[key]);
+        const type = TERMINAL_PARAM_TYPES[key] || 'dword';
+
+        if (type === 'string') {
+            // STRING: longitud = bytes reales del string (no fija en 4
+            // como el DWORD), ASCII half-width según el manual.
+            const strBuf = Buffer.from(String(value), 'ascii');
+            return Buffer.concat([paramId, Buffer.from([strBuf.length]), strBuf]);
+        }
+
         const valBuf = Buffer.alloc(4);
         valBuf.writeUInt32BE(Math.round(value), 0);
         return Buffer.concat([paramId, Buffer.from([4]), valBuf]); // ID(2) + longitud(1) + valor DWORD(4)

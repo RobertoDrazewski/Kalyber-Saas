@@ -328,7 +328,13 @@ const sendDeviceCommand = async (req, res) => {
 const sendDeviceParams = async (req, res) => {
     const { imei } = req.params;
     const params = req.body || {};
-    const allowedKeys = ['heartbeatIntervalSec', 'reportIntervalSec', 'sleepIntervalSec', 'alarmIntervalSec', 'reportDistanceM'];
+    // [AMPLIADO 16/07/2026] apn/serverAddr/serverPort agregados — sirven
+    // para reconfigurar el servidor del VL502 por TCP (0x8103), como vía
+    // alternativa cuando el SMS no es confiable (ej: plataformas que
+    // mandan por ICCID sin número de teléfono asociado, que muchos
+    // equipos Concox/Jimi terminan ignorando si no matchea su número
+    // "maestro" autorizado).
+    const allowedKeys = ['heartbeatIntervalSec', 'reportIntervalSec', 'sleepIntervalSec', 'alarmIntervalSec', 'reportDistanceM', 'apn', 'serverAddr', 'serverPort', 'vehicleTypeCode'];
     const filtered = Object.fromEntries(
         Object.entries(params).filter(([k, v]) => allowedKeys.includes(k) && v !== '' && v != null)
     );
