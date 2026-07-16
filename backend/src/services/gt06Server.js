@@ -54,7 +54,20 @@ const pool = require('../config/database');
 const telemetryIngestReal = require('./telemetryIngestReal');
 const jt808 = require('./jt808Handler');
 
-const PORT = process.env.GT06_TCP_PORT || 9000;
+// [ACTUALIZADO 16/07/2026] Separación real de puertos por modelo de
+// equipo — antes un solo puerto (9000) aceptaba GT06 y JT808 mezclados
+// y el parser decidía el protocolo por el byte de arranque (0x7878 vs
+// 0x7e). Eso YA funcionaba bien (ver extractAnyFrame/extractJT808Frame
+// más abajo, no dependen del puerto), pero para poder probar en serio
+// con un controlador y equipo por vehículo, separamos también a nivel
+// de puerto TCP:
+//   GT06_TCP_PORT_VL04  (default 9000) — SOLO equipos VL04 (Kangoo)
+//   GT06_TCP_PORT_VL502 (default 9002) — SOLO equipos VL502 (Hilux)
+// OJO: NO usar 9001 para esto — ese puerto ya está tomado por la API
+// interna de comandos (startInternalCommandApi, ver GT06_INTERNAL_PORT
+// más abajo). Si se pisan, la API interna deja de levantar y el envío
+// de comandos desde el panel se rompe en silencio.
+const PORT = process.env.GT06_TCP_PORT || process.env.GT06_TCP_PORT_VL04 || 9000;
 
 const START = Buffer.from([0x78, 0x78]);
 const STOP = Buffer.from([0x0D, 0x0A]);
@@ -579,20 +592,40 @@ async function findDeviceIdByImei(imei) {
     return device?.id ?? null;
 }
 
-function startGt06Server() {
+// [ACTUALIZADO 16/07/2026] Ahora recibe puerto/label/protocolo esperado
+// para poder levantar DOS instancias independientes (VL04 en 9000,
+// VL502 en 9002) reusando exactamente el mismo parser — el parser ya
+// detecta el protocolo por el byte de arranque, así que no hace falta
+// (ni conviene) duplicar la lógica de parseo en dos archivos distintos.
+//
+//   port           — puerto TCP a escuchar (default: el histórico PORT/9000)
+//   label          — sufijo para distinguir en los logs qué instancia es
+//                    (ej: "VL04:9000", "VL502:9002")
+//   expectedProto  — 'gt06' | 'jt808' | null. Si un equipo se conecta al
+//                    puerto "equivocado" (ej: un VL502 mal configurado
+//                    por SMS que sigue apuntando al puerto de VL04), NO
+//                    se descarta el paquete — sigue funcionando igual
+//                    que antes — pero se loguea un warning bien visible
+//                    para detectar el error de configuración del equipo
+//                    sin perder telemetría real por eso.
+function startGt06Server(port = PORT, { label = null, expectedProto = null } = {}) {
+    const tag = label || `puerto ${port}`;
     const server = net.createServer((socket) => {
         let buffer = Buffer.alloc(0);
         let currentImei = null;
         const remote = `${socket.remoteAddress}:${socket.remotePort}`;
-        console.log(`[GT06] Conexión nueva desde ${remote}`);
+        console.log(`[GT06:${tag}] Conexión nueva desde ${remote}`);
 
         socket.on('data', async (data) => {
             buffer = Buffer.concat([buffer, data]);
-            console.log(`[GT06] Datos crudos recibidos de ${remote} (${data.length} bytes): ${data.toString('hex')}`);
+            console.log(`[GT06:${tag}] Datos crudos recibidos de ${remote} (${data.length} bytes): ${data.toString('hex')}`);
 
             // ---- JT808 (equipos VL502/"Avanzado") — protocolo distinto,
             // delimitado por 0x7e en vez de 0x7878/0x7979. Se procesa
             // aparte, antes del loop de GT06 existente.
+            if (expectedProto === 'gt06' && buffer.indexOf(Buffer.from([0x7e])) === 0) {
+                console.warn(`[GT06:${tag}] ⚠️  Llegó una trama JT808 (0x7e) al puerto reservado para VL04/GT06 (${port}). Revisá la configuración *SETSERVER de ese equipo — probablemente sigue apuntando a este puerto en vez del de VL502. Se procesa igual para no perder el dato.`);
+            }
             let jt808Result;
             while ((jt808Result = jt808.extractJT808Frame(buffer)) !== null) {
                 buffer = jt808Result.rest;
@@ -848,6 +881,10 @@ function startGt06Server() {
                 }
             }
 
+            if (expectedProto === 'jt808' && buffer.indexOf(START) === 0) {
+                console.warn(`[GT06:${tag}] ⚠️  Llegó una trama GT06 (0x7878) al puerto reservado para VL502/JT808 (${port}). Revisá la configuración *SETSERVER de ese equipo — probablemente sigue apuntando al puerto de VL04. Se procesa igual para no perder el dato.`);
+            }
+
             let result;
             while ((result = extractAnyFrame(buffer)) !== null) {
                 const { frame, rest, isLong } = result;
@@ -1095,11 +1132,11 @@ function startGt06Server() {
         });
     });
 
-    server.listen(PORT, '0.0.0.0', () => {
-        console.log(`📡 Servidor GT06 (trackers) escuchando en el puerto ${PORT}`);
+    server.listen(port, '0.0.0.0', () => {
+        console.log(`📡 Servidor de trackers [${tag}] escuchando en el puerto ${port}`);
     });
 
-    server.on('error', (err) => console.error('❌ Error en servidor GT06:', err.message));
+    server.on('error', (err) => console.error(`❌ Error en servidor de trackers [${tag}] (puerto ${port}):`, err.message));
 
     return server;
 }
