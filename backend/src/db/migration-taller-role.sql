@@ -1,0 +1,13 @@
+-- ============================================================
+-- Agrega el rol 'taller' como valor propio del ENUM de Users.role.
+--
+-- POR QUÉ: hasta ahora el mecánico/dueño de un taller se creaba con
+-- role='admin' (mismo que un cliente de flota), y la única forma de
+-- distinguirlo era consultar si su id aparecía como owner_user_id en
+-- Workshops — funcional, pero confuso de leer/debuggear y frágil
+-- (un desalineamiento entre Users y Workshops, como pasó durante las
+-- pruebas, deja al usuario cayendo silenciosamente al dashboard
+-- equivocado). Con 'taller' como rol propio, la distinción queda
+-- explícita en el dato mismo, sin tener que cruzar tablas.
+-- ============================================================
+ALTER TABLE Users MODIFY COLUMN role ENUM('super_admin','admin','driver','taller') DEFAULT NULL;

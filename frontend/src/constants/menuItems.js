@@ -25,4 +25,4 @@ export const menuItems = [
   { id: 'facturador', label: 'Facturador', icon: Receipt, visibleFor: ['super_admin'] },
 ];
 
-export const roleLabel = { super_admin: 'Super Admin', admin: 'Admin de flota', driver: 'Chofer' };
+export const roleLabel = { super_admin: 'Super Admin', admin: 'Admin de flota', driver: 'Chofer', taller: 'Taller (Kalyber Scanner)' };

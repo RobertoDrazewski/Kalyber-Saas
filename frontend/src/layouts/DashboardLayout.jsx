@@ -5,11 +5,12 @@ import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import GoogleTranslateBar from '../components/GoogleTranslateBar';
 
-const ROLE_LABEL = { super_admin: 'Super Admin', admin: 'Admin', driver: 'Chofer' };
+const ROLE_LABEL = { super_admin: 'Super Admin', admin: 'Admin', driver: 'Chofer', taller: 'Taller' };
 const ROLE_COLOR = {
   super_admin: 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/30',
   admin: 'text-[#6366F1] bg-[#6366F1]/10 border-[#6366F1]/30',
   driver: 'text-[#10B981] bg-[#10B981]/10 border-[#10B981]/30',
+  taller: 'text-[#EC4899] bg-[#EC4899]/10 border-[#EC4899]/30',
 };
 
 export default function DashboardLayout({ children, activeTab, setActiveTab }) {

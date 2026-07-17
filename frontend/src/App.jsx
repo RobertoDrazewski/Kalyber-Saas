@@ -4,9 +4,12 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DriverView from './pages/DriverView';
+import ScannerMechanicView from './pages/ScannerMechanicView';
 
 // Protector de Rutas — además de exigir token, valida el rol cuando
-// la ruta lo requiere.
+// la ruta lo requiere. El fallback contempla los 3 roles con vista
+// propia (driver/taller van a la suya, todo lo demás al dashboard).
+const roleHome = { driver: '/driver', taller: '/scanner' };
 const PrivateRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem('kyber_token');
   if (!token) return <Navigate to="/login" />;
@@ -14,7 +17,7 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   if (allowedRoles) {
     const user = JSON.parse(localStorage.getItem('kyber_user') || '{}');
     if (!allowedRoles.includes(user.role)) {
-      return <Navigate to={user.role === 'driver' ? '/driver' : '/dashboard'} />;
+      return <Navigate to={roleHome[user.role] || '/dashboard'} />;
     }
   }
   return children;
@@ -70,6 +73,15 @@ export default function App() {
           element={
             <PrivateRoute allowedRoles={['driver']}>
               <DriverView />
+            </PrivateRoute>
+          }
+        />
+        {/* Vista del mecánico (producto Kalyber Scanner) — rol propio 'taller'. */}
+        <Route
+          path="/scanner"
+          element={
+            <PrivateRoute allowedRoles={['super_admin', 'taller']}>
+              <ScannerMechanicView />
             </PrivateRoute>
           }
         />

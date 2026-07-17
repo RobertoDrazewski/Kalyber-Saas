@@ -40,7 +40,9 @@ export default function Login() {
       localStorage.setItem('kyber_user', JSON.stringify(data.user));
       // Los choferes van a su vista reducida (mapa + elegir auto);
       // el resto va al dashboard completo.
-      navigate(data.user.role === 'driver' ? '/driver' : '/dashboard');
+      // Cada rol tiene su vista propia; el resto (admin, super_admin) va al dashboard de flota.
+      const roleHome = { driver: '/driver', taller: '/scanner' };
+      navigate(roleHome[data.user.role] || '/dashboard');
       return;
     } catch (err) {
       setError(err.message);
