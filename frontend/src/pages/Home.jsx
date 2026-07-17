@@ -418,11 +418,11 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Intercepción de códigos de error (DTC) para la prevención de paradas operativas no planificadas.</div>
+                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Interceptamos y registramos los códigos de error (DTC) que reporta la ECU en tiempo real — la traducción a descripción de falla específica está en desarrollo activo, hoy se muestra el código crudo reportado por el equipo para que su taller lo cruce.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Procesamiento y Notificación Inteligente:</strong> Generación de alertas contextuales y reportes consolidados mediante tecnología OpenAI.</div>
+                <div><strong className="text-white font-semibold">Acceso por API para Integraciones:</strong> El administrador de flota puede generar sus propias API Keys para conectar Kalyber con su ERP u otro software, sin depender de nosotros para cada integración.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
@@ -430,7 +430,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Funcionalidad Completa:</strong> Incluye absolutamente todas las características operativas del Plan Básico (incluyendo Soberanía de Datos).</div>
+                <div><strong className="text-white font-semibold">Funcionalidad Completa de Plataforma:</strong> Incluye todas las capacidades de software del Plan Básico (Soberanía de Datos, geocercas, score de manejo). Único punto a aclarar: el aviso sonoro en cabina es una capacidad física del hardware VL04 — el escáner VL502 no tiene buzzer local, reporta sus eventos por red igual que todo lo demás.</div>
               </li>
             </ul>
           </div>
