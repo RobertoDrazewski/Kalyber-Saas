@@ -4,9 +4,10 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { fetchAPI } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair, Pencil, LogIn, LogOut } from 'lucide-react';
+import { X, Gauge, Fuel, Wrench, Hash, Clock, MapPinned, Plus, Trash2, Crosshair, Pencil, LogIn, LogOut, Navigation } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 import { forwardFillSeries } from '../utils/chartFill';
+import { reverseGeocode } from '../utils/reverseGeocode';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -112,6 +113,28 @@ export default function TabPosicion() {
   // es NULL en el 100% de sus filas reales).
   const selectedIdRef = useRef(null);
   useEffect(() => { selectedIdRef.current = selected?.id ?? null; }, [selected?.id]);
+
+  // [NUEVO 17/07/2026] Dirección real (calle + altura) del vehículo
+  // seleccionado, resuelta por geocodificación inversa a partir de su
+  // lat/lng actual. Ver utils/reverseGeocode.js — no rompe nada si
+  // falla (queda null y el panel simplemente no muestra la línea de
+  // dirección, sigue mostrando todo lo demás normal).
+  const [address, setAddress] = useState(null);
+  // [NUEVO 17/07/2026] Toggle Calles/Satélite — capas 100% gratis, sin
+  // API key: CARTO Voyager para calles (la que ya había) y ESRI World
+  // Imagery + una capa de etiquetas encima para el estilo "híbrido"
+  // (satélite con nombres de calle), muy similar a lo que se ve en
+  // Google Maps en modo satélite pero sin costo de facturación.
+  const [mapStyle, setMapStyle] = useState('calles'); // 'calles' | 'satelite'
+  useEffect(() => {
+    if (!selected || selected.lat == null || selected.lng == null) { setAddress(null); return; }
+    const requestedId = selected.id;
+    setAddress(null); // limpiar mientras resuelve, para no mostrar la dirección del auto anterior
+    reverseGeocode(Number(selected.lat), Number(selected.lng)).then(result => {
+      if (selectedIdRef.current !== requestedId) return; // cambiaste de auto mientras resolvía
+      setAddress(result);
+    });
+  }, [selected?.id, selected?.lat, selected?.lng]);
 
   // Geocercas del auto seleccionado + estado del flujo de creación.
   const [geofences, setGeofences] = useState([]);
@@ -401,14 +424,49 @@ export default function TabPosicion() {
               <Crosshair size={14} /> Tocá el mapa donde querés el centro de la geocerca
             </div>
           )}
+
+          {/* [NUEVO 17/07/2026] Switch Calles/Satélite */}
+          <div className="absolute top-3 right-3 z-[1000] bg-[#0B1120]/90 backdrop-blur-sm rounded-lg border border-slate-700 p-1 flex gap-1 shadow-lg">
+            <button
+              onClick={() => setMapStyle('calles')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${mapStyle === 'calles' ? 'bg-[#6366F1] text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Calles
+            </button>
+            <button
+              onClick={() => setMapStyle('satelite')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${mapStyle === 'satelite' ? 'bg-[#6366F1] text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Satélite
+            </button>
+          </div>
+
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} maxZoom={19} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-              maxZoom={20}
-              maxNativeZoom={19}
-            />
+            {mapStyle === 'calles' ? (
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                maxZoom={20}
+                maxNativeZoom={19}
+              />
+            ) : (
+              <>
+                {/* Base satelital — imágenes reales, gratis, sin API key */}
+                <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                  attribution='Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics'
+                  maxZoom={19}
+                  maxNativeZoom={19}
+                />
+                {/* Etiquetas encima (calles, nombres de lugares) para que quede "híbrido", no una foto muda */}
+                <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                  maxZoom={19}
+                  maxNativeZoom={19}
+                />
+              </>
+            )}
             {selected && <FlyToVehicle vehicle={selectedVehicleCoord} />}
             <FenceClickHandler active={placingFence} onPick={(latlng) => { setPendingCenter(latlng); setPlacingFence(false); }} />
 
@@ -532,6 +590,16 @@ export default function TabPosicion() {
               <div>
                 <h3 className="text-xl font-bold text-white font-mono">{selected.plate}</h3>
                 <p className="text-slate-400 text-sm">{selected.brand} {selected.model} · {Math.round(selected.odometer_km || 0)} km</p>
+                {/* [NUEVO 17/07/2026] Dirección real en vez de solo
+                    coordenadas — si todavía no resolvió o falló, cae
+                    a lat/lng+rumbo como antes, nunca queda en blanco. */}
+                <p className="text-slate-500 text-xs flex items-center gap-1.5 mt-1">
+                  <Navigation size={11} className="shrink-0" style={{ transform: selected.heading != null ? `rotate(${selected.heading}deg)` : undefined }} />
+                  {address
+                    ? <span className="text-slate-400">{address.full}</span>
+                    : <span>{Number(selected.lat).toFixed(5)}, {Number(selected.lng).toFixed(5)}{selected.heading != null ? ` · rumbo ${Math.round(selected.heading)}°` : ''}</span>
+                  }
+                </p>
               </div>
             </div>
             <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-white"><X size={20} /></button>

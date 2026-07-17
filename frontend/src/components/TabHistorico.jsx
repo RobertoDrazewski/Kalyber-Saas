@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchAPI } from '../services/api';
-import { MapContainer, TileLayer, Polyline, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { History, Clock, MapPin, Gauge, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
 import { getEventIcon } from '../utils/eventIcons';
+import { reverseGeocode } from '../utils/reverseGeocode';
 
 const dotIcon = (color) => L.divIcon({
   className: '',
@@ -28,6 +29,26 @@ function formatDuration(min) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
+// [NUEVO 17/07/2026] Antes el mapa siempre arrancaba centrado en un
+// punto fijo de Mendoza con zoom 13 — si el viaje era corto o quedaba
+// lejos de ese centro, había que buscarlo a mano con scroll/drag.
+// Este componente no renderiza nada visible: usa el hook useMap() de
+// react-leaflet para, cada vez que cambia el trazo (tripTrail), pedirle
+// al mapa que encuadre automáticamente TODO el recorrido con un margen
+// prolijo — mismo patrón que Google Maps cuando abrís una ruta.
+function FitBoundsToTrail({ trail }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!trail || trail.length === 0) return;
+    if (trail.length === 1) {
+      map.setView(trail[0], 15);
+      return;
+    }
+    map.fitBounds(trail, { padding: [40, 40], maxZoom: 16 });
+  }, [trail, map]);
+  return null;
+}
+
 export default function TabHistorico() {
   const [trips, setTrips] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -40,6 +61,23 @@ export default function TabHistorico() {
   // seleccionado, con ícono por tipo — antes la bitácora del cliente
   // no mostraba ningún evento, solo distancia/duración/velocidad.
   const [tripEvents, setTripEvents] = useState([]);
+
+  // [NUEVO 17/07/2026] Dirección real de inicio y fin del viaje —
+  // antes solo se veía la hora, sin ubicación legible. Se resuelve
+  // recién cuando ya tenemos el trazo (tripTrail[0] y el último punto),
+  // así usamos coordenadas reales del GPS y no las del centro del
+  // vehículo que puede haberse movido desde entonces.
+  const [tripAddresses, setTripAddresses] = useState({ start: null, end: null });
+  useEffect(() => {
+    if (tripTrail.length === 0) { setTripAddresses({ start: null, end: null }); return; }
+    setTripAddresses({ start: null, end: null });
+    const [startLat, startLng] = tripTrail[0];
+    const [endLat, endLng] = tripTrail[tripTrail.length - 1];
+    reverseGeocode(startLat, startLng).then(r => setTripAddresses(prev => ({ ...prev, start: r })));
+    if (tripTrail.length > 1) {
+      reverseGeocode(endLat, endLng).then(r => setTripAddresses(prev => ({ ...prev, end: r })));
+    }
+  }, [tripTrail]);
 
   const load = () => fetchAPI('/trips').then(setTrips).catch(err => setLoadError(err.message));
 
@@ -211,6 +249,20 @@ export default function TabHistorico() {
               <div>
                 <p className="font-mono text-white font-bold">{selectedTrip.plate}</p>
                 <p className="text-xs text-slate-400">{formatDate(selectedTrip.start_time)} · {formatTime(selectedTrip.start_time)} - {formatTime(selectedTrip.end_time)}</p>
+                {/* [NUEVO 17/07/2026] Calle y altura real de inicio/fin,
+                    en vez de tener que buscarlas mirando el mapa. */}
+                <div className="mt-2 space-y-1 text-xs">
+                  <p className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0" />
+                    {tripAddresses.start ? tripAddresses.start.full : 'Buscando dirección de inicio…'}
+                  </p>
+                  {tripTrail.length > 1 && (
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <span className="w-2 h-2 rounded-full bg-[#EF4444] shrink-0" />
+                      {tripAddresses.end ? tripAddresses.end.full : 'Buscando dirección de destino…'}
+                    </p>
+                  )}
+                </div>
               </div>
               <button onClick={() => setSelectedTrip(null)} className="text-slate-400 hover:text-white"><X size={18} /></button>
             </div>
@@ -223,6 +275,7 @@ export default function TabHistorico() {
                 {tripTrail.length > 1 && <Polyline positions={tripTrail} pathOptions={{ color: '#6366F1', weight: 4 }} />}
                 {tripTrail.length > 0 && <Marker position={tripTrail[0]} icon={dotIcon('#10B981')} />}
                 {tripTrail.length > 1 && <Marker position={tripTrail[tripTrail.length - 1]} icon={dotIcon('#EF4444')} />}
+                <FitBoundsToTrail trail={tripTrail} />
               </MapContainer>
             </div>
             <div className="p-4 grid grid-cols-3 gap-3 text-center border-t border-slate-800">

@@ -367,7 +367,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Gestión de Perímetros (Geocercas):</strong> Configuración de áreas operativas y alertas automáticas por desvíos.</div>
+                <div><strong className="text-white font-semibold">Gestión de Perímetros (Geocercas) por GPS:</strong> El cruce de entrada/salida se calcula en nuestra infraestructura a partir de la posición real — funciona igual en los dos modelos de hardware, sin depender de que el equipo la detecte por su cuenta.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
@@ -423,6 +423,10 @@ function Pricing() {
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
                 <div><strong className="text-white font-semibold">Procesamiento y Notificación Inteligente:</strong> Generación de alertas contextuales y reportes consolidados mediante tecnología OpenAI.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Gestión de Perímetros (Geocercas) por GPS:</strong> Misma tecnología de cruce por GPS del Plan Básico, incluida sin cargo extra.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 

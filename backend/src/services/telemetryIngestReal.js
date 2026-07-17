@@ -27,6 +27,79 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ============================================================
+// [NUEVO 16/07/2026] Geocercas calculadas por NOSOTROS a partir del
+// GPS real, en vez de depender de que el equipo las detecte solo.
+//
+// POR QUÉ: hasta ahora, la única forma de saber si un vehículo entró o
+// salió de una geocerca era que el EQUIPO la tuviera configurada
+// (comando FENCE/0x8600) y nos avisara con su propia alarma nativa
+// (0x04/0x05 para VL04, 0x21/0x22 para VL502). Confirmado por logs
+// reales: la alarma de SALIDA del VL04 está rota en este firmware, y
+// la del VL502 nunca llegó a confirmarse. Resultado: geocercas que no
+// avisan nada, aunque el auto haya cruzado el límite de verdad.
+//
+// CÓMO FUNCIONA AHORA: cada vez que llega una posición real (de
+// CUALQUIER equipo, VL04 o VL502 — este archivo es compartido por los
+// dos protocolos), comparamos la distancia contra el centro de cada
+// geocerca activa del vehículo. Si el estado "adentro/afuera" cambió
+// respecto a la última lectura, generamos la alarma nosotros mismos,
+// sin depender de que el equipo la detecte. Mismo alarm_id (0x22
+// entrada / 0x21 salida) que ya usa TabPosicion.jsx para contar
+// entradas/salidas — así el panel no necesita ningún cambio, ya sabe
+// leer estos eventos.
+// ============================================================
+async function checkGeofenceCrossings(vehicleId, lat, lng) {
+    const [fences] = await pool.query(
+        `SELECT id, name, lat, lng, radius_m, mode, last_known_inside
+         FROM Geofences WHERE vehicle_id = ? AND active = 1`,
+        [vehicleId]
+    );
+    if (fences.length === 0) return;
+
+    for (const fence of fences) {
+        const distKm = haversineKm(lat, lng, parseFloat(fence.lat), parseFloat(fence.lng));
+        const isInsideNow = (distKm * 1000) <= fence.radius_m;
+        const wasInside = fence.last_known_inside === null ? null : !!fence.last_known_inside;
+
+        // Primera lectura para esta geocerca: solo fijamos el estado
+        // base, sin disparar alarma — no sabemos si "entró ahora" o
+        // "ya estaba ahí desde antes de crear la geocerca".
+        if (wasInside === null) {
+            await pool.query('UPDATE Geofences SET last_known_inside = ? WHERE id = ?', [isInsideNow ? 1 : 0, fence.id]);
+            continue;
+        }
+
+        if (isInsideNow !== wasInside) {
+            const crossedIn = isInsideNow; // true = entró, false = salió
+            const shouldAlert =
+                fence.mode === 'BOTH' ||
+                (fence.mode === 'IN' && crossedIn) ||
+                (fence.mode === 'OUT' && !crossedIn);
+
+            if (shouldAlert) {
+                try {
+                    await pool.query(
+                        `INSERT INTO Telemetry_Alarms (vehicle_id, alarm_id, label, description, lat, lng, source)
+                         VALUES (?, ?, ?, ?, ?, ?, 'real')`,
+                        [
+                            vehicleId,
+                            crossedIn ? 0x22 : 0x21,
+                            crossedIn ? 'geofence_enter_gps' : 'geofence_exit_gps',
+                            `${crossedIn ? 'Entró a' : 'Salió de'} "${fence.name || 'geocerca #' + fence.id}" (calculado por GPS)`,
+                            lat, lng,
+                        ]
+                    );
+                    console.log(`[Geofence] Vehículo ${vehicleId} ${crossedIn ? 'ENTRÓ a' : 'SALIÓ de'} "${fence.name || fence.id}" (calculado por GPS, no por el equipo)`);
+                } catch (err) {
+                    console.error(`[Geofence] Error guardando cruce (vehicle_id=${vehicleId}, fence=${fence.id}):`, err.message);
+                }
+            }
+            await pool.query('UPDATE Geofences SET last_known_inside = ? WHERE id = ?', [isInsideNow ? 1 : 0, fence.id]);
+        }
+    }
+}
+
 async function findPairedDevice(imei) {
     const [[device]] = await pool.query(
         `SELECT id, vehicle_id FROM Devices WHERE imei = ? AND status = 'paired'`,
@@ -141,6 +214,18 @@ async function ingestReading(imei, reading) {
         }
     } catch (err) {
         console.error(`[telemetryIngestReal] Error actualizando Vehicles (IMEI ${imei}) — Telemetry_Raw sí se guardó, pero el panel no va a ver esta lectura como "última posición":`, err.message);
+    }
+
+    // [NUEVO 16/07/2026] Chequeo de geocercas por GPS — ver nota completa
+    // en checkGeofenceCrossings() más arriba. Propio try/catch: una
+    // geocerca mal configurada nunca debe tirar abajo el resto de la
+    // ingesta (posición/odómetro/ACC ya quedaron guardados arriba).
+    if (hasCoords) {
+        try {
+            await checkGeofenceCrossings(device.vehicle_id, reading.lat, reading.lng);
+        } catch (err) {
+            console.error(`[telemetryIngestReal] Error chequeando geocercas (IMEI ${imei}):`, err.message);
+        }
     }
 
     await pool.query(`UPDATE Devices SET last_seen_at = NOW() WHERE id = ?`, [device.id]);
