@@ -185,6 +185,37 @@ function parseStatusFlags(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+// [NUEVO 17/07/2026] Sub-pestañas dentro del panel de detalle — antes
+// header + gráfico + estado + eventos + DTC + viajes iban todos
+// apilados en una sola columna larguísima, obligando a mucho scroll
+// para llegar a "viajes" o "DTC". Ahora el header/gauges quedan
+// siempre visibles arriba (lo que se consulta de un vistazo) y el
+// resto se organiza en pestañas — mismo patrón que ya usa el resto
+// del panel (Sidebar), no un componente nuevo que aprender.
+function SectionTabs({ sections, active, onChange }) {
+  return (
+    <div className="flex gap-1 border-b border-slate-800 mb-5 overflow-x-auto">
+      {sections.map(s => (
+        <button
+          key={s.key}
+          onClick={() => onChange(s.key)}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+            active === s.key
+              ? 'border-[#6366F1] text-white'
+              : 'border-transparent text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          {s.icon && <s.icon size={14} />}
+          {s.label}
+          {s.badge != null && s.badge > 0 && (
+            <span className="ml-1 text-[10px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{s.badge}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ============================================================
 // Panel de Control Profesional — solo para autos con VL502
 // (Plan Avanzado). Todo lo que se muestra acá viene de datos reales
@@ -220,9 +251,21 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
   // (que sí se sostenía) se ve sólido — exactamente al revés de antes.
   const chartSeries = useMemo(() => forwardFillSeries(series, ['engine_rpm', 'speed_kmh']), [series]);
 
+  // [NUEVO 17/07/2026] Ver nota de SectionTabs más arriba.
+  const [section, setSection] = useState('resumen');
+  const doorsOpenCount = statusFlags
+    ? ['puerta_del_izq', 'puerta_del_der', 'puerta_tras_izq', 'puerta_tras_der', 'baul'].filter(k => statusFlags[k]).length
+    : 0;
+  const sections = [
+    { key: 'resumen', label: 'Resumen', icon: Activity },
+    { key: 'estado', label: 'Estado del vehículo', icon: ShieldCheck, badge: doorsOpenCount },
+    { key: 'eventos', label: 'Eventos y DTC', icon: AlertTriangle, badge: dtc.length },
+    { key: 'viajes', label: 'Viajes del equipo', icon: History },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header de estado */}
+      {/* Header de estado — siempre visible, no entra en las pestañas */}
       <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
@@ -259,8 +302,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
         </div>
       </div>
 
-      {/* Gráfico RPM/velocidad */}
-      {series.length > 0 && (
+      <SectionTabs sections={sections} active={section} onChange={setSection} />
+
+      {/* ---- Pestaña Resumen: el gráfico ---- */}
+      {section === 'resumen' && series.length > 0 && (
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
           <p className="text-sm text-slate-400 mb-3">RPM y velocidad — últimas lecturas</p>
           <div className="h-64">
@@ -279,8 +324,12 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           </div>
         </div>
       )}
+      {section === 'resumen' && series.length === 0 && (
+        <p className="text-slate-600 text-sm">Todavía no hay lecturas suficientes para graficar.</p>
+      )}
 
-      {/* Estado del vehículo — luces, puertas, cinturones, fallas */}
+      {/* ---- Pestaña Estado del vehículo ---- */}
+      {section === 'estado' && (
       <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
         <p className="text-sm text-slate-400 mb-4">Estado del vehículo (último reporte)</p>
         {!statusFlags ? (
@@ -300,7 +349,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           </div>
         )}
       </div>
+      )}
 
+      {/* ---- Pestaña Eventos y DTC ---- */}
+      {section === 'eventos' && (
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Eventos de manejo reales — frenadas, giros, colisiones, geocerca */}
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
@@ -346,8 +398,10 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           )}
         </div>
       </div>
+      )}
 
-      {/* Viajes reportados por el propio equipo (odómetro/combustible reales del tramo) */}
+      {/* ---- Pestaña Viajes ---- */}
+      {section === 'viajes' && (
       <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
         <p className="text-sm text-slate-400 mb-4 flex items-center gap-2"><History size={15} className="text-[#6366F1]" /> Viajes reportados por el equipo</p>
         {trips.length === 0 ? (
@@ -385,6 +439,7 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -406,6 +461,11 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
 function PanelBasico({ vehicle, series, alarms }) {
   const last = series[series.length - 1] || {};
   const accOn = last.acc_signal ?? vehicle.last_status_flags?.acc_signal ?? null;
+  const [section, setSection] = useState('resumen');
+  const sections = [
+    { key: 'resumen', label: 'Resumen', icon: Activity },
+    { key: 'eventos', label: 'Eventos de manejo', icon: AlertTriangle, badge: alarms.length },
+  ];
 
   return (
     <div className="space-y-6">
@@ -434,7 +494,9 @@ function PanelBasico({ vehicle, series, alarms }) {
         </p>
       </div>
 
-      {series.length > 0 && (
+      <SectionTabs sections={sections} active={section} onChange={setSection} />
+
+      {section === 'resumen' && series.length > 0 && (
         <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
           <p className="text-sm text-slate-400 mb-3">Velocidad — últimas lecturas</p>
           <div className="h-56">
@@ -450,12 +512,17 @@ function PanelBasico({ vehicle, series, alarms }) {
           </div>
         </div>
       )}
+      {section === 'resumen' && series.length === 0 && (
+        <p className="text-slate-600 text-sm">Todavía no hay lecturas suficientes para graficar.</p>
+      )}
 
       {/* Eventos de manejo reales — mismo mecanismo y misma tabla que el Avanzado */}
-      <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
-        <p className="text-sm text-slate-400 mb-4 flex items-center gap-2"><AlertTriangle size={15} className="text-amber-400" /> Eventos de manejo (histórico real)</p>
-        <AlarmTimeline alarms={alarms} />
-      </div>
+      {section === 'eventos' && (
+        <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-6">
+          <p className="text-sm text-slate-400 mb-4 flex items-center gap-2"><AlertTriangle size={15} className="text-amber-400" /> Eventos de manejo (histórico real)</p>
+          <AlarmTimeline alarms={alarms} />
+        </div>
+      )}
     </div>
   );
 }
@@ -531,6 +598,14 @@ export default function TabTelemetria() {
   const avanzadoVehicles = data.filter(d => d.device_model === AVANZADO);
   const basicoVehicles = data.filter(d => d.device_model !== AVANZADO);
 
+  // [NUEVO 17/07/2026] Antes, con un auto ya seleccionado, las tarjetas
+  // grandes de TODOS los autos seguían ocupando toda la pantalla arriba
+  // del panel de detalle — había que scrollear de más para llegar a lo
+  // que ya elegiste. Ahora, apenas seleccionás uno, la lista se compacta
+  // a chips en una sola fila; "Ver todos los autos" la vuelve a expandir.
+  const [listExpanded, setListExpanded] = useState(true);
+  useEffect(() => { if (selectedId) setListExpanded(false); }, [selectedId]);
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-white">Telemetría en Vivo</h2>
@@ -543,10 +618,42 @@ export default function TabTelemetria() {
         <MetricCard title="Plan Básico" value={basicoCount} icon={ShieldCheck} trend="GPS + eventos de manejo reales" />
       </div>
 
+      {/* [NUEVO 17/07/2026] Tira compacta — reemplaza a las tarjetas
+          grandes una vez que ya elegiste un auto. */}
+      {!listExpanded && data.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setListExpanded(true)}
+            className="text-xs font-semibold text-slate-400 hover:text-white px-3 py-2 rounded-lg border border-slate-700 hover:border-slate-600 shrink-0"
+          >
+            Ver todos los autos ({data.length})
+          </button>
+          {data.map(t => (
+            <button
+              key={t.vehicle_id}
+              onClick={() => setSelectedId(t.vehicle_id)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono font-bold transition-colors ${
+                selectedId === t.vehicle_id
+                  ? 'bg-[#6366F1]/15 border-[#6366F1] text-white'
+                  : 'bg-[#1E293B]/50 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+              }`}
+            >
+              {t.plate}
+              <PlanBadge model={t.device_model} />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Plan Avanzado — lista separada */}
-      {avanzadoVehicles.length > 0 && (
+      {listExpanded && avanzadoVehicles.length > 0 && (
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-[#818CF8] mb-2">Plan Avanzado (VL502)</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#818CF8]">Plan Avanzado (VL502)</p>
+            {selectedId && (
+              <button onClick={() => setListExpanded(false)} className="text-xs text-slate-500 hover:text-white">Compactar ✕</button>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {avanzadoVehicles.map(t => {
               const flags = parseStatusFlags(t.last_status_flags);
@@ -580,7 +687,7 @@ export default function TabTelemetria() {
       )}
 
       {/* Plan Básico — lista separada, sin columnas de motor/score */}
-      {basicoVehicles.length > 0 && (
+      {listExpanded && basicoVehicles.length > 0 && (
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Plan Básico (VL04) — solo GPS y velocidad</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
