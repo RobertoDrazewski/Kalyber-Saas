@@ -306,6 +306,21 @@ const getWorkshopHistory = async (req, res) => {
     }
 };
 
+// ---- El propio usuario logueado pregunta "¿soy dueño de un taller?" ----
+// [NUEVO 17/07/2026] Necesario para el Login: como el mecánico usa el
+// mismo rol 'admin' que un cliente de flota, no hay forma de saber a
+// qué vista mandarlo (dashboard de flota vs. /scanner) sin esto.
+const getMyWorkshop = async (req, res) => {
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        if (!workshopId) return res.json(null);
+        const [[workshop]] = await pool.query('SELECT id, name FROM Workshops WHERE id = ?', [workshopId]);
+        res.json(workshop || null);
+    } catch (error) {
+        res.status(500).json({ error: 'Error consultando el taller' });
+    }
+};
+
 const listMyDevices = async (req, res) => {
     try {
         const workshopId = await resolveWorkshopId(req.user.id);
@@ -326,6 +341,7 @@ module.exports = {
     createWorkshop,
     listWorkshops,
     getWorkshopHistory,
+    getMyWorkshop,
     claimScannerDevice,
     listMyDevices,
     createScanVehicle,

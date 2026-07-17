@@ -8,6 +8,12 @@ import ScannerMechanicView from './pages/ScannerMechanicView';
 
 // Protector de Rutas — además de exigir token, valida el rol cuando
 // la ruta lo requiere.
+// [ACTUALIZADO 17/07/2026] El fallback ahora contempla los 3 roles
+// con vista propia (driver/taller van a la suya, todo lo demás al
+// dashboard de flota) — antes solo distinguía 'driver', así que un
+// 'taller' que intentara entrar a una ruta no permitida caía mal en
+// /dashboard en vez de /scanner.
+const roleHome = { driver: '/driver', taller: '/scanner' };
 const PrivateRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem('kyber_token');
   if (!token) return <Navigate to="/login" />;
@@ -15,7 +21,7 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   if (allowedRoles) {
     const user = JSON.parse(localStorage.getItem('kyber_user') || '{}');
     if (!allowedRoles.includes(user.role)) {
-      return <Navigate to={user.role === 'driver' ? '/driver' : '/dashboard'} />;
+      return <Navigate to={roleHome[user.role] || '/dashboard'} />;
     }
   }
   return children;
@@ -74,15 +80,13 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        {/* [NUEVO 17/07/2026] Vista del mecánico (producto Kalyber
-            Scanner) — mismo login/rol 'admin' que la flota, pero un
-            producto totalmente aparte (tablas propias). El mecánico
-            entra directo a esta URL desde el celular, no pasa por el
-            Dashboard de flotas. */}
+        {/* [ACTUALIZADO 17/07/2026] Vista del mecánico (producto
+            Kalyber Scanner) — ahora 'taller' es su propio rol, ya no
+            comparte 'admin' con los clientes de flota. */}
         <Route
           path="/scanner"
           element={
-            <PrivateRoute allowedRoles={['super_admin', 'admin']}>
+            <PrivateRoute allowedRoles={['super_admin', 'taller']}>
               <ScannerMechanicView />
             </PrivateRoute>
           }
