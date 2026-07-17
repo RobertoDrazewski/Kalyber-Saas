@@ -35,7 +35,7 @@ function getResendClient() {
 // TabConductores/driversController — se sacó de ahí para no tener dos
 // caminos distintos que terminan pisándose).
 const CREATION_RULES = {
-    super_admin: ['admin', 'super_admin', 'taller'],
+    super_admin: ['admin', 'super_admin'],
     admin: ['driver'],
 };
 
@@ -151,17 +151,6 @@ const createUser = async (req, res) => {
             return res.status(400).json({ error: 'Para chofer: nombre, apellido, DNI y teléfono son obligatorios (el teléfono es para las alertas de manejo)' });
         }
         displayName = `${first_name} ${last_name}`;
-    } else if (role === 'taller') {
-        // [NUEVO 17/07/2026] Login del dueño/mecánico de un taller
-        // (producto Kalyber Scanner). Los datos comerciales completos
-        // (CUIT, dirección, etc.) viven en Workshops, no acá — este
-        // registro en Users es solo el login. Reusamos company_name
-        // como nombre para mostrar, ya le llega con el nombre del
-        // taller desde el formulario.
-        if (!company_name) {
-            return res.status(400).json({ error: 'Falta el nombre del taller (se usa como nombre para mostrar de este login)' });
-        }
-        displayName = company_name;
     } else {
         // super_admin creado por otro super_admin: caso raro, pedimos lo mínimo.
         if (!first_name || !last_name) {

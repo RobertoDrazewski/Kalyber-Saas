@@ -38,18 +38,9 @@ export default function Login() {
 
       localStorage.setItem('kyber_token', data.token);
       localStorage.setItem('kyber_user', JSON.stringify(data.user));
-
-      // [SIMPLIFICADO 17/07/2026] 'taller' ya es un rol propio (antes
-      // compartía 'admin' con los clientes de flota, y había que
-      // preguntarle al backend "¿este admin tiene un taller?" — eso
-      // generaba justamente el bug que encontramos: si por algún
-      // motivo el owner_user_id de Workshops quedaba desalineado, el
-      // mecánico caía en silencio al dashboard de flota sin ningún
-      // aviso. Ahora el rol mismo ya lo dice, sin cruces ni llamadas
-      // de red extra.
-      if (data.user.role === 'driver') navigate('/driver');
-      else if (data.user.role === 'taller') navigate('/scanner');
-      else navigate('/dashboard');
+      // Los choferes van a su vista reducida (mapa + elegir auto);
+      // el resto va al dashboard completo.
+      navigate(data.user.role === 'driver' ? '/driver' : '/dashboard');
       return;
     } catch (err) {
       setError(err.message);

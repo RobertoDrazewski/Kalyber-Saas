@@ -17,7 +17,6 @@ const fuelroutes = require('./src/routes/fuelroutes');
 const apiKeysRoutes = require('./src/routes/apiKeysRoutes');
 const publicApiRoutes = require('./src/routes/publicApiRoutes');
 const geofenceRoutes = require('./src/routes/geofenceRoutes'); // [NUEVO] crear/listar/borrar geocercas
-const scannerRoutes = require('./src/routes/scannerRoutes'); // [NUEVO 17/07/2026] producto Kalyber Scanner (talleres/mecánicos)
 
 const app = express();
 
@@ -53,7 +52,6 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/fuel', fuelroutes);
 app.use('/api/apikeys', apiKeysRoutes);
 app.use('/api/geofences', geofenceRoutes); // [NUEVO]
-app.use('/api/scanner', scannerRoutes); // [NUEVO 17/07/2026] producto Kalyber Scanner — endpoints propios + /internal/diagnostics-log para el ESP32
 app.use('/api/v1', publicApiRoutes); // API pública para terceros, autenticada con API key (no JWT)
 
 app.get('/api/status', (req, res) => {
