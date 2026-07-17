@@ -9,6 +9,7 @@ const {
     listMyDevices,
     createScanVehicle,
     listScanVehicles,
+    getScanVehicleHistory,
     startSession,
     endSession,
     ingestDiagnosticsLog,
@@ -38,6 +39,7 @@ router.get('/devices', verifyToken, requireRole('super_admin', 'taller'), listMy
 
 router.post('/vehicles', verifyToken, requireRole('super_admin', 'taller'), createScanVehicle);
 router.get('/vehicles', verifyToken, requireRole('super_admin', 'taller'), listScanVehicles);
+router.get('/vehicles/:id/history', verifyToken, requireRole('super_admin', 'taller'), getScanVehicleHistory);
 
 router.post('/sessions', verifyToken, requireRole('super_admin', 'taller'), startSession);
 router.post('/sessions/:id/end', verifyToken, requireRole('super_admin', 'taller'), endSession);

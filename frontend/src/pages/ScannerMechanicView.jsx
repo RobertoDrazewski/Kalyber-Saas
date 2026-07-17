@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { fetchAPI } from '../services/api';
 import {
   Car, Wifi, Activity, Camera, Plus, X, Copy, CheckCircle2,
   AlertTriangle, ShieldAlert, Loader2, ChevronRight, RadioTower,
-  Wrench, ThumbsUp, ThumbsDown, Play, Square, Clock,
+  Wrench, ThumbsUp, ThumbsDown, Play, Square, Clock, History,
+  LogOut, Home, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 function fileToBase64(file) {
@@ -22,26 +24,53 @@ function fileToBase64(file) {
 // abajo de la pantalla (como el resto de la app en mobile).
 // ============================================================
 export default function ScannerMechanicView() {
-  const [tab, setTab] = useState('autos'); // 'autos' | 'parear' | 'vivo'
+  const [tab, setTab] = useState('autos'); // 'autos' | 'parear' | 'vivo' | 'historico'
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('kyber_token');
+    localStorage.removeItem('kyber_user');
+    navigate('/login');
+  };
 
   return (
     <div className="min-h-screen bg-[#0B1120] flex flex-col">
-      <div className="px-4 pt-5 pb-3 flex items-center gap-2 border-b border-slate-800">
-        <RadioTower className="text-[#10B981]" size={22} />
-        <h1 className="text-lg font-bold text-white">Kalyber Scanner</h1>
+      <div className="px-4 pt-5 pb-3 flex items-center justify-between gap-2 border-b border-slate-800">
+        <div className="flex items-center gap-2 min-w-0">
+          <RadioTower className="text-[#10B981] shrink-0" size={22} />
+          <h1 className="text-lg font-bold text-white truncate">Kalyber Scanner</h1>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => navigate('/')}
+            title="Volver a la web"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[#1E293B] transition-colors"
+          >
+            <Home size={18} />
+          </button>
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-20 px-4 pt-4">
         {tab === 'autos' && <TabAutos />}
         {tab === 'parear' && <TabParear />}
         {tab === 'vivo' && <TabDiagnosticoVivo />}
+        {tab === 'historico' && <TabHistoricoVehiculos />}
       </div>
 
       {/* Nav inferior fija — igual criterio que BottomNav del resto de la app */}
       <div className="fixed bottom-0 left-0 right-0 h-16 bg-[#050B14] border-t border-slate-800 flex items-stretch z-40">
         <NavBtn icon={Car} label="Autos" active={tab === 'autos'} onClick={() => setTab('autos')} />
-        <NavBtn icon={Wifi} label="Parear equipo" active={tab === 'parear'} onClick={() => setTab('parear')} />
+        <NavBtn icon={Wifi} label="Parear" active={tab === 'parear'} onClick={() => setTab('parear')} />
         <NavBtn icon={Activity} label="En vivo" active={tab === 'vivo'} onClick={() => setTab('vivo')} />
+        <NavBtn icon={History} label="Histórico" active={tab === 'historico'} onClick={() => setTab('historico')} />
       </div>
     </div>
   );
@@ -546,6 +575,123 @@ function DtcCard({ dtc, onConfirm }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// PESTAÑA 4 — Histórico: todos los autos leídos por este taller,
+// con sus sesiones y los DTCs de cada una, expandible.
+// ============================================================
+function TabHistoricoVehiculos() {
+  const [vehicles, setVehicles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [detail, setDetail] = useState({}); // { [vehicleId]: { vehicle, sessions } }
+
+  useEffect(() => {
+    fetchAPI('/scanner/vehicles')
+      .then(rows => setVehicles(Array.isArray(rows) ? rows : []))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async (id) => {
+    if (expandedId === id) { setExpandedId(null); return; }
+    setExpandedId(id);
+    if (!detail[id]) {
+      try {
+        const data = await fetchAPI(`/scanner/vehicles/${id}/history`);
+        setDetail(prev => ({ ...prev, [id]: data }));
+      } catch {
+        setDetail(prev => ({ ...prev, [id]: { sessions: [] } }));
+      }
+    }
+  };
+
+  // Mismo mecanismo que en "En vivo" — acá también sirve confirmar/
+  // corregir un DTC de una sesión pasada, no solo de la que está
+  // corriendo ahora mismo.
+  const handleConfirm = async (vehicleId, dtcId, confirmed, correction) => {
+    await fetchAPI(`/scanner/dtc/${dtcId}/confirm`, { method: 'PATCH', body: JSON.stringify({ confirmed, correction }) });
+    setDetail(prev => {
+      const d = prev[vehicleId];
+      if (!d) return prev;
+      const sessions = d.sessions.map(s => ({
+        ...s,
+        dtcs: s.dtcs.map(dtc => dtc.id === dtcId ? { ...dtc, confirmed_by_mechanic: confirmed ? 1 : 0, mechanic_correction: correction || null } : dtc),
+      }));
+      return { ...prev, [vehicleId]: { ...d, sessions } };
+    });
+  };
+
+  if (loading) return <p className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Cargando...</p>;
+  if (error) return <p className="text-red-400 text-sm">{error}</p>;
+
+  if (vehicles.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-500">
+        <History size={36} className="mx-auto mb-2 opacity-30" />
+        <p className="text-sm">Todavía no hay ningún auto leído.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-white font-bold mb-1">Histórico de vehículos leídos</h2>
+      {vehicles.map(v => {
+        const d = detail[v.id];
+        return (
+          <div key={v.id} className="bg-[#1E293B]/60 rounded-xl border border-slate-700 overflow-hidden">
+            <button onClick={() => toggle(v.id)} className="w-full flex items-center justify-between p-3 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                {v.plate_photo_url ? (
+                  <img src={v.plate_photo_url} className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0"><Car size={18} className="text-slate-600" /></div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-white font-bold text-sm truncate">{v.brand || 'Marca ?'} {v.model || ''} {v.model_year ? `(${v.model_year})` : ''}</p>
+                  <p className="text-slate-500 text-xs truncate font-mono">{v.plate_text} {v.customer_label ? `· ${v.customer_label}` : ''}</p>
+                  <p className="text-[11px] text-slate-600 mt-0.5">{v.total_sesiones ?? 0} sesión(es) · {v.total_dtcs ?? 0} DTC(s)</p>
+                </div>
+              </div>
+              {expandedId === v.id ? <ChevronUp size={18} className="text-slate-400 shrink-0" /> : <ChevronDown size={18} className="text-slate-400 shrink-0" />}
+            </button>
+
+            {expandedId === v.id && (
+              <div className="border-t border-slate-800 p-3 pt-3 bg-[#0B1120]/40 space-y-3">
+                {!d ? (
+                  <p className="text-slate-600 text-xs flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Cargando...</p>
+                ) : d.sessions.length === 0 ? (
+                  <p className="text-slate-600 text-xs">Sin sesiones registradas para este auto.</p>
+                ) : (
+                  d.sessions.map(s => (
+                    <div key={s.id} className="pl-3 border-l-2 border-slate-800">
+                      <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1.5">
+                        <Clock size={11} />
+                        {new Date(s.started_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${s.status === 'en_curso' ? 'bg-[#10B981]/15 text-[#10B981]' : 'bg-slate-700/40 text-slate-400'}`}>
+                          {s.status === 'en_curso' ? 'En curso' : 'Finalizada'}
+                        </span>
+                      </p>
+                      {s.dtcs.length === 0 ? (
+                        <p className="text-slate-600 text-xs pl-1">Sin fallas detectadas en esta sesión.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {s.dtcs.map(dtc => <DtcCard key={dtc.id} dtc={dtc} onConfirm={(dtcId, confirmed, correction) => handleConfirm(v.id, dtcId, confirmed, correction)} />)}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

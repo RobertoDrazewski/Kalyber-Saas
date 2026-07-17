@@ -114,13 +114,56 @@ const listScanVehicles = async (req, res) => {
         if (!workshopId) return res.json([]);
         const [rows] = await pool.query(
             `SELECT sv.*,
-                    (SELECT COUNT(*) FROM DiagnosticSessions ds WHERE ds.scan_vehicle_id = sv.id) as total_sesiones
+                    (SELECT COUNT(*) FROM DiagnosticSessions ds WHERE ds.scan_vehicle_id = sv.id) as total_sesiones,
+                    (SELECT COUNT(*) FROM DiagnosticDTC dd JOIN DiagnosticSessions ds2 ON dd.session_id = ds2.id WHERE ds2.scan_vehicle_id = sv.id) as total_dtcs
              FROM ScanVehicles sv WHERE sv.workshop_id = ? ORDER BY sv.created_at DESC`,
             [workshopId]
         );
         res.json(rows);
     } catch (error) {
         res.status(500).json({ error: 'Error listando vehículos' });
+    }
+};
+
+// [NUEVO] El propio mecánico viendo el detalle de UN auto suyo — todas
+// sus sesiones, con los DTCs de cada una. Distinto de getWorkshopHistory
+// (esa es la vista de super_admin viendo TODOS los talleres); acá
+// verificamos que el auto sea del taller de quien pregunta, no de otro.
+const getScanVehicleHistory = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        const [[vehicle]] = await pool.query(
+            `SELECT id, vin, brand, model, model_year, plate_text, customer_label, created_at
+             FROM ScanVehicles WHERE id = ? AND workshop_id = ?`,
+            [id, workshopId]
+        );
+        if (!vehicle) return res.status(404).json({ error: 'Auto no encontrado en tu taller' });
+
+        const [sessions] = await pool.query(
+            `SELECT id, mode, started_at, ended_at, status FROM DiagnosticSessions
+             WHERE scan_vehicle_id = ? ORDER BY started_at DESC`,
+            [id]
+        );
+        const sessionIds = sessions.map(s => s.id);
+        let dtcsBySession = {};
+        if (sessionIds.length > 0) {
+            const [dtcs] = await pool.query(
+                `SELECT id, session_id, detected_at, decoded_code, description_guess, source, confirmed_by_mechanic, mechanic_correction
+                 FROM DiagnosticDTC WHERE session_id IN (?) ORDER BY detected_at DESC`,
+                [sessionIds]
+            );
+            dtcsBySession = dtcs.reduce((acc, d) => {
+                (acc[d.session_id] = acc[d.session_id] || []).push(d);
+                return acc;
+            }, {});
+        }
+        const sessionsWithDtcs = sessions.map(s => ({ ...s, dtcs: dtcsBySession[s.id] || [] }));
+
+        res.json({ vehicle, sessions: sessionsWithDtcs });
+    } catch (error) {
+        console.error('[Scanner] Error obteniendo historial del vehículo:', error.message);
+        res.status(500).json({ error: 'Error obteniendo el historial' });
     }
 };
 
@@ -346,6 +389,7 @@ module.exports = {
     listMyDevices,
     createScanVehicle,
     listScanVehicles,
+    getScanVehicleHistory,
     startSession,
     endSession,
     ingestDiagnosticsLog,
