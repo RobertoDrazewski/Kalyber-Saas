@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DriverView from './pages/DriverView';
+import ScannerMechanicView from './pages/ScannerMechanicView';
 
 // Protector de Rutas — además de exigir token, valida el rol cuando
 // la ruta lo requiere.
@@ -70,6 +71,19 @@ export default function App() {
           element={
             <PrivateRoute allowedRoles={['driver']}>
               <DriverView />
+            </PrivateRoute>
+          }
+        />
+        {/* [NUEVO 17/07/2026] Vista del mecánico (producto Kalyber
+            Scanner) — mismo login/rol 'admin' que la flota, pero un
+            producto totalmente aparte (tablas propias). El mecánico
+            entra directo a esta URL desde el celular, no pasa por el
+            Dashboard de flotas. */}
+        <Route
+          path="/scanner"
+          element={
+            <PrivateRoute allowedRoles={['super_admin', 'admin']}>
+              <ScannerMechanicView />
             </PrivateRoute>
           }
         />
