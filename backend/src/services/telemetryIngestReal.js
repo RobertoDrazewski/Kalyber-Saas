@@ -17,6 +17,44 @@ const mlService = require('./mlService');
 // los dos equipos porque los dos pasan por ingestReading().
 const lastAccByImei = new Map();
 
+// [NUEVO 18/07/2026] Frenada brusca calculada por GPS — mismo criterio
+// que usamos para las geocercas: el sistema hasta ahora SOLO marcaba
+// harsh_brake=true si el EQUIPO mandaba un código de alarma específico
+// (0x30 GT06 / 0x1B "confirmado" JT808) — confirmado con pruebas reales
+// hoy que el VL502 nunca manda esa alarma, ni siquiera con 3 frenadas
+// bruscas reales hechas a propósito. Esto lo calculamos nosotros a
+// partir de la caída de velocidad entre dos lecturas consecutivas.
+//
+// LIMITACIÓN HONESTA, a diferencia del acelerómetro real que el equipo
+// debería tener: el GPS solo reporta cada 5-20 segundos, no en
+// continuo — así que no medimos la desaceleración INSTANTÁNEA real
+// (la de un frenazo dura menos de 2 segundos), medimos un PROMEDIO
+// sobre el intervalo entre dos lecturas. Esto significa que el umbral
+// tiene que ser más permisivo que un acelerómetro real, y puede haber
+// falsos positivos (frenar normal para un semáforo en rojo, si el GPS
+// justo reportó poco antes de empezar a frenar) o falsos negativos
+// (un frenazo real y corto, entre dos lecturas de GPS espaciadas).
+// No es tan preciso como un acelerómetro — es lo mejor que se puede
+// hacer con los datos que el equipo sí manda de forma confiable.
+const lastSpeedByVehicle = new Map();
+const HARSH_BRAKE_KMH_PER_SEC = 2.5; // caída sostenida de >2.5 km/h por segundo, en promedio, entre dos lecturas
+const MAX_GAP_SECONDS = 30; // si el hueco entre lecturas es mayor a esto, no comparamos (podría ser una reconexión, no manejo continuo)
+
+function detectHarshBrakeByGps(vehicleId, speedKmh, timestampMs) {
+    const prev = lastSpeedByVehicle.get(vehicleId);
+    lastSpeedByVehicle.set(vehicleId, { speed: speedKmh, t: timestampMs });
+
+    if (!prev) return false;
+    const gapSeconds = (timestampMs - prev.t) / 1000;
+    if (gapSeconds <= 0 || gapSeconds > MAX_GAP_SECONDS) return false;
+
+    const drop = prev.speed - speedKmh;
+    if (drop <= 0) return false;
+
+    const dropRate = drop / gapSeconds; // km/h por segundo, promedio del intervalo
+    return dropRate >= HARSH_BRAKE_KMH_PER_SEC;
+}
+
 function haversineKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -139,6 +177,33 @@ async function ingestReading(imei, reading) {
             }
         }
         lastAccByImei.set(imei, reading.acc_signal);
+    }
+
+    // [NUEVO 18/07/2026] Frenada brusca por GPS — ver nota completa
+    // arriba de detectHarshBrakeByGps(). Solo la calculamos si el
+    // equipo NO mandó ya su propia alarma real (reading.harsh_brake
+    // true) — si el dato del equipo está disponible y es confiable
+    // (como en el VL04, donde SÍ llega el código 0x1B), no lo pisamos;
+    // esto es un COMPLEMENTO para equipos/paquetes donde el equipo no
+    // avisa nada, no un reemplazo de una fuente mejor cuando existe.
+    if (!reading.harsh_brake && reading.lat != null && reading.lng != null && reading.speed_kmh != null) {
+        try {
+            reading.harsh_brake = detectHarshBrakeByGps(device.vehicle_id, reading.speed_kmh, Date.now());
+            if (reading.harsh_brake) {
+                console.log(`[telemetryIngestReal] 🛑 Frenada brusca detectada por GPS (IMEI ${imei}, vehicle_id=${device.vehicle_id})`);
+                // Mismo alarm_id/label que ya usa el sistema cuando el
+                // EQUIPO reporta su propia alarma 0x30 (gt06Server.js) —
+                // así el panel de "Eventos de manejo" la reconoce y le
+                // pone el mismo ícono, sin tener que tocar el frontend.
+                await ingestAlarm(imei, {
+                    id: 0x30,
+                    label: 'harsh_braking',
+                    desc: 'Frenada brusca (calculada por GPS)',
+                }, { lat: reading.lat, lon: reading.lng });
+            }
+        } catch (err) {
+            console.error(`[telemetryIngestReal] Error calculando frenada brusca por GPS (IMEI ${imei}):`, err.message);
+        }
     }
 
     // 1. Insert en Telemetry_Raw (funciona OK)
