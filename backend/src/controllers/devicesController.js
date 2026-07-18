@@ -477,6 +477,53 @@ const sendDeviceQueryVersion = async (req, res) => {
     }
 };
 
+// [NUEVO 18/07/2026] Consulta real de qué vehicleTypeCode (0xF00D)
+// tiene GUARDADO el equipo ahora mismo — no inferido por cómo se ven
+// los datos, sino preguntándole directo. Motivo: mandamos este
+// parámetro por curl varias veces hoy sin ver nunca una confirmación
+// explícita de "éxito" (el equipo estaba desconectado en varios de
+// esos intentos) — antes de seguir asumiendo que quedó aplicado,
+// mejor confirmarlo con el equipo mismo.
+const VEHICLE_TYPE_PARAM_IDS = [0xF00D];
+const sendDeviceQueryVehicleType = async (req, res) => {
+    const { imei } = req.params;
+    try {
+        const [[device]] = await pool.query('SELECT id, model FROM Devices WHERE imei = ?', [imei]);
+        if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+        if (device.model !== 'VL502') {
+            return res.status(400).json({ error: 'La consulta de vehicleTypeCode (0x8106) solo aplica a VL502.' });
+        }
+
+        const result = await gt06Internal.sendQueryParamsCommand(imei, VEHICLE_TYPE_PARAM_IDS);
+        const commandLabel = `QUERY_PARAMS(0x8106): 0xF00D (vehicleTypeCode — confirmar marca/combustible configurado)`;
+
+        if (!result.sent) {
+            await pool.query(
+                `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+                 VALUES (?, ?, ?, ?, 'failed', ?)`,
+                [device.id, imei, commandLabel, `failed-${Date.now()}`, req.user.id]
+            ).catch(() => {});
+            return res.status(409).json({ error: result.reason });
+        }
+
+        await pool.query(
+            `INSERT INTO CommandLog (device_id, imei, command_text, correlation_id, status, sent_by)
+             VALUES (?, ?, ?, ?, 'sent', ?)`,
+            [device.id, imei, commandLabel, result.correlationId, req.user.id]
+        ).catch(err => {
+            if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+        });
+
+        res.json({
+            message: `Consulta enviada a IMEI ${imei}. Mirá el historial de comandos en unos segundos — el valor hexadecimal que responda hay que convertirlo: 3 = Ford nafta, 8195 = Ford diésel, 8196 = Toyota diésel (el que quedó de la prueba de hoy en la Hilux).`,
+            correlation_id: result.correlationId,
+        });
+    } catch (error) {
+        console.error('❌ Error consultando vehicleTypeCode:', error);
+        res.status(500).json({ error: 'Error consultando el vehicleTypeCode' });
+    }
+};
+
 // [NUEVO] Historial de comandos mandados a un equipo puntual, con su
 // estado real (sent = esperando respuesta, acked = el equipo
 // confirmó, failed = no se pudo mandar). El panel hace polling de
@@ -499,4 +546,4 @@ const getDeviceCommandLog = async (req, res) => {
     }
 };
 
-module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, sendDeviceQueryVersion, getDeviceCommandLog };
+module.exports = { addDevice, getDevices, pairDevice, unpairDevice, getDeviceRawData, updateDevice, deleteDevice, sendDeviceCommand, sendDeviceParams, sendDeviceQueryDrivingThresholds, sendDeviceQueryVersion, sendDeviceQueryVehicleType, getDeviceCommandLog };
