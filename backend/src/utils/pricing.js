@@ -11,6 +11,13 @@
 const PLAN_INFO = {
     basico: { label: 'Plan Básico (JM-VL04)', monthly: 30, hardware: 110 },
     avanzado: { label: 'Plan Avanzado (JM-VL502)', monthly: 60, hardware: 130 },
+    // [NUEVO 18/07/2026] Kalyber Scanner — a diferencia de los otros dos,
+    // NO es "por vehículo" (un taller no tiene una flota propia), es
+    // por EQUIPO/taller. Reusamos el mismo mecanismo de "cantidad" del
+    // carrito igual (por si un taller con varias sucursales quiere
+    // pedir más de un scanner de una), pero conceptualmente qty acá
+    // significa "cantidad de equipos", no "cantidad de vehículos".
+    taller: { label: 'Plan Taller (Kalyber Scanner)', monthly: 60, hardware: 350 },
 };
 
 function calcDiscount(vehicleCount) {
@@ -29,7 +36,7 @@ function calcQuote(plan, vehicleCount) {
     }
     const qty = parseInt(vehicleCount, 10);
     if (!qty || qty < 1 || qty > 10000) {
-        throw new Error('Cantidad de vehículos inválida');
+        throw new Error('Cantidad inválida');
     }
     const discountPct = calcDiscount(qty);
     const monthlyTotal = Number((info.monthly * qty * (1 - discountPct / 100)).toFixed(2));

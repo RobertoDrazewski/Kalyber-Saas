@@ -21,6 +21,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 const PLANS = {
   basico: { label: 'Plan Básico', device: 'JM-VL04', monthly: 30, hardware: 110 },
   avanzado: { label: 'Plan Avanzado', device: 'JM-VL502', monthly: 60, hardware: 130 },
+  // [NUEVO 18/07/2026] Kalyber Scanner — para talleres, no para flota.
+  taller: { label: 'Plan Taller', device: 'Kalyber Scanner', monthly: 60, hardware: 350 },
 };
 
 function calcDiscount(qty) {
@@ -231,25 +233,32 @@ export default function CartCalculator() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-2">
                     {Object.entries(PLANS).map(([key, p]) => (
                       <button
                         type="button"
                         key={key}
                         onClick={() => setPlan(key)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
                           plan === key ? 'border-[#6366F1] bg-[#6366F1]/10' : 'border-slate-700 hover:border-slate-500'
                         }`}
                       >
-                        <p className="text-white font-bold text-sm">{p.label}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{p.device}</p>
-                        <p className="text-[#6366F1] font-bold text-xs mt-1.5">${p.monthly}/mes</p>
+                        <p className="text-white font-bold text-xs leading-tight">{p.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">{p.device}</p>
+                        <p className="text-[#6366F1] font-bold text-[11px] mt-1">${p.monthly}/mes</p>
                       </button>
                     ))}
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Cantidad de vehículos</label>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      {/* [NUEVO 18/07/2026] El Plan Taller no se cobra "por
+                          vehículo" — un taller no tiene flota propia. Se
+                          reusa el mismo campo de cantidad (por si un
+                          taller con varias sucursales pide más de un
+                          equipo), pero con la etiqueta correcta. */}
+                      {plan === 'taller' ? 'Cantidad de equipos' : 'Cantidad de vehículos'}
+                    </label>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg bg-[#1E293B] text-white font-bold hover:bg-slate-700">−</button>
                       <input
@@ -264,7 +273,7 @@ export default function CartCalculator() {
                     </div>
                     {discountPct > 0 && (
                       <p className="text-[#10B981] text-xs mt-1.5 font-semibold">
-                        🎉 {discountPct}% de descuento por flota de {qty >= 50 ? '50+' : '10+'} vehículos
+                        🎉 {discountPct}% de descuento por {qty >= 50 ? '50+' : '10+'} {plan === 'taller' ? 'equipos' : 'vehículos'}
                       </p>
                     )}
                   </div>

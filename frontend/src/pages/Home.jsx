@@ -369,7 +369,7 @@ function Pricing() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 w-full ">
+        <div className="grid md:grid-cols-3 gap-8 w-full ">
           
           <div className="kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
@@ -476,72 +476,61 @@ function Pricing() {
               </li>
             </ul>
           </div>
-        </div>
 
-        {/* [NUEVO 17/07/2026] Plan Taller / Kalyber Scanner — sección
-            propia, no una tercera tarjeta en la grilla de arriba. La
-            unidad económica es distinta a propósito: los planes de
-            flota son "por vehículo", este es "por taller" (un solo
-            equipo cubre decenas de autos de terceros por semana). */}
-        <div className="mt-20 pt-16 border-t border-slate-800">
-          <div className="text-center mb-12">
-            <span className="inline-block text-xs font-bold tracking-widest uppercase text-[#EC4899] bg-[#EC4899]/10 px-4 py-1.5 rounded-full mb-4">
-              Nuevo — Para Talleres y Mecánicos
+          {/* [ACTUALIZADO 18/07/2026] Kalyber Scanner — ahora en la MISMA
+              grilla que Básico/Avanzado, uno al lado del otro (antes era
+              una sección propia más abajo, rompía la estética con los 3
+              hardware de arriba que sí están en una sola fila). */}
+          <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#EC4899]/50 flex flex-col shadow-2xl shadow-[#EC4899]/10 hover:brightness-110 transition-all">
+            <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-[#EC4899] bg-[#EC4899]/10 px-3 py-1 rounded-full mb-3">
+              Nuevo — Para Talleres
             </span>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Kalyber Scanner</h2>
-            <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-              Diagnóstico OBD-II en vivo para su taller, con historial de cada cliente y traducción de fallas — sin depender de un scanner de mesa genérico ni de licencias por técnico.
-            </p>
-          </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
+            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
 
-          <div className="max-w-md mx-auto">
-            <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#EC4899]/50 flex flex-col shadow-2xl shadow-[#EC4899]/10">
-              <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
-              <p className="text-slate-400 mb-6 text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) en tiempo real, e historial completo de cada vehículo que pasa por su taller.</p>
-
-              <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#EC4899]/30">
-                <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
-                <div className="flex items-end gap-2 mb-2">
-                  <p className="text-3xl md:text-4xl font-extrabold text-white">$350</p>
-                  <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">pago único</span></p>
-                </div>
-                <p className="text-xs text-slate-500">Incluye: Kalyber Scanner (equipo OBD-II con conectividad WiFi propia), conector OBD-II, y puesta en marcha.</p>
+            <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#EC4899]/30">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
+              <div className="flex items-end gap-2 mb-2">
+                <p className="text-3xl md:text-4xl font-extrabold text-white">$350</p>
+                <p className="text-slate-500 pb-1 font-medium">USD <span className="text-xs ml-1">pago único</span></p>
               </div>
-
-              <div className="mb-5 md:mb-8">
-                <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
-                <div className="flex items-end gap-2">
-                  <p className="text-4xl md:text-5xl font-extrabold text-[#EC4899]">$60</p>
-                  <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por taller</span></p>
-                </div>
-              </div>
-
-              <hr className="border-slate-800 mb-5 md:mb-8" />
-
-              <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
-                <li className="flex items-start gap-3">
-                  <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                  <div><strong className="text-white font-semibold">Diagnóstico en Vivo:</strong> Conecte el scanner al auto y vea los códigos de falla (DTC) aparecer en tiempo real desde su celular o computadora.</div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                  <div><strong className="text-white font-semibold">Historial de Clientes:</strong> Cada auto que pasa por su taller queda registrado — vuelva a consultar diagnósticos anteriores sin depender de papeles.</div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                  <div><strong className="text-white font-semibold">Alta por Vehículo con Foto:</strong> Registre cada auto con foto de patente, marca, modelo y VIN antes de escanearlo.</div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                  <div><strong className="text-white font-semibold">Un equipo, autos ilimitados:</strong> Sin límite de vehículos escaneados por mes — la suscripción es por taller, no por auto.</div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                  <div><strong className="text-white font-semibold">Confirmación de Diagnóstico:</strong> Confirme o corrija cada falla detectada después de revisar el auto — su taller construye su propio historial verificado, no solo códigos sin contexto.</div>
-                </li>
-              </ul>
+              <p className="text-xs text-slate-500">Incluye: Kalyber Scanner (equipo OBD-II con conectividad WiFi propia), conector OBD-II, y puesta en marcha.</p>
             </div>
+
+            <div className="mb-5 md:mb-8">
+              <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Suscripción Mensual (Software)</p>
+              <div className="flex items-end gap-2">
+                <p className="text-4xl md:text-5xl font-extrabold text-[#EC4899]">$60</p>
+                <p className="text-slate-500 pb-1 font-medium">/mes <span className="text-xs ml-1">por taller</span></p>
+              </div>
+            </div>
+
+            <hr className="border-slate-800 mb-5 md:mb-8" />
+
+            <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Diagnóstico en Vivo:</strong> Conecte el scanner al auto y vea los códigos de falla (DTC) aparecer en tiempo real desde su celular o computadora.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Historial de Clientes:</strong> Cada auto que pasa por su taller queda registrado — vuelva a consultar diagnósticos anteriores sin depender de papeles.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Alta por Vehículo con Foto:</strong> Registre cada auto con foto de patente, marca, modelo y VIN antes de escanearlo.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Un equipo, autos ilimitados:</strong> Sin límite de vehículos escaneados por mes — la suscripción es por taller, no por auto.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Confirmación de Diagnóstico:</strong> Confirme o corrija cada falla detectada después de revisar el auto — su taller construye su propio historial verificado, no solo códigos sin contexto.</div>
+              </li>
+            </ul>
           </div>
+
         </div>
 
       </div>
