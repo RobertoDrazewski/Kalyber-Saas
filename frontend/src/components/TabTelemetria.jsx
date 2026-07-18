@@ -286,19 +286,33 @@ function PanelAvanzado({ vehicle, series, alarms, dtc, trips }) {
           </div>
         </div>
 
-        {/* Gauges — todo lo que el VL502 puede reportar */}
+        {/* [FIX 18/07/2026] Antes los 10 gauges se mostraban siempre,
+            con "—" si el auto no traía ese dato — pedido puntual: que
+            no se muestren en absoluto si no hay dato para ESTE auto,
+            pero que sigan apareciendo completos para cualquier otro
+            auto que sí los traiga (por eso se arma dinámico acá, no
+            se saca directamente del JSX de abajo). */}
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-          <GaugeStat icon={Gauge} label="Velocidad" value={vehicle.speed_kmh ?? last.speed_kmh} unit="km/h" color="#10B981" />
-          <GaugeStat icon={Zap} label="RPM" value={lastObd.engine_rpm} unit="" color="#6366F1" />
-          <GaugeStat icon={Fuel} label="Combustible" value={lastObd.fuel_level} unit="%" color="#F59E0B" />
-          <GaugeStat icon={Cpu} label="Temp. motor" value={lastObd.coolant_temp} unit="°C" color="#EF4444" />
-          <GaugeStat icon={Zap} label="Batería" value={lastObd.battery_voltage} unit="V" color="#818CF8" />
-          <GaugeStat icon={Wrench} label="Presión aceite" value={lastObd.oil_pressure_kpa} unit="kPa" color="#94A3B8" />
-          <GaugeStat icon={MapPin} label="Odómetro equipo" value={(lastObd.device_odometer_km ?? vehicle.device_odometer_km) != null ? Math.round(lastObd.device_odometer_km ?? vehicle.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
-          {/* [NUEVO 14/07/2026] El parser ya sacaba esto de la trama real, nunca se mostraba */}
-          <GaugeStat icon={Gauge} label="Pedal freno" value={lastObd.brake_pedal_pct} unit="%" color="#EF4444" />
-          <GaugeStat icon={Gauge} label="Pedal acelerador" value={lastObd.accelerator_pedal_pct} unit="%" color="#F59E0B" />
-          <GaugeStat icon={Wrench} label="Consumo instant." value={lastObd.fuel_consumption_instant} unit="L/100km" color="#94A3B8" />
+          {[
+            { icon: Gauge, label: 'Velocidad', value: vehicle.speed_kmh ?? last.speed_kmh, unit: 'km/h', color: '#10B981' },
+            { icon: Zap, label: 'RPM', value: lastObd.engine_rpm, unit: '', color: '#6366F1' },
+            { icon: Fuel, label: 'Combustible', value: lastObd.fuel_level, unit: '%', color: '#F59E0B' },
+            { icon: Cpu, label: 'Temp. motor', value: lastObd.coolant_temp, unit: '°C', color: '#EF4444' },
+            { icon: Zap, label: 'Batería', value: lastObd.battery_voltage, unit: 'V', color: '#818CF8' },
+            { icon: Wrench, label: 'Presión aceite', value: lastObd.oil_pressure_kpa, unit: 'kPa', color: '#94A3B8' },
+            {
+              icon: MapPin, label: 'Odómetro equipo',
+              value: (lastObd.device_odometer_km ?? vehicle.device_odometer_km) != null
+                ? Math.round(lastObd.device_odometer_km ?? vehicle.device_odometer_km).toLocaleString('es-AR')
+                : null,
+              unit: 'km', color: '#10B981',
+            },
+            { icon: Gauge, label: 'Pedal freno', value: lastObd.brake_pedal_pct, unit: '%', color: '#EF4444' },
+            { icon: Gauge, label: 'Pedal acelerador', value: lastObd.accelerator_pedal_pct, unit: '%', color: '#F59E0B' },
+            { icon: Wrench, label: 'Consumo instant.', value: lastObd.fuel_consumption_instant, unit: 'L/100km', color: '#94A3B8' },
+          ]
+            .filter(g => g.value != null)
+            .map(g => <GaugeStat key={g.label} {...g} />)}
         </div>
       </div>
 
@@ -484,10 +498,24 @@ function PanelBasico({ vehicle, series, alarms }) {
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <GaugeStat icon={Gauge} label="Velocidad" value={vehicle.speed_kmh} unit="km/h" color="#10B981" />
-          <GaugeStat icon={MapPin} label="Odómetro equipo" value={vehicle.device_odometer_km != null ? Math.round(vehicle.device_odometer_km).toLocaleString('es-AR') : null} unit="km" color="#10B981" />
-          <GaugeStat icon={ShieldCheck} label="Score de manejo" value={vehicle.driver_score} unit="/100" color={vehicle.driver_score != null && vehicle.driver_score < 70 ? '#F59E0B' : '#10B981'} />
-          <GaugeStat icon={Wrench} label="Desgaste frenos" value={vehicle.brake_wear_score} unit="/100" color={vehicle.brake_wear_score != null && vehicle.brake_wear_score < 40 ? '#EF4444' : '#818CF8'} />
+          {[
+            { icon: Gauge, label: 'Velocidad', value: vehicle.speed_kmh, unit: 'km/h', color: '#10B981' },
+            {
+              icon: MapPin, label: 'Odómetro equipo',
+              value: vehicle.device_odometer_km != null ? Math.round(vehicle.device_odometer_km).toLocaleString('es-AR') : null,
+              unit: 'km', color: '#10B981',
+            },
+            {
+              icon: ShieldCheck, label: 'Score de manejo', value: vehicle.driver_score, unit: '/100',
+              color: vehicle.driver_score != null && vehicle.driver_score < 70 ? '#F59E0B' : '#10B981',
+            },
+            {
+              icon: Wrench, label: 'Desgaste frenos', value: vehicle.brake_wear_score, unit: '/100',
+              color: vehicle.brake_wear_score != null && vehicle.brake_wear_score < 40 ? '#EF4444' : '#818CF8',
+            },
+          ]
+            .filter(g => g.value != null)
+            .map(g => <GaugeStat key={g.label} {...g} />)}
         </div>
         <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-3">
           Equipo <strong className="text-slate-300">Básico (JM-VL04)</strong>: GPS, velocidad y odómetro real del propio equipo. Confirmado que colisión, corte de energía y desconexión física llegan a este panel en vivo (no solo suena en cabina); frenada/aceleración/giro brusco usan el mismo camino y deberían llegar igual — todavía no tuvimos el primer evento real de manejo para confirmarlo al 100%. No tiene lectura de motor (RPM, temperatura, combustible): eso es exclusivo del Plan Avanzado (VL502).

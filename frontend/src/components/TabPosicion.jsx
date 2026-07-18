@@ -302,17 +302,43 @@ export default function TabPosicion() {
   // eso el conteo de salidas para VL04 va a quedar siempre en 0, no es
   // un bug de este panel.
   const [fenceEventCounts, setFenceEventCounts] = useState({ entradas: 0, salidas: 0 });
+  // [NUEVO 18/07/2026] Desglose por zona — antes solo se veían 2
+  // números totales ("3 entradas, 3 salidas") sin decir DE QUÉ zona,
+  // inútil apenas hay más de una geocerca en el mismo auto. El cálculo
+  // por GPS (checkGeofenceCrossings en telemetryIngestReal.js) guarda
+  // el nombre de la geocerca entre comillas en la descripción del
+  // evento — lo extraemos acá para armar el desglose, sin tener que
+  // tocar el backend de nuevo.
+  const [fenceEventsByZone, setFenceEventsByZone] = useState([]);
+  const extractZoneName = (description) => {
+    const m = (description || '').match(/"([^"]+)"/);
+    return m ? m[1] : 'Zona sin nombre';
+  };
   const loadFenceEvents = () => {
-    if (!selected) { setFenceEventCounts({ entradas: 0, salidas: 0 }); return; }
+    if (!selected) { setFenceEventCounts({ entradas: 0, salidas: 0 }); setFenceEventsByZone([]); return; }
     const requestedId = selected.id;
     fetchAPI(`/telemetry/vehicle/${requestedId}/alarms?limit=200`)
       .then(alarms => {
         if (selectedIdRef.current !== requestedId) return; // respuesta atrasada de otro vehículo, descartar
-        const entradas = alarms.filter(a => a.alarm_id === 0x22 || a.alarm_id === 0x04).length;
-        const salidas = alarms.filter(a => a.alarm_id === 0x21 || a.alarm_id === 0x05).length;
-        setFenceEventCounts({ entradas, salidas });
+        const entradas = alarms.filter(a => a.alarm_id === 0x22 || a.alarm_id === 0x04);
+        const salidas = alarms.filter(a => a.alarm_id === 0x21 || a.alarm_id === 0x05);
+        setFenceEventCounts({ entradas: entradas.length, salidas: salidas.length });
+
+        // Agrupar por nombre de zona
+        const byZone = {};
+        entradas.forEach(a => {
+          const zone = extractZoneName(a.description);
+          byZone[zone] = byZone[zone] || { zone, entradas: 0, salidas: 0 };
+          byZone[zone].entradas++;
+        });
+        salidas.forEach(a => {
+          const zone = extractZoneName(a.description);
+          byZone[zone] = byZone[zone] || { zone, entradas: 0, salidas: 0 };
+          byZone[zone].salidas++;
+        });
+        setFenceEventsByZone(Object.values(byZone).sort((a, b) => (b.entradas + b.salidas) - (a.entradas + a.salidas)));
       })
-      .catch(() => setFenceEventCounts({ entradas: 0, salidas: 0 }));
+      .catch(() => { setFenceEventCounts({ entradas: 0, salidas: 0 }); setFenceEventsByZone([]); });
   };
 
   useEffect(() => {
@@ -322,6 +348,7 @@ export default function TabPosicion() {
     // instante, aunque ya no hubiera ninguna carrera de datos real.
     setSeries([]);
     setFenceEventCounts({ entradas: 0, salidas: 0 });
+    setFenceEventsByZone([]);
     loadSeries();
     loadFenceEvents();
     if (!selected) return;
@@ -331,7 +358,14 @@ export default function TabPosicion() {
     return () => clearInterval(interval);
   }, [selected]);
 
+  // [FIX 18/07/2026] Antes se mostraba en el mapa cualquier vehículo
+  // con lat/lng guardado, aunque ya no tuviera ningún equipo pareado
+  // — quedaba visible con su ÚLTIMA posición conocida de cuando SÍ
+  // tenía equipo, como si siguiera reportando en vivo. Agregado el
+  // filtro por device_imei (viene del LEFT JOIN a Devices en
+  // getVehicles — null si no hay ningún equipo pareado ahora mismo).
   const vehiclesWithCoords = vehicles
+    .filter(v => v.device_imei != null)
     .map(v => ({ ...v, latNum: toNum(v.lat), lngNum: toNum(v.lng) }))
     .filter(v => v.latNum !== null && v.lngNum !== null);
 
@@ -648,6 +682,21 @@ export default function TabPosicion() {
                 </div>
               </div>
             </div>
+
+            {/* [NUEVO 18/07/2026] Desglose por zona — de qué geocerca puntual */}
+            {fenceEventsByZone.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {fenceEventsByZone.map(z => (
+                  <div key={z.zone} className="flex items-center justify-between text-xs bg-[#0B1120]/60 border border-slate-800/60 rounded-lg px-3 py-2">
+                    <span className="text-slate-300 font-medium truncate">{z.zone}</span>
+                    <span className="text-slate-500 shrink-0 flex items-center gap-3">
+                      {z.entradas > 0 && <span className="flex items-center gap-1 text-amber-400"><LogIn size={11} /> {z.entradas}</span>}
+                      {z.salidas > 0 && <span className="flex items-center gap-1 text-amber-400"><LogOut size={11} /> {z.salidas}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Geocercas del auto */}

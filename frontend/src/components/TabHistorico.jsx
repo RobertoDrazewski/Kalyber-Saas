@@ -122,16 +122,15 @@ export default function TabHistorico() {
   // viaje puntual, no todo el histórico del auto.
   useEffect(() => {
     if (!selectedTrip) { setTripEvents([]); return; }
-    fetchAPI(`/telemetry/vehicle/${selectedTrip.vehicle_id}/alarms?limit=200`)
-      .then(rows => {
-        const start = new Date(selectedTrip.start_time).getTime();
-        const end = new Date(selectedTrip.end_time || Date.now()).getTime();
-        const inWindow = rows.filter(a => {
-          const t = new Date(a.recorded_at).getTime();
-          return t >= start - 60000 && t <= end + 60000;
-        });
-        setTripEvents(inWindow);
-      })
+    const start = new Date(selectedTrip.start_time);
+    const end = new Date(selectedTrip.end_time || Date.now());
+    // Margen de 1 minuto de cada lado, mismo criterio que antes — el
+    // ACC "encendido" suele registrarse unos segundos antes de que el
+    // GPS detecte el primer movimiento del viaje.
+    const since = new Date(start.getTime() - 60000).toISOString();
+    const until = new Date(end.getTime() + 60000).toISOString();
+    fetchAPI(`/telemetry/vehicle/${selectedTrip.vehicle_id}/alarms?limit=200&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}`)
+      .then(rows => setTripEvents(Array.isArray(rows) ? rows : []))
       .catch(() => setTripEvents([]));
   }, [selectedTrip]);
 

@@ -103,15 +103,25 @@ const getVehicleSeries = async (req, res) => {
 const getVehicleAlarms = async (req, res) => {
     const { id } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 300);
+    // [NUEVO 18/07/2026] Filtro opcional por rango de fechas — antes
+    // TabHistorico pedía los últimos 200 registros y filtraba la
+    // ventana del viaje EN EL FRONTEND. Si el auto generó muchas
+    // geocercas nuevas después de ese viaje puntual, esos 200 más
+    // recientes podían no alcanzar para llegar hasta un viaje viejo,
+    // y sus eventos de ACC/frenada quedaban invisibles sin que fuera
+    // un bug del cálculo — solo de la ventana de datos pedida.
+    const { since, until } = req.query;
     try {
         if (!(await assertVehicleAccess(req, id))) {
             return res.status(403).json({ error: 'Ese vehículo no pertenece a tu flota' });
         }
-        const [rows] = await pool.query(
-            `SELECT id, alarm_id, label, description, lat, lng, recorded_at
-             FROM Telemetry_Alarms WHERE vehicle_id = ? ORDER BY recorded_at DESC LIMIT ?`,
-            [id, limit]
-        );
+        let query = `SELECT id, alarm_id, label, description, lat, lng, recorded_at FROM Telemetry_Alarms WHERE vehicle_id = ?`;
+        const params = [id];
+        if (since) { query += ` AND recorded_at >= ?`; params.push(new Date(since)); }
+        if (until) { query += ` AND recorded_at <= ?`; params.push(new Date(until)); }
+        query += ` ORDER BY recorded_at DESC LIMIT ?`;
+        params.push(limit);
+        const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
         // Si la migración de Telemetry_Alarms todavía no corrió, no
