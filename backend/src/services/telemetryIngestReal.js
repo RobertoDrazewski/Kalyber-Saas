@@ -169,7 +169,15 @@ async function ingestReading(imei, reading) {
 
     // 2. Update en Vehicles (Reparado para evitar errores de columnas dinámicas)
     // Usamos una estructura fija para el UPDATE y evitamos join() dinámico que rompe el orden de parámetros
-    const hasCoords = reading.lat != null && reading.lng != null;
+    // [FIX 18/07/2026] lat=0,lng=0 NO es una posición real — es lo que
+    // manda el equipo cuando todavía no consiguió fix de GPS (ej:
+    // recién reiniciado, en frío, buscando satélites). Confirmado en
+    // logs reales: tras un factory reset, el primer paquete 0x26 vino
+    // con exactamente lat=0.00000 lng=0.00000. Sin este filtro,
+    // hubiera pisado la posición real del auto con el medio del
+    // océano frente a África — mismo criterio que ya usamos para
+    // "sin coordenadas" (null), (0,0) tampoco es un fix válido.
+    const hasCoords = reading.lat != null && reading.lng != null && !(reading.lat === 0 && reading.lng === 0);
     
     // Red de seguridad: si este UPDATE falla por cualquier motivo (el
     // bug de arriba, o algo nuevo el día de mañana), que NO se lleve
