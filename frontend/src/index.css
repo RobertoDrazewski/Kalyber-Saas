@@ -142,36 +142,3 @@ body {
 #google_translate_element { display: none !important; }
 iframe.goog-te-menu-frame { display: none !important; }
 .skiptranslate { display: none !important; }
-
-/* ============================================================
-   Carrusel horizontal para mobile — subcomponentes con muchas
-   tarjetas (Features, Hardware, Pricing) dejan de apilarse en un
-   scroll vertical larguísimo y pasan a deslizarse de costado.
-   Solo actúa por debajo de 768px — a partir de md: no hace nada,
-   el grid de desktop queda exactamente como estaba.
-   ============================================================ */
-@media (max-width: 767px) {
-  .mobile-carousel {
-    display: flex !important;
-    gap: 1.25rem;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-padding-left: 1.5rem;
-    padding-bottom: 0.75rem;
-    margin-left: -1.5rem;
-    margin-right: -1.5rem;
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    -webkit-overflow-scrolling: touch;
-  }
-  .mobile-carousel::-webkit-scrollbar { display: none; }
-  .mobile-carousel { scrollbar-width: none; }
-  .mobile-carousel-item {
-    scroll-snap-align: center;
-    flex-shrink: 0;
-    width: 85%;
-  }
-  .mobile-carousel-item.wide {
-    width: 92%;
-  }
-}

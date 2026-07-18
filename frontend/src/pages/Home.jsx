@@ -21,9 +21,9 @@ function Features() {
         </div>
 
         {/* Grilla perfecta de 3x2 con las 6 tarjetas */}
-        <div className="grid md:grid-cols-3 gap-8 mobile-carousel">
+        <div className="grid md:grid-cols-3 gap-8 ">
           
-          <div className="mobile-carousel-item bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
             <div className="w-12 h-12 bg-[#6366F1]/20 rounded-xl flex items-center justify-center mb-6 text-[#6366F1]">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
             </div>
@@ -33,7 +33,7 @@ function Features() {
             </p>
           </div>
 
-          <div className="mobile-carousel-item bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#10B981]/50 transition-all hover:-translate-y-1 shadow-lg relative overflow-hidden">
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#10B981]/50 transition-all hover:-translate-y-1 shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-[#10B981]/5 rounded-bl-full pointer-events-none"></div>
             <div className="w-12 h-12 bg-[#10B981]/20 rounded-xl flex items-center justify-center mb-6 text-[#10B981]">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
@@ -44,7 +44,7 @@ function Features() {
             </p>
           </div>
 
-          <div className="mobile-carousel-item bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#F59E0B]/50 transition-all hover:-translate-y-1 shadow-lg">
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#F59E0B]/50 transition-all hover:-translate-y-1 shadow-lg">
             <div className="w-12 h-12 bg-[#F59E0B]/20 rounded-xl flex items-center justify-center mb-6 text-[#F59E0B]">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
             </div>
@@ -55,7 +55,7 @@ function Features() {
           </div>
 
           {/* Tarjeta 4: Infraestructura Propietaria y API */}
-          <div className="mobile-carousel-item bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#6366F1]/50 transition-all hover:-translate-y-1 shadow-lg">
             <div className="w-12 h-12 bg-[#6366F1]/20 rounded-xl flex items-center justify-center mb-6">
               <svg className="w-6 h-6 text-[#6366F1]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -68,7 +68,7 @@ function Features() {
           </div>
 
           {/* Tarjeta 5: El Sello de Ciberseguridad */}
-          <div className="mobile-carousel-item bg-gradient-to-br from-[#1E293B]/80 to-[#0F172A] p-8 rounded-3xl border border-[#10B981]/30 hover:border-[#10B981] transition-all hover:-translate-y-1 shadow-[0_0_15px_rgba(16,185,129,0.1)] relative overflow-hidden">
+          <div className="bg-gradient-to-br from-[#1E293B]/80 to-[#0F172A] p-8 rounded-3xl border border-[#10B981]/30 hover:border-[#10B981] transition-all hover:-translate-y-1 shadow-[0_0_15px_rgba(16,185,129,0.1)] relative overflow-hidden">
             <div className="absolute top-4 right-4 bg-[#10B981]/20 text-[#10B981] text-xs font-bold px-3 py-1 rounded-full border border-[#10B981]/50">
               Auditoría Enterprise
             </div>
@@ -85,7 +85,7 @@ function Features() {
           </div>
 
           {/* Tarjeta 6: Business Intelligence & Ventas */}
-          <div className="mobile-carousel-item bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#A855F7]/50 transition-all hover:-translate-y-1 shadow-lg">
+          <div className="bg-[#1E293B]/40 p-8 rounded-3xl border border-slate-800 hover:border-[#A855F7]/50 transition-all hover:-translate-y-1 shadow-lg">
             <div className="w-12 h-12 bg-[#A855F7]/20 rounded-xl flex items-center justify-center mb-6">
               <svg className="w-6 h-6 text-[#A855F7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -113,10 +113,10 @@ function Hardware() {
           Dispositivos de instalación "Plug & Play" que se conectan directamente al puerto OBD2 del vehículo. Una solución no invasiva que preserva la garantía original del fabricante.
         </p>
         
-        <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left mobile-carousel">
+        <div className="grid md:grid-cols-3 gap-8 w-full mb-12 text-left ">
           
           {/* Hardware Básico */}
-          <div className="mobile-carousel-item kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
+          <div className="kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
@@ -153,7 +153,7 @@ function Hardware() {
           </div>
 
           {/* Hardware Avanzado */}
-          <div className="mobile-carousel-item bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
+          <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-[#6366F1] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
@@ -185,13 +185,55 @@ function Hardware() {
             </div>
           </div>
 
+          {/* [NUEVO 18/07/2026] Kalyber Scanner — para talleres, no para
+              flota. Sin foto de producto real todavía (no hay archivo
+              en /public) — uso un ícono en vez de inventar una imagen
+              que no corresponde. Cuando tengas la foto/render final,
+              reemplazar este bloque de ícono por <img src="/kalyber-scanner.png" .../>
+              con el mismo tamaño que las otras dos tarjetas. */}
+          <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 rounded-3xl border border-[#EC4899]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#EC4899]/10 transform hover:-translate-y-2 transition-transform duration-300">
+            <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-[#EC4899] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#EC4899]/40">
+                Plan Taller
+              </div>
+              <div className="w-20 h-20 md:w-32 md:h-32 rounded-2xl bg-[#EC4899]/15 border border-[#EC4899]/30 flex items-center justify-center">
+                <svg className="w-10 h-10 md:w-16 md:h-16 text-[#EC4899]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+              </div>
+            </div>
+            <div className="p-5 md:p-8 pt-4 md:pt-6 flex-1 flex flex-col">
+              <h3 className="text-xl md:text-2xl font-bold text-white mb-1">Kalyber Scanner</h3>
+              <p className="text-xs md:text-sm font-semibold text-[#EC4899] mb-4 md:mb-6 uppercase tracking-widest">Diagnóstico OBD-II para Talleres</p>
+
+              <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
+                <li className="flex items-start gap-3">
+                  <span className="text-[#EC4899] font-bold">✓</span>
+                  <div><strong className="text-white">Diagnóstico en Vivo:</strong> Conecte el scanner al auto y vea los códigos de falla (DTC) aparecer en tiempo real, desde el celular o la computadora del taller.</div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-[#EC4899] font-bold">✓</span>
+                  <div><strong className="text-white">Historial de Clientes:</strong> Cada auto que pasa por el taller queda registrado, con su historial de diagnósticos anteriores.</div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-[#EC4899] font-bold">✓</span>
+                  <div><strong className="text-white">Conectividad WiFi Propia:</strong> Sin depender del WiFi del taller para funcionar — se conecta directo a la red del local una sola vez.</div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-[#EC4899] font-bold">✓</span>
+                  <div><strong className="text-white">Un Equipo, Autos Ilimitados:</strong> Sin límite de vehículos escaneados por mes — pago único de hardware, suscripción mensual por taller.</div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
         </div>
 
         {/* Accesorios: Cable y Chip M2M */}
-        <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left mobile-carousel">
+        <div className="grid md:grid-cols-2 gap-8 w-full mb-12 text-left ">
           
           {/* Bloque Cable Extensor */}
-          <div className="mobile-carousel-item bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-slate-500 transition-colors">
+          <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-slate-500 transition-colors">
             <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
               <img 
                 src="/cable-extensor.png" 
@@ -208,7 +250,7 @@ function Hardware() {
           </div>
 
           {/* Bloque Chip M2M */}
-          <div className="mobile-carousel-item bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-[#6366F1]/50 transition-colors">
+          <div className="bg-gradient-to-r from-[#1E293B] to-[#0B1120] p-6 rounded-2xl border border-slate-700 flex flex-col xl:flex-row items-center gap-6 shadow-lg overflow-hidden relative hover:border-[#6366F1]/50 transition-colors">
             <div className="w-32 h-32 shrink-0 flex items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative z-10 p-4 shadow-inner">
               <img 
                 src="/m2m.png" 
@@ -237,8 +279,8 @@ function Hardware() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10 mobile-carousel">
-            <div className="mobile-carousel-item bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#6366F1]/50 transition-colors">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10 ">
+            <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#6366F1]/50 transition-colors">
               <div className="w-14 h-14 bg-[#6366F1]/10 text-[#6366F1] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
@@ -248,7 +290,7 @@ function Hardware() {
               <p className="text-xs text-[#6366F1] font-bold uppercase tracking-wide">Multi-Carrier</p>
             </div>
 
-            <div className="mobile-carousel-item bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#10B981]/50 transition-colors">
+            <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#10B981]/50 transition-colors">
               <div className="w-14 h-14 bg-[#10B981]/10 text-[#10B981] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
@@ -258,7 +300,7 @@ function Hardware() {
               <p className="text-xs text-[#10B981] font-bold uppercase tracking-wide">Automática</p>
             </div>
 
-            <div className="mobile-carousel-item bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#F59E0B]/50 transition-colors">
+            <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#F59E0B]/50 transition-colors">
               <div className="w-14 h-14 bg-[#F59E0B]/10 text-[#F59E0B] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -268,7 +310,7 @@ function Hardware() {
               <p className="text-xs text-[#F59E0B] font-bold uppercase tracking-wide">Urgencias Críticas</p>
             </div>
 
-            <div className="mobile-carousel-item bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#EF4444]/50 transition-colors">
+            <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#EF4444]/50 transition-colors">
               <div className="w-14 h-14 bg-[#EF4444]/10 text-[#EF4444] rounded-full flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
@@ -327,9 +369,9 @@ function Pricing() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 w-full mobile-carousel">
+        <div className="grid md:grid-cols-2 gap-8 w-full ">
           
-          <div className="mobile-carousel-item wide kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
+          <div className="kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
             <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Rastreo satelital, odómetro real y eventos de manejo en vivo — colisión, corte de energía y frenada/aceleración brusca, sin datos de motor.</p>
             
@@ -380,7 +422,7 @@ function Pricing() {
             </ul>
           </div>
           
-          <div className="mobile-carousel-item wide bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#6366F1]/50 flex flex-col relative transform md:-translate-y-4 shadow-2xl shadow-[#6366F1]/10">
+          <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#6366F1]/50 flex flex-col relative transform md:-translate-y-4 shadow-2xl shadow-[#6366F1]/10">
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#6366F1] text-white px-5 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase shadow-lg shadow-[#6366F1]/40">
               Integración IA Avanzada
             </div>
