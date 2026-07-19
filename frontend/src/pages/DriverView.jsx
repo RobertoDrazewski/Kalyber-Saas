@@ -78,7 +78,12 @@ export default function DriverView() {
 
   // Vehículos con coordenadas VÁLIDAS y ya convertidas a número —
   // esto es lo que realmente se le pasa al mapa.
+  // Mismo filtro que la vista de super admin: solo autos con equipo
+  // pareado (device_imei != null) se muestran en el mapa. Sin esto,
+  // un auto sin equipo aparecía con su última posición vieja como si
+  // siguiera reportando.
   const vehiclesWithCoords = vehicles
+    .filter(v => v.device_imei != null)
     .map(v => ({ ...v, latNum: toNum(v.lat), lngNum: toNum(v.lng) }))
     .filter(v => v.latNum !== null && v.lngNum !== null);
 
@@ -87,14 +92,24 @@ export default function DriverView() {
   // Mismo trazo segmentado por viaje que en Mapa en Vivo — se corta
   // cuando el auto queda quieto y arranca de otro color al volver a
   // moverse.
-  const TRAIL_COLORS = ['#10B981', '#6366F1', '#F59E0B', '#EC4899', '#06B6D4'];
+  // Mismos colores y constantes EXACTAS que la vista de super admin
+  // (TabPosicion.jsx), para que el trazo se vea idéntico en las dos.
+  const TRAIL_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#F97316'];
   const MOVING_SPEED_KMH = 3;
   const STOP_GAP_MINUTES = 4;
 
   function segmentTripsForDisplay(rawSeries) {
     const points = rawSeries
       .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng), speed: toNum(p.speed_kmh), t: p.recorded_at }))
-      .filter(p => p.lat !== null && p.lng !== null);
+      .filter(p => p.lat !== null && p.lng !== null)
+      // [FIX 19/07/2026] El backend devuelve las posiciones más nuevas
+      // primero (ORDER BY recorded_at DESC). Si segmentamos en ese
+      // orden, la línea va del futuro al pasado y une puntos que en
+      // realidad no son consecutivos en el recorrido — de ahí las
+      // rectas diagonales que cruzaban el mapa. Ordenamos ascendente
+      // por tiempo para que la línea siga el camino real que hizo el
+      // auto, de principio a fin.
+      .sort((a, b) => new Date(a.t) - new Date(b.t));
 
     const segments = [];
     let current = [];
@@ -238,9 +253,20 @@ export default function DriverView() {
               attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
             {myVehicle && <FlyToVehicle vehicle={myVehicle} />}
-            {trail.length > 1 && (
-              <Polyline positions={trail} pathOptions={{ color: '#10B981', weight: 4, opacity: 0.8 }} />
-            )}
+            {/* [FIX 19/07/2026] Antes se dibujaba `trail` crudo como UNA
+                sola Polyline — como trail viene ordenado por fecha DESC
+                y sin segmentar, unía puntos lejanos en el tiempo y
+                espacio con rectas diagonales que cruzaban todo el mapa
+                (bug visible en la vista del chofer). Ahora usa los
+                mismos tripSegments que la vista de super admin: un
+                Polyline por viaje, cortado cuando el auto queda quieto. */}
+            {tripSegments.map((segment, i) => (
+              <Polyline
+                key={i}
+                positions={segment}
+                pathOptions={{ color: TRAIL_COLORS[i % TRAIL_COLORS.length], weight: 4, opacity: 0.8 }}
+              />
+            ))}
             {vehiclesWithCoords.map(v => (
               <Marker key={v.id} position={[v.latNum, v.lngNum]} icon={vehicleIcon(v.photo_url, v.id === myVehicle?.id)}>
                 <Popup>
