@@ -23,6 +23,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDrivers, updateDriver, deleteDriver } = require('../controllers/driversController');
+const { getMyEarnings, updateMyRate, getMyVehicleCheck, getMyDrivingSummary } = require('../controllers/driverToolsController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
 
@@ -33,5 +34,14 @@ const { requireRole } = require('../middlewares/requireRole');
 router.get('/', verifyToken, requireRole('super_admin', 'admin'), getDrivers);
 router.patch('/:id', verifyToken, requireRole('super_admin', 'admin'), updateDriver);
 router.delete('/:id', verifyToken, requireRole('super_admin', 'admin'), deleteDriver);
+
+// [NUEVO 19/07/2026] Herramientas para el propio chofer — cada una
+// devuelve SOLO los datos del chofer logueado (su driver_id), nunca
+// los de otro. Por eso van con requireRole('driver') y resuelven el
+// driver desde req.user, no desde un id en la URL.
+router.get('/me/earnings', verifyToken, requireRole('driver'), getMyEarnings);
+router.patch('/me/rate', verifyToken, requireRole('driver'), updateMyRate);
+router.get('/me/vehicle-check', verifyToken, requireRole('driver'), getMyVehicleCheck);
+router.get('/me/driving-summary', verifyToken, requireRole('driver'), getMyDrivingSummary);
 
 module.exports = router;

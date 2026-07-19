@@ -3,7 +3,11 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Car, CheckCircle2, Wrench } from 'lucide-react';
+import {
+  LogOut, Car, CheckCircle2, Wrench, DollarSign, Activity,
+  TrendingUp, Award, Gauge, ThermometerSun, BatteryMedium,
+  Fuel, Pencil, X, Check, ShieldCheck, AlertTriangle,
+} from 'lucide-react';
 import { fetchAPI } from '../services/api';
 import ErrorBanner from '../components/ErrorBanner';
 import MaintenanceEventForm from '../components/MaintenanceEventForm';
@@ -136,6 +140,49 @@ export default function DriverView() {
     return () => clearInterval(interval);
   }, [myVehicle?.id]);
 
+  // [NUEVO 19/07/2026] Las 4 herramientas del chofer. Se cargan solo
+  // si tiene un auto asignado (sin auto, no hay nada que mostrar). No
+  // rompen la vista si el backend falla — cada una cae a null y su
+  // tarjeta simplemente no se muestra.
+  const [earnings, setEarnings] = useState(null);
+  const [vehicleCheck, setVehicleCheck] = useState(null);
+  const [drivingSummary, setDrivingSummary] = useState(null);
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState('');
+  const [newAchievement, setNewAchievement] = useState(null);
+
+  const loadDriverTools = () => {
+    fetchAPI('/drivers/me/earnings').then(setEarnings).catch(() => {});
+    fetchAPI('/drivers/me/vehicle-check').then(setVehicleCheck).catch(() => {});
+    fetchAPI('/drivers/me/driving-summary').then(data => {
+      setDrivingSummary(data);
+      // Si hay un logro recién desbloqueado, lo mostramos como
+      // celebración una sola vez.
+      if (data?.recien_desbloqueados?.length > 0) {
+        setNewAchievement(data.recien_desbloqueados[0]);
+      }
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!myVehicle) { setEarnings(null); setVehicleCheck(null); setDrivingSummary(null); return; }
+    loadDriverTools();
+    const interval = setInterval(loadDriverTools, 15000); // menos frecuente que el mapa, no cambia tan rápido
+    return () => clearInterval(interval);
+  }, [myVehicle?.id]);
+
+  const handleSaveRate = async () => {
+    const rate = parseFloat(rateInput);
+    if (!Number.isFinite(rate) || rate < 0) return;
+    try {
+      await fetchAPI('/drivers/me/rate', { method: 'PATCH', body: JSON.stringify({ rate_per_km: rate }) });
+      setEditingRate(false);
+      loadDriverTools();
+    } catch (err) {
+      // silencioso — no romper la vista por esto
+    }
+  };
+
   const handleSelect = async (vehicleId) => {
     setSelecting(true);
     setSelectError('');
@@ -207,6 +254,147 @@ export default function DriverView() {
           </MapContainer>
         </div>
 
+        {/* ============================================================
+            HERRAMIENTAS DEL CHOFER (19/07/2026) — solo si tiene auto.
+            Pensadas para que el equipo le SIRVA a él, no solo para
+            controlarlo: cuánto lleva ganado, cómo está su auto, y
+            reconocimiento por manejar bien.
+            ============================================================ */}
+        {myVehicle && earnings && !earnings.error_soft && (
+          <div className="bg-gradient-to-br from-[#10B981]/10 to-[#1E293B]/40 rounded-2xl border border-[#10B981]/40 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-sm flex items-center gap-2">
+                <DollarSign size={16} className="text-[#10B981]" /> Tu jornada
+              </h3>
+              {!editingRate ? (
+                <button
+                  onClick={() => { setRateInput(String(earnings.rate_per_km)); setEditingRate(true); }}
+                  className="text-[11px] text-slate-400 flex items-center gap-1 hover:text-white"
+                >
+                  <Pencil size={11} /> ${earnings.rate_per_km}/km {earnings.is_default_rate && '(ajustar)'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 text-xs">$</span>
+                  <input
+                    type="number"
+                    value={rateInput}
+                    onChange={e => setRateInput(e.target.value)}
+                    className="w-16 bg-[#0B1120] border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    autoFocus
+                  />
+                  <span className="text-slate-400 text-xs">/km</span>
+                  <button onClick={handleSaveRate} className="text-[#10B981] p-1"><Check size={14} /></button>
+                  <button onClick={() => setEditingRate(false)} className="text-slate-500 p-1"><X size={14} /></button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-[#0B1120]/60 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-[#10B981]">${(earnings.hoy.estimado).toLocaleString('es-AR')}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Hoy · {earnings.hoy.km} km</p>
+              </div>
+              <div className="bg-[#0B1120]/60 rounded-xl p-3 text-center">
+                <p className="text-xl font-bold text-white">${(earnings.semana.estimado).toLocaleString('es-AR')}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Semana · {earnings.semana.km} km</p>
+              </div>
+              <div className="bg-[#0B1120]/60 rounded-xl p-3 text-center">
+                <p className="text-xl font-bold text-white">${(earnings.mes.estimado).toLocaleString('es-AR')}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Mes · {earnings.mes.km} km</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2 text-center">
+              Estimación según tus km reales y tu tarifa — no es el dato oficial de la app de viajes.
+            </p>
+          </div>
+        )}
+
+        {/* Chequeo del auto — semáforo */}
+        {myVehicle && vehicleCheck && !vehicleCheck.error_soft && vehicleCheck.checks?.length > 0 && (
+          <div className={`rounded-2xl border p-4 ${
+            vehicleCheck.general === 'alert' ? 'bg-red-500/10 border-red-500/40' :
+            vehicleCheck.general === 'warn' ? 'bg-amber-500/10 border-amber-500/40' :
+            'bg-[#1E293B]/50 border-slate-700'
+          }`}>
+            <h3 className="text-white font-bold text-sm flex items-center gap-2 mb-3">
+              <Activity size={16} className={
+                vehicleCheck.general === 'alert' ? 'text-red-400' :
+                vehicleCheck.general === 'warn' ? 'text-amber-400' : 'text-[#10B981]'
+              } />
+              Chequeo de tu auto
+              {vehicleCheck.general === 'ok' && <span className="text-[10px] text-[#10B981] font-normal">· Todo bien</span>}
+              {vehicleCheck.general === 'warn' && <span className="text-[10px] text-amber-400 font-normal">· Revisá algo</span>}
+              {vehicleCheck.general === 'alert' && <span className="text-[10px] text-red-400 font-normal">· Necesita atención</span>}
+            </h3>
+            <div className="space-y-2">
+              {vehicleCheck.checks.map(c => {
+                const Icon = c.key === 'temp' ? ThermometerSun : c.key === 'bateria' ? BatteryMedium : Fuel;
+                const dot = c.estado === 'alert' ? 'bg-red-400' : c.estado === 'warn' ? 'bg-amber-400' : c.estado === 'ok' ? 'bg-[#10B981]' : 'bg-slate-600';
+                return (
+                  <div key={c.key} className="flex items-center gap-3 bg-[#0B1120]/50 rounded-lg px-3 py-2">
+                    <Icon size={16} className="text-slate-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-white">{c.label}</span>
+                        <span className="text-sm font-bold text-slate-300">{c.detalle}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">{c.consejo}</p>
+                    </div>
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dot}`} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Resumen de manejo + logros */}
+        {myVehicle && drivingSummary && !drivingSummary.error_soft && (
+          <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4">
+            <h3 className="text-white font-bold text-sm flex items-center gap-2 mb-3">
+              <ShieldCheck size={16} className="text-[#6366F1]" /> Tu manejo
+            </h3>
+
+            {/* Insight causa-efecto */}
+            <div className="bg-[#6366F1]/10 border border-[#6366F1]/30 rounded-xl p-3 mb-3">
+              <p className="text-sm text-slate-200 leading-relaxed">{drivingSummary.insight}</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="text-center">
+                <p className="text-xl font-bold text-[#10B981]">{drivingSummary.dias_sin_frenada}</p>
+                <p className="text-[10px] text-slate-500">días sin frenada brusca</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-white">{drivingSummary.km_mes}</p>
+                <p className="text-[10px] text-slate-500">km este mes</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-white">{drivingSummary.excesos_mes}</p>
+                <p className="text-[10px] text-slate-500">excesos de vel.</p>
+              </div>
+            </div>
+
+            {/* Logros */}
+            {drivingSummary.logros?.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1">
+                  <Award size={12} /> Tus logros
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {drivingSummary.logros.map(l => (
+                    <div key={l.key} className="flex items-center gap-1.5 bg-[#0B1120]/60 border border-slate-700 rounded-full px-3 py-1.5">
+                      <span>{l.emoji}</span>
+                      <span className="text-[11px] text-slate-300">{l.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {myVehicle && (
           <div className="bg-[#1E293B]/50 rounded-2xl border border-slate-700 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -262,6 +450,27 @@ export default function DriverView() {
           </div>
         </div>
       </div>
+      {/* [NUEVO 19/07/2026] Celebración de logro recién desbloqueado —
+          aparece una sola vez, el chofer lo cierra. Refuerzo positivo,
+          la razón emocional para que el equipo le "caiga bien". */}
+      {newAchievement && (
+        <div
+          className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-6"
+          onClick={() => setNewAchievement(null)}
+        >
+          <div className="bg-gradient-to-b from-[#1E293B] to-[#0B1120] border border-[#10B981]/50 rounded-3xl p-8 max-w-xs text-center shadow-2xl shadow-[#10B981]/20">
+            <div className="text-6xl mb-4">{newAchievement.emoji}</div>
+            <p className="text-[#10B981] font-bold text-xs uppercase tracking-widest mb-2">¡Logro desbloqueado!</p>
+            <p className="text-white font-bold text-lg mb-4">{newAchievement.label}</p>
+            <button
+              onClick={() => setNewAchievement(null)}
+              className="w-full py-2.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm"
+            >
+              ¡Genial!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
