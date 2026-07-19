@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchAPI } from '../services/api';
+import { fetchAPI, API_URL } from '../services/api';
 import {
   Car, Wifi, Activity, Camera, Plus, X, Copy, CheckCircle2,
   AlertTriangle, ShieldAlert, Loader2, ChevronRight, RadioTower,
   Wrench, ThumbsUp, ThumbsDown, Play, Square, Clock, History,
-  LogOut, Home, ChevronDown, ChevronUp,
+  LogOut, Home, ChevronDown, ChevronUp, BarChart3, Download,
+  Search, TrendingUp,
 } from 'lucide-react';
 
 function fileToBase64(file) {
@@ -24,7 +25,7 @@ function fileToBase64(file) {
 // abajo de la pantalla (como el resto de la app en mobile).
 // ============================================================
 export default function ScannerMechanicView() {
-  const [tab, setTab] = useState('autos'); // 'autos' | 'parear' | 'vivo' | 'historico'
+  const [tab, setTab] = useState('autos'); // 'autos' | 'parear' | 'vivo' | 'historico' | 'stats'
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -63,6 +64,7 @@ export default function ScannerMechanicView() {
         {tab === 'parear' && <TabParear />}
         {tab === 'vivo' && <TabDiagnosticoVivo />}
         {tab === 'historico' && <TabHistoricoVehiculos />}
+        {tab === 'stats' && <TabEstadisticas />}
       </div>
 
       {/* Nav inferior fija — igual criterio que BottomNav del resto de la app */}
@@ -71,6 +73,7 @@ export default function ScannerMechanicView() {
         <NavBtn icon={Wifi} label="Parear" active={tab === 'parear'} onClick={() => setTab('parear')} />
         <NavBtn icon={Activity} label="En vivo" active={tab === 'vivo'} onClick={() => setTab('vivo')} />
         <NavBtn icon={History} label="Histórico" active={tab === 'historico'} onClick={() => setTab('historico')} />
+        <NavBtn icon={BarChart3} label="Stats" active={tab === 'stats'} onClick={() => setTab('stats')} />
       </div>
     </div>
   );
@@ -155,6 +158,29 @@ function NuevoAutoForm({ onDone, onCancel }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // [NUEVO 19/07/2026] "Este auto ya estuvo acá" — mientras el
+  // mecánico tipea la patente, buscamos en segundo plano (con
+  // debounce, para no pegarle al backend en cada letra) si ya existe
+  // un auto con esa patente en este taller. Si lo encuentra, se lo
+  // avisamos ANTES de que cargue un duplicado sin darse cuenta.
+  const [existingMatch, setExistingMatch] = useState(null);
+  const [checkingPlate, setCheckingPlate] = useState(false);
+  const lookupTimer = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(lookupTimer.current);
+    setExistingMatch(null);
+    if (form.plate_text.length < 4) return;
+    setCheckingPlate(true);
+    lookupTimer.current = setTimeout(() => {
+      fetchAPI(`/scanner/vehicles/lookup?plate=${encodeURIComponent(form.plate_text)}`)
+        .then(res => setExistingMatch(res))
+        .catch(() => setExistingMatch(null))
+        .finally(() => setCheckingPlate(false));
+    }, 500);
+    return () => clearTimeout(lookupTimer.current);
+  }, [form.plate_text]);
+
   const handlePhoto = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -208,6 +234,28 @@ function NuevoAutoForm({ onDone, onCancel }) {
           required
         />
         <p className="text-[11px] text-slate-500 mt-1">Es lo que el scanner va a usar para identificar este auto — escribila igual a como está en la chapa.</p>
+
+        {/* [NUEVO 19/07/2026] Aviso de "este auto ya estuvo acá" */}
+        {checkingPlate && <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Buscando si ya lo tenés cargado...</p>}
+        {existingMatch && (
+          <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <p className="text-amber-400 text-xs font-semibold flex items-center gap-1.5"><AlertTriangle size={13} /> Este auto ya estuvo en tu taller</p>
+            <p className="text-slate-300 text-xs mt-1">{existingMatch.brand || 'Marca ?'} {existingMatch.model || ''} — {existingMatch.total_sesiones} sesión(es) previa(s)</p>
+            {existingMatch.last_session && (
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Última vez: {new Date(existingMatch.last_session.started_at).toLocaleDateString('es-AR')} · {existingMatch.last_session.dtc_count} DTC detectado(s)
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500 mt-1.5">Si seguís cargando, se va a crear un registro NUEVO — mejor usar el que ya existe para no partir el historial en dos.</p>
+            <button
+              type="button"
+              onClick={() => onDone(existingMatch.id)}
+              className="mt-2 w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold"
+            >
+              Usar este auto existente (recomendado)
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -626,6 +674,31 @@ function TabHistoricoVehiculos() {
     });
   };
 
+  // [NUEVO 19/07/2026] Descarga del reporte PDF — no puede usar
+  // fetchAPI (esa devuelve JSON) porque acá la respuesta es binaria.
+  // Se pide como blob, con el mismo token de auth, y se dispara la
+  // descarga en el navegador manualmente.
+  const downloadReport = async (vehicleId, plate) => {
+    try {
+      const token = localStorage.getItem('kyber_token');
+      const res = await fetch(`${API_URL}/scanner/vehicles/${vehicleId}/report.pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('No se pudo generar el reporte');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `diagnostico-${plate || vehicleId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('No se pudo descargar el reporte: ' + err.message);
+    }
+  };
+
   if (loading) return <p className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Cargando...</p>;
   if (error) return <p className="text-red-400 text-sm">{error}</p>;
 
@@ -663,6 +736,14 @@ function TabHistoricoVehiculos() {
 
             {expandedId === v.id && (
               <div className="border-t border-slate-800 p-3 pt-3 bg-[#0B1120]/40 space-y-3">
+                {/* [NUEVO 19/07/2026] Reporte PDF para entregarle al cliente del taller */}
+                <button
+                  onClick={() => downloadReport(v.id, v.plate_text)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#6366F1]/10 text-[#818CF8] text-xs font-semibold border border-[#6366F1]/30"
+                >
+                  <Download size={13} /> Descargar reporte para el cliente (PDF)
+                </button>
+
                 {!d ? (
                   <p className="text-slate-600 text-xs flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Cargando...</p>
                 ) : d.sessions.length === 0 ? (
@@ -692,6 +773,97 @@ function TabHistoricoVehiculos() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================
+// PESTAÑA 5 — Estadísticas propias del taller: qué marcas y qué
+// fallas se repiten más, para que el mecánico sepa qué repuestos
+// conviene tener a mano. Es el "plus" que justifica pagar la
+// suscripción más allá de solo conectar y diagnosticar.
+// ============================================================
+function TabEstadisticas() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchAPI('/scanner/stats')
+      .then(setStats)
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Cargando...</p>;
+  if (error) return <p className="text-red-400 text-sm">{error}</p>;
+  if (!stats || stats.total_autos === 0) {
+    return (
+      <div className="text-center py-12 text-slate-500">
+        <BarChart3 size={36} className="mx-auto mb-2 opacity-30" />
+        <p className="text-sm">Todavía no hay suficientes datos — escaneá algunos autos y volvé por acá.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-white font-bold flex items-center gap-2"><TrendingUp size={18} className="text-[#6366F1]" /> Estadísticas de tu taller</h2>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-[#1E293B]/60 rounded-xl border border-slate-700 p-3 text-center">
+          <p className="text-2xl font-bold text-white">{stats.total_autos}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Autos totales</p>
+        </div>
+        <div className="bg-[#1E293B]/60 rounded-xl border border-slate-700 p-3 text-center">
+          <p className="text-2xl font-bold text-[#10B981]">{stats.autos_ultimo_mes}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Últimos 30 días</p>
+        </div>
+        <div className="bg-[#1E293B]/60 rounded-xl border border-slate-700 p-3 text-center">
+          <p className="text-2xl font-bold text-red-400">{stats.total_dtcs}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">DTC detectados</p>
+        </div>
+      </div>
+
+      {stats.topDtcs?.length > 0 && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Fallas más comunes en tu taller</p>
+          <p className="text-[11px] text-slate-600 mb-2">Para saber qué repuestos conviene tener a mano.</p>
+          <div className="space-y-1.5">
+            {stats.topDtcs.map((d, i) => (
+              <div key={d.decoded_code} className="flex items-center justify-between bg-[#1E293B]/60 rounded-lg border border-slate-800 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-red-300 font-mono font-bold text-sm">{d.decoded_code}</p>
+                  <p className="text-slate-400 text-[11px] truncate">{d.description_guess || 'Sin descripción'}</p>
+                </div>
+                <span className="text-white font-bold text-sm shrink-0 ml-2">{d.cantidad}x</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stats.topBrands?.length > 0 && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Marcas que más pasan por tu taller</p>
+          <div className="space-y-1.5">
+            {stats.topBrands.map(b => {
+              const pct = Math.round((b.cantidad / stats.total_autos) * 100);
+              return (
+                <div key={b.brand}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-300">{b.brand}</span>
+                    <span className="text-slate-500">{b.cantidad} auto(s)</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#6366F1] rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

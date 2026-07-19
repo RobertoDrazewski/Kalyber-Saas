@@ -15,6 +15,9 @@ const {
     ingestDiagnosticsLog,
     getSessionLive,
     confirmDtc,
+    getVehicleReportPdf,
+    lookupScanVehicleByPlate,
+    getWorkshopStats,
 } = require('../controllers/scannerController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
@@ -39,7 +42,11 @@ router.get('/devices', verifyToken, requireRole('super_admin', 'taller'), listMy
 
 router.post('/vehicles', verifyToken, requireRole('super_admin', 'taller'), createScanVehicle);
 router.get('/vehicles', verifyToken, requireRole('super_admin', 'taller'), listScanVehicles);
+router.get('/vehicles/lookup', verifyToken, requireRole('super_admin', 'taller'), lookupScanVehicleByPlate);
 router.get('/vehicles/:id/history', verifyToken, requireRole('super_admin', 'taller'), getScanVehicleHistory);
+router.get('/vehicles/:id/report.pdf', verifyToken, requireRole('super_admin', 'taller'), getVehicleReportPdf);
+
+router.get('/stats', verifyToken, requireRole('super_admin', 'taller'), getWorkshopStats);
 
 router.post('/sessions', verifyToken, requireRole('super_admin', 'taller'), startSession);
 router.post('/sessions/:id/end', verifyToken, requireRole('super_admin', 'taller'), endSession);

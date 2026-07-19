@@ -2,7 +2,7 @@
 // en la PC). Para probar desde el celular en la misma red WiFi, o para
 // producción en Railway, hay que setear VITE_API_URL explícitamente
 // (ver .env.example).
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const fetchAPI = async (endpoint, options = {}) => {
   const token = localStorage.getItem('kyber_token');

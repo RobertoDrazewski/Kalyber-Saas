@@ -118,7 +118,7 @@ function Hardware() {
           {/* Hardware Básico */}
           <div className="kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
-              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border border-slate-600">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
               </div>
               <img src="/Jimi_Vl04l.png" alt="Hardware Básico" className="h-24 md:h-48 w-auto object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-transform duration-500" />
@@ -155,7 +155,7 @@ function Hardware() {
           {/* Hardware Avanzado */}
           <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
-              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-[#6366F1] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-[#6366F1] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
               </div>
               <img src="/Kalyber_OBD_Pro.png" alt="Hardware Avanzado" className="h-24 md:h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(99,102,241,0.3)] transform hover:scale-105 transition-transform duration-500" />
@@ -193,8 +193,15 @@ function Hardware() {
               con el mismo tamaño que las otras dos tarjetas. */}
           <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 rounded-3xl border border-[#EC4899]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#EC4899]/10 transform hover:-translate-y-2 transition-transform duration-300">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
-              <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-[#EC4899] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#EC4899]/40">
+              <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-[#EC4899] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#EC4899]/40">
                 Plan Taller
+              </div>
+              {/* [NUEVO 19/07/2026] El hardware físico todavía se está
+                  armando (ver la conversación de ensamblado) — se lo
+                  dejamos claro al visitante en vez de dar a entender
+                  que ya está listo para comprar hoy mismo. */}
+              <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10 bg-amber-500 text-[#0B1120] px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-amber-500/40">
+                🚧 Próximamente
               </div>
               <div className="w-20 h-20 md:w-32 md:h-32 rounded-2xl bg-[#EC4899]/15 border border-[#EC4899]/30 flex items-center justify-center">
                 <svg className="w-10 h-10 md:w-16 md:h-16 text-[#EC4899]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +211,8 @@ function Hardware() {
             </div>
             <div className="p-5 md:p-8 pt-4 md:pt-6 flex-1 flex flex-col">
               <h3 className="text-xl md:text-2xl font-bold text-white mb-1">Kalyber Scanner</h3>
-              <p className="text-xs md:text-sm font-semibold text-[#EC4899] mb-4 md:mb-6 uppercase tracking-widest">Diagnóstico OBD-II para Talleres</p>
+              <p className="text-xs md:text-sm font-semibold text-[#EC4899] mb-2 uppercase tracking-widest">Diagnóstico OBD-II para Talleres</p>
+              <p className="text-[11px] md:text-xs text-amber-400/90 mb-4 md:mb-6">Estamos armando el primer prototipo — reserve su lugar dejando su email más abajo y le avisamos apenas esté disponible.</p>
 
               <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
@@ -482,9 +490,14 @@ function Pricing() {
               una sección propia más abajo, rompía la estética con los 3
               hardware de arriba que sí están en una sola fila). */}
           <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#EC4899]/50 flex flex-col shadow-2xl shadow-[#EC4899]/10 hover:brightness-110 transition-all">
-            <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-[#EC4899] bg-[#EC4899]/10 px-3 py-1 rounded-full mb-3">
-              Nuevo — Para Talleres
-            </span>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-[#EC4899] bg-[#EC4899]/10 px-3 py-1 rounded-full">
+                Nuevo — Para Talleres
+              </span>
+              <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full">
+                🚧 Próximamente
+              </span>
+            </div>
             <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
             <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
 
@@ -527,6 +540,18 @@ function Pricing() {
               <li className="flex items-start gap-3">
                 <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
                 <div><strong className="text-white font-semibold">Confirmación de Diagnóstico:</strong> Confirme o corrija cada falla detectada después de revisar el auto — su taller construye su propio historial verificado, no solo códigos sin contexto.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Reporte PDF para su Cliente:</strong> Genere un informe profesional de diagnóstico, listo para entregarle al dueño del vehículo — con los códigos detectados y su confirmación.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">"Este Auto Ya Estuvo Acá":</strong> Aviso automático al cargar una patente repetida, con su historial completo — nunca pierda de vista si una falla ya se había presentado antes.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
+                <div><strong className="text-white font-semibold">Estadísticas de su Taller:</strong> Qué marcas y qué fallas se repiten más en sus clientes — para saber qué repuestos conviene tener siempre a mano.</div>
               </li>
             </ul>
           </div>

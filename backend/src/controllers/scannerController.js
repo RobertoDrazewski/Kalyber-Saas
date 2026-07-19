@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../config/database');
 const { hashDeviceToken } = require('../middlewares/deviceAuth');
+const PDFDocument = require('pdfkit');
 
 function generateDeviceToken() {
     // Mismo criterio que las ApiKeys de flota (crypto.randomBytes, se
@@ -380,6 +381,172 @@ const listMyDevices = async (req, res) => {
     }
 };
 
+// ============================================================
+// [NUEVO 19/07/2026] Las 3 herramientas extra del Plan Taller — el
+// "plus" que justifica pagar mensualidad más allá de "conectar y
+// listo": reporte para el cliente del taller, aviso de auto repetido,
+// y estadísticas propias.
+// ============================================================
+
+// ---- 1) Reporte PDF de un vehículo escaneado — PARA EL CLIENTE DEL TALLER ----
+// A diferencia de las vistas de super_admin (donde la patente/foto se
+// excluyen a propósito por privacidad), ACÁ SÍ corresponde mostrarlas
+// — es el propio taller entregándole el reporte a SU cliente, el
+// dueño del auto. Es un documento completamente distinto en cuanto a
+// qué información es apropiada mostrar.
+const getVehicleReportPdf = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        const [[vehicle]] = await pool.query(
+            `SELECT sv.*, w.name as workshop_name, w.phone as workshop_phone
+             FROM ScanVehicles sv JOIN Workshops w ON sv.workshop_id = w.id
+             WHERE sv.id = ? AND sv.workshop_id = ?`,
+            [id, workshopId]
+        );
+        if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado en tu taller' });
+
+        const [sessions] = await pool.query(
+            `SELECT id, started_at, ended_at, status FROM DiagnosticSessions
+             WHERE scan_vehicle_id = ? ORDER BY started_at DESC`,
+            [id]
+        );
+        const sessionIds = sessions.map(s => s.id);
+        let dtcs = [];
+        if (sessionIds.length > 0) {
+            [dtcs] = await pool.query(
+                `SELECT session_id, detected_at, decoded_code, description_guess, confirmed_by_mechanic, mechanic_correction
+                 FROM DiagnosticDTC WHERE session_id IN (?) ORDER BY detected_at DESC`,
+                [sessionIds]
+            );
+        }
+
+        // ---- Armado del PDF ----
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="diagnostico-${vehicle.plate_text || vehicle.id}.pdf"`);
+        doc.pipe(res);
+
+        // Encabezado
+        doc.fontSize(20).fillColor('#1E293B').text(vehicle.workshop_name, { align: 'left' });
+        doc.fontSize(10).fillColor('#64748B').text(vehicle.workshop_phone || '', { align: 'left' });
+        doc.moveDown(0.5);
+        doc.fontSize(16).fillColor('#6366F1').text('Reporte de Diagnóstico OBD-II', { align: 'left' });
+        doc.moveDown(1);
+        doc.strokeColor('#E2E8F0').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+        doc.moveDown(1);
+
+        // Datos del vehículo — acá SÍ va la patente, es el reporte del cliente del taller
+        doc.fontSize(11).fillColor('#1E293B');
+        doc.text(`Patente: ${vehicle.plate_text || '—'}`);
+        doc.text(`Marca / Modelo: ${vehicle.brand || '—'} ${vehicle.model || ''} ${vehicle.model_year ? `(${vehicle.model_year})` : ''}`);
+        if (vehicle.vin) doc.text(`VIN: ${vehicle.vin}`);
+        if (vehicle.customer_label) doc.text(`Cliente: ${vehicle.customer_label}`);
+        doc.text(`Fecha del reporte: ${new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Mendoza' })}`);
+        doc.moveDown(1.5);
+
+        if (dtcs.length === 0) {
+            doc.fontSize(12).fillColor('#10B981').text('✓ Sin fallas detectadas en las sesiones registradas.');
+        } else {
+            doc.fontSize(13).fillColor('#1E293B').text('Códigos de falla detectados:', { underline: true });
+            doc.moveDown(0.5);
+            dtcs.forEach(d => {
+                doc.fontSize(11).fillColor('#EF4444').text(`${d.decoded_code || '—'}`, { continued: true });
+                doc.fillColor('#475569').text(`  —  ${d.description_guess || 'Sin descripción'}`);
+                doc.fontSize(9).fillColor('#94A3B8').text(`Detectado: ${new Date(d.detected_at).toLocaleString('es-AR', { timeZone: 'America/Argentina/Mendoza' })}`);
+                if (d.confirmed_by_mechanic === 1) {
+                    doc.fillColor('#10B981').text('✓ Confirmado por el mecánico');
+                } else if (d.confirmed_by_mechanic === 0) {
+                    doc.fillColor('#F59E0B').text(`⚠ Corregido por el mecánico: ${d.mechanic_correction || '(sin detalle)'}`);
+                }
+                doc.moveDown(0.8);
+            });
+        }
+
+        doc.moveDown(2);
+        doc.fontSize(8).fillColor('#94A3B8').text('Generado automáticamente por Kalyber Scanner — kalyber.com.ar', { align: 'center' });
+
+        doc.end();
+    } catch (error) {
+        console.error('[Scanner] Error generando reporte PDF:', error.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Error generando el reporte' });
+    }
+};
+
+// ---- 2) "Este auto ya estuvo acá" — búsqueda por patente ANTES de escanear ----
+const lookupScanVehicleByPlate = async (req, res) => {
+    const { plate } = req.query;
+    if (!plate || plate.trim().length < 3) return res.json(null);
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        const [[vehicle]] = await pool.query(
+            `SELECT id, vin, brand, model, model_year, plate_text, customer_label, created_at
+             FROM ScanVehicles WHERE workshop_id = ? AND plate_text = ? ORDER BY created_at DESC LIMIT 1`,
+            [workshopId, plate.trim().toUpperCase()]
+        );
+        if (!vehicle) return res.json(null);
+
+        const [[lastSession]] = await pool.query(
+            `SELECT ds.id, ds.started_at,
+                    (SELECT COUNT(*) FROM DiagnosticDTC dd WHERE dd.session_id = ds.id) as dtc_count
+             FROM DiagnosticSessions ds WHERE ds.scan_vehicle_id = ? ORDER BY ds.started_at DESC LIMIT 1`,
+            [vehicle.id]
+        );
+        const [[totals]] = await pool.query(
+            `SELECT COUNT(*) as total_sesiones FROM DiagnosticSessions WHERE scan_vehicle_id = ?`,
+            [vehicle.id]
+        );
+
+        res.json({ ...vehicle, total_sesiones: totals.total_sesiones, last_session: lastSession || null });
+    } catch (error) {
+        console.error('[Scanner] Error buscando vehículo por patente:', error.message);
+        res.status(500).json({ error: 'Error buscando el vehículo' });
+    }
+};
+
+// ---- 3) Estadísticas propias del taller ----
+const getWorkshopStats = async (req, res) => {
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        if (!workshopId) return res.json(null);
+
+        const [[totals]] = await pool.query(
+            `SELECT
+                (SELECT COUNT(*) FROM ScanVehicles WHERE workshop_id = ?) as total_autos,
+                (SELECT COUNT(*) FROM ScanVehicles WHERE workshop_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as autos_ultimo_mes,
+                (SELECT COUNT(*) FROM DiagnosticDTC dd JOIN DiagnosticSessions ds ON dd.session_id = ds.id
+                   JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id WHERE sv.workshop_id = ?) as total_dtcs`,
+            [workshopId, workshopId, workshopId]
+        );
+
+        // Top 5 marcas más escaneadas
+        const [topBrands] = await pool.query(
+            `SELECT brand, COUNT(*) as cantidad FROM ScanVehicles
+             WHERE workshop_id = ? AND brand IS NOT NULL AND brand != ''
+             GROUP BY brand ORDER BY cantidad DESC LIMIT 5`,
+            [workshopId]
+        );
+
+        // Top 5 códigos DTC más comunes en este taller — esto es
+        // justo el dato que le sirve al mecánico para saber qué
+        // repuestos tener a mano.
+        const [topDtcs] = await pool.query(
+            `SELECT dd.decoded_code, dd.description_guess, COUNT(*) as cantidad
+             FROM DiagnosticDTC dd
+             JOIN DiagnosticSessions ds ON dd.session_id = ds.id
+             JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+             WHERE sv.workshop_id = ? AND dd.decoded_code IS NOT NULL
+             GROUP BY dd.decoded_code, dd.description_guess ORDER BY cantidad DESC LIMIT 5`,
+            [workshopId]
+        );
+
+        res.json({ ...totals, topBrands, topDtcs });
+    } catch (error) {
+        console.error('[Scanner] Error obteniendo estadísticas del taller:', error.message);
+        res.status(500).json({ error: 'Error obteniendo estadísticas' });
+    }
+};
+
 module.exports = {
     createWorkshop,
     listWorkshops,
@@ -395,4 +562,7 @@ module.exports = {
     ingestDiagnosticsLog,
     getSessionLive,
     confirmDtc,
+    getVehicleReportPdf,
+    lookupScanVehicleByPlate,
+    getWorkshopStats,
 };
