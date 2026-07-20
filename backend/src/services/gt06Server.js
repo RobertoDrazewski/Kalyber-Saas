@@ -523,14 +523,32 @@ const lastRealPositionByImei = new Map();
 function isStaleDuplicatePosition(imei, gps) {
     if (!gps) return false;
     const prev = lastRealPositionByImei.get(imei);
-    const isLowSpeed = (gps.speed_kmh ?? 0) <= 2;
-    if (prev && isLowSpeed && prev.speed_kmh <= 2) {
+
+    if (prev) {
         const latDiff = Math.abs(gps.lat - prev.lat);
         const lngDiff = Math.abs(gps.lon - prev.lon);
-        // ~0.0003° ≈ 30m a esta latitud — suficiente para no confundir
-        // "sigue estacionado en el mismo lugar" con un movimiento real.
-        if (latDiff < 0.0003 && lngDiff < 0.0003) return true;
+
+        // [FIX 20/07/2026] Caso 1 — GPS CONGELADO: el módulo GPS del
+        // VL04 a veces se cuelga y repite el ÚLTIMO fix que tenía en
+        // memoria, con coordenadas EXACTAMENTE iguales y una velocidad
+        // fija distinta de cero (ej: 7 km/h repetido 28 veces en 2.5h,
+        // con el auto en realidad moviéndose en otro lado). El filtro
+        // viejo solo miraba velocidad <= 2, así que este caso se le
+        // escapaba. Ahora: si las coordenadas son BYTE-POR-BYTE
+        // idénticas a la lectura anterior, es imposible en un GPS real
+        // (siempre hay micro-jitter), así que es una repetición
+        // cacheada — la descartamos sin importar la velocidad.
+        const bitExactRepeat = latDiff === 0 && lngDiff === 0;
+        if (bitExactRepeat) return true;
+
+        // Caso 2 — ESTACIONADO (el de antes): velocidad baja + posición
+        // casi igual = sigue en el mismo lugar, no es un movimiento real.
+        const isLowSpeed = (gps.speed_kmh ?? 0) <= 2;
+        if (isLowSpeed && prev.speed_kmh <= 2 && latDiff < 0.0003 && lngDiff < 0.0003) {
+            return true;
+        }
     }
+
     lastRealPositionByImei.set(imei, { lat: gps.lat, lon: gps.lon, speed_kmh: gps.speed_kmh ?? 0 });
     return false;
 }
