@@ -15,6 +15,7 @@ import TabDiagnostico from '../components/TabDiagnostico';
 import TabComandos from '../components/TabComandos';
 import TabMantenimientoRealizado from '../components/TabMantenimientoRealizado';
 import TabApiKeys from '../components/TabApiKeys';
+import TabEquiposScanner from '../components/TabEquiposScanner';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('telemetria');
@@ -35,6 +36,7 @@ export default function Dashboard() {
       case 'facturador': return <TabFacturador />;
       case 'diagnostico': return <TabDiagnostico />;
       case 'comandos': return <TabComandos />;
+      case 'equiposScanner': return <TabEquiposScanner />;
       case 'apikeys': return <TabApiKeys />;
       default: return <TabTelemetria />;
     }

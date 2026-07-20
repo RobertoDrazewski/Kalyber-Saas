@@ -314,6 +314,84 @@ const confirmDtc = async (req, res) => {
 };
 
 // ---- Vistas de SUPER_ADMIN — vos viendo todos los talleres ----
+// ============================================================
+// [NUEVO 19/07/2026] Provisioning de equipos — SOLO super_admin.
+// Flujo del barcode: acá se genera y pre-carga cada device_uid con
+// formato ordenado (KAL-SCAN-XXXX) ANTES de despachar el equipo. Ese
+// número es el que va impreso en el barcode de la tapa. Cuando el
+// taller lo parea (claimScannerDevice), esa fila ya existe con
+// workshop_id NULL y el UPSERT simplemente la reclama.
+// ============================================================
+const UID_PREFIX = 'KAL-SCAN-';
+
+const provisionScannerDevice = async (req, res) => {
+    try {
+        // Buscar el número más alto ya usado con nuestro prefijo, para
+        // seguir la serie sin huecos ni colisiones. Se hace en una
+        // transacción con lock para que dos provisioning simultáneos no
+        // saquen el mismo número.
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            const [rows] = await conn.query(
+                `SELECT device_uid FROM ScannerDevices
+                 WHERE device_uid LIKE ? ORDER BY device_uid DESC LIMIT 1 FOR UPDATE`,
+                [UID_PREFIX + '%']
+            );
+
+            let nextNum = 1;
+            if (rows.length > 0) {
+                const lastNum = parseInt(rows[0].device_uid.replace(UID_PREFIX, ''), 10);
+                if (Number.isFinite(lastNum)) nextNum = lastNum + 1;
+            }
+            const deviceUid = UID_PREFIX + String(nextNum).padStart(4, '0');
+
+            const [result] = await conn.query(
+                `INSERT INTO ScannerDevices (device_uid, workshop_id, label, created_at)
+                 VALUES (?, NULL, ?, NOW())`,
+                [deviceUid, req.body.label || null]
+            );
+            await conn.commit();
+
+            res.json({
+                id: result.insertId,
+                device_uid: deviceUid,
+                message: `Equipo ${deviceUid} pre-cargado. Imprimí este código en la tapa — el taller lo va a escanear al parear.`,
+            });
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error('[Scanner] Error en provisioning:', error.message);
+        res.status(500).json({ error: 'Error generando el equipo' });
+    }
+};
+
+// Lista de equipos provisionados, para tu control de stock: cuáles ya
+// se vendieron (tienen workshop_id) y cuáles siguen sin asignar.
+const listProvisionedDevices = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT d.id, d.device_uid, d.label, d.workshop_id, d.paired_at, d.last_seen_at,
+                    d.created_at, w.name as workshop_name,
+                    (d.workshop_id IS NOT NULL) as reclamado,
+                    (d.last_seen_at IS NOT NULL AND d.last_seen_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as online
+             FROM ScannerDevices d
+             LEFT JOIN Workshops w ON d.workshop_id = w.id
+             WHERE d.device_uid LIKE ?
+             ORDER BY d.device_uid DESC`,
+            [UID_PREFIX + '%']
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('[Scanner] Error listando equipos provisionados:', error.message);
+        res.status(500).json({ error: 'Error listando equipos' });
+    }
+};
+
 const listWorkshops = async (req, res) => {
     try {
         const [rows] = await pool.query(
@@ -565,4 +643,6 @@ module.exports = {
     getVehicleReportPdf,
     lookupScanVehicleByPlate,
     getWorkshopStats,
+    provisionScannerDevice,
+    listProvisionedDevices,
 };

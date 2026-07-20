@@ -1,12 +1,20 @@
 const { Resend } = require('resend');
 
-// Asegúrate de tener RESEND_API_KEY en tu archivo .env
-const resend = new Resend(process.env.RESEND_API_KEY);
+// [FIX 20/07/2026] Lazy-init: antes se hacía `new Resend(...)` al cargar
+// el módulo. Si RESEND_API_KEY no estaba en ese instante exacto del
+// arranque, la librería tiraba error y CRASHEABA el backend entero.
+// Ahora se crea el cliente recién cuando se manda un mail — mismo fix
+// que ya se aplicó en usersController.
+let _resend = null;
+function getResend() {
+    if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+    return _resend;
+}
 
 const sendContactEmail = async (req, res) => {
     const { name, email, message } = req.body;
     try {
-        const data = await resend.emails.send({
+        const data = await getResend().emails.send({
             // El remitente inventado bajo tu dominio verificado
             from: 'Kalyber Web <contacto@kalyber.com.ar>', 
             // A dónde te llega la notificación
@@ -45,7 +53,7 @@ const sendQuoteEmail = async (req, res) => {
             </p>`
         ).join('');
 
-        const data = await resend.emails.send({
+        const data = await getResend().emails.send({
             // El remitente inventado para el bot
             from: 'Kalyber IA <cotizaciones@kalyber.com.ar>', 
             to: ['kalyber@puma-code.com'],
@@ -82,7 +90,7 @@ const sendCartQuote = async (req, res) => {
     }
 
     try {
-        const data = await resend.emails.send({
+        const data = await getResend().emails.send({
             from: 'Kalyber Carrito <cotizaciones@kalyber.com.ar>',
             to: ['kalyber@puma-code.com'],
             reply_to: billingEmail,

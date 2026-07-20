@@ -18,6 +18,8 @@ const {
     getVehicleReportPdf,
     lookupScanVehicleByPlate,
     getWorkshopStats,
+    provisionScannerDevice,
+    listProvisionedDevices,
 } = require('../controllers/scannerController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
@@ -34,6 +36,11 @@ const { requireDeviceToken } = require('../middlewares/deviceAuth');
 // nuestro, no autoservicio del cliente).
 router.post('/workshops', verifyToken, requireRole('super_admin'), createWorkshop);
 router.get('/workshops', verifyToken, requireRole('super_admin'), listWorkshops);
+
+// [NUEVO 19/07/2026] Provisioning de equipos — genera/lista los
+// device_uid pre-cargados para imprimir en el barcode de la tapa.
+router.post('/provision', verifyToken, requireRole('super_admin'), provisionScannerDevice);
+router.get('/provision', verifyToken, requireRole('super_admin'), listProvisionedDevices);
 router.get('/workshops/:id/history', verifyToken, requireRole('super_admin'), getWorkshopHistory);
 router.get('/my-workshop', verifyToken, requireRole('super_admin', 'taller'), getMyWorkshop);
 

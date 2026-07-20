@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchAPI, API_URL } from '../services/api';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import {
   Car, Wifi, Activity, Camera, Plus, X, Copy, CheckCircle2,
   AlertTriangle, ShieldAlert, Loader2, ChevronRight, RadioTower,
   Wrench, ThumbsUp, ThumbsDown, Play, Square, Clock, History,
   LogOut, Home, ChevronDown, ChevronUp, BarChart3, Download,
-  Search, TrendingUp,
+  Search, TrendingUp, ScanLine,
 } from 'lucide-react';
 
 function fileToBase64(file) {
@@ -308,6 +309,7 @@ function TabParear() {
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(false);
   const [paired, setPaired] = useState(false);
+  const [scanning, setScanning] = useState(false); // muestra el modal de cámara para escanear el barcode
   const pollRef = useRef(null);
 
   const handleClaim = async (e) => {
@@ -366,13 +368,28 @@ function TabParear() {
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Código del equipo</label>
-            <input
-              value={deviceUid}
-              onChange={e => setDeviceUid(e.target.value.trim())}
-              placeholder="Ej: 868935060187604"
-              className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm font-mono"
-              required
-            />
+            <div className="flex gap-2">
+              <input
+                value={deviceUid}
+                onChange={e => setDeviceUid(e.target.value.trim())}
+                placeholder="Ej: KAL-SCAN-0001"
+                className="flex-1 bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm font-mono"
+                required
+              />
+              {/* [NUEVO 19/07/2026] Reusa el MISMO BarcodeScannerModal que
+                  ya se usa para el ICC del chip M2M — el mecánico saca
+                  foto al barcode de la tapa del scanner en vez de tipear
+                  el código a mano. */}
+              <button
+                type="button"
+                onClick={() => setScanning(true)}
+                className="shrink-0 px-4 rounded-lg bg-[#6366F1]/20 text-[#818CF8] border border-[#6366F1]/40 flex items-center justify-center"
+                title="Escanear con la cámara"
+              >
+                <ScanLine size={20} />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-1">Escribilo, o tocá el botón para escanear el código de barras de la tapa con la cámara.</p>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Nombre para este equipo (opcional)</label>
@@ -438,6 +455,16 @@ function TabParear() {
             Parear otro equipo
           </button>
         </div>
+      )}
+
+      {/* Modal de cámara para escanear el barcode de la tapa del scanner */}
+      {scanning && (
+        <BarcodeScannerModal
+          title="Escaneá el código de la tapa del scanner"
+          errorHint="No se pudo abrir la cámara. Revisá los permisos, o escribí el código del equipo a mano."
+          onScan={(code) => { setDeviceUid(code.trim()); setScanning(false); }}
+          onClose={() => setScanning(false)}
+        />
       )}
     </div>
   );

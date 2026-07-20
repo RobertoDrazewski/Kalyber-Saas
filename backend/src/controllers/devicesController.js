@@ -370,7 +370,7 @@ const sendDeviceParams = async (req, res) => {
         });
 
         res.json({
-            message: `Parámetros enviados a IMEI ${imei}: ${Object.keys(filtered).join(', ')}. SIN CONFIRMAR contra prueba real todavía — verificá que el equipo conteste "éxito" y que el intervalo de reporte cambie de verdad.`,
+            message: `Parámetros enviados a IMEI ${imei}: ${Object.keys(filtered).join(', ')}. Revisá el historial de comandos para ver la confirmación del equipo.`,
             correlation_id: result.correlationId,
         });
     } catch (error) {

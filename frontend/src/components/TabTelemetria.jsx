@@ -518,7 +518,7 @@ function PanelBasico({ vehicle, series, alarms }) {
             .map(g => <GaugeStat key={g.label} {...g} />)}
         </div>
         <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-3">
-          Equipo <strong className="text-slate-300">Básico (JM-VL04)</strong>: GPS, velocidad y odómetro real del propio equipo. Confirmado que colisión, corte de energía y desconexión física llegan a este panel en vivo (no solo suena en cabina); frenada/aceleración/giro brusco usan el mismo camino y deberían llegar igual — todavía no tuvimos el primer evento real de manejo para confirmarlo al 100%. No tiene lectura de motor (RPM, temperatura, combustible): eso es exclusivo del Plan Avanzado (VL502).
+          Equipo <strong className="text-slate-300">Básico (JM-VL04)</strong>: GPS, velocidad y odómetro real del propio equipo. Registra en vivo eventos de colisión, corte de energía, desconexión física y eventos de manejo (frenada, aceleración y giro brusco), con hora y ubicación. No incluye lectura de motor (RPM, temperatura, combustible): eso es exclusivo del Plan Avanzado (VL502).
         </p>
       </div>
 

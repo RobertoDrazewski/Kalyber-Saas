@@ -11,8 +11,14 @@ const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_HISTORY_MESSAGES = 6;
 
-// Inicializa Resend con tu API key (asegúrate de tener RESEND_API_KEY en tu .env)
-const resend = new Resend(process.env.RESEND_API_KEY);
+// [FIX 20/07/2026] Lazy-init — ver nota en contactController. Antes
+// `new Resend(...)` a nivel de módulo crasheaba el backend al arrancar
+// si faltaba la API key.
+let _resend = null;
+function getResend() {
+    if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+    return _resend;
+}
 
 const SYSTEM_PROMPT = `Sos el asistente de ventas de Kalyber (kalyber.com.ar), una plataforma de gestión de flotas con IA para autos de Uber/taxi y flotas chicas en Mendoza, Argentina.
 
@@ -297,7 +303,7 @@ const sendQuoteEmail = async (req, res) => {
         // ---- Mail INTERNO a Puma Code — transcripción completa + borrador de contrato ----
         // Nunca sale de acá para el lado del cliente — es el que Roberto
         // revisa y, si corresponde, reenvía él mismo manualmente.
-        const internalData = await resend.emails.send({
+        const internalData = await getResend().emails.send({
             from: 'Kalyber IA <cotizaciones@kalyber.com.ar>', 
             to: ['kalyber@puma-code.com'],
             subject: `Nueva Solicitud de Cotización${extracted.clientName ? ' — ' + extracted.clientName : ''} (Chat IA)`,
@@ -325,7 +331,7 @@ const sendQuoteEmail = async (req, res) => {
         let clientReplySent = false;
         if (clientEmail) {
             try {
-                await resend.emails.send({
+                await getResend().emails.send({
                     from: 'Kalyber <cotizaciones@kalyber.com.ar>',
                     to: [clientEmail],
                     subject: 'Recibimos tu consulta — Kalyber',

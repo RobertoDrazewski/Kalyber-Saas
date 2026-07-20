@@ -468,7 +468,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Interceptamos y registramos los códigos de error (DTC) que reporta la ECU en tiempo real — la traducción a descripción de falla específica está en desarrollo activo, hoy se muestra el código crudo reportado por el equipo para que su taller lo cruce.</div>
+                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Leemos y registramos en tiempo real los códigos de diagnóstico (DTC) que reporta la computadora del vehículo, para que puedas anticiparte a una falla antes de que se convierta en una rotura mayor.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 

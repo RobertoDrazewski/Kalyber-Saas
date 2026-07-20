@@ -145,8 +145,7 @@ export default function TabPosicion() {
   const [fenceName, setFenceName] = useState('');
   const [savingFence, setSavingFence] = useState(false);
   const [fenceError, setFenceError] = useState('');
-  const [fenceNotice, setFenceNotice] = useState(''); // aviso benigno (guardado pero sin sync), no es un error real
-  const [resyncingId, setResyncingId] = useState(null);
+  const [fenceNotice, setFenceNotice] = useState(''); // reservado para avisos benignos futuros
   // [NUEVO 14/07/2026] Edición de geocercas ya creadas — antes solo se
   // podían crear o borrar, no editar nombre/radio/modo.
   const [editingFenceId, setEditingFenceId] = useState(null);
@@ -226,17 +225,11 @@ export default function TabPosicion() {
           });
       cancelFenceForm();
       setPlacingFence(false);
-      // Se guardó bien en los dos casos — esto NO es un error, es un
-      // aviso: si el equipo estaba offline, avisamos que hay que
-      // reintentar el envío (hay botón para eso en la lista de abajo),
-      // pero la geocerca ya está en la base y no hay que crearla de nuevo.
-      // FIX 14/07/2026: antes esto solo se mostraba si device_synced
-      // era false. Pero ahora el backend puede devolver
-      // device_synced=true CON un warning igual (ej: VL04 en modo
-      // BOTH, donde la entrada sí se aplicó pero la salida quedó sin
-      // confirmar) — si solo miramos device_synced, ese aviso
-      // importante se perdía en silencio.
-      if (!res.device_synced || res.warning) setFenceNotice(res.message);
+      // [20/07/2026] Ya no hay avisos de "equipo offline" ni warnings:
+      // la geocerca se guarda y el servidor la vigila por GPS, sin
+      // mandarle nada al equipo. La creación siempre es exitosa y
+      // silenciosa (salvo un error real de red/permiso, que cae en el
+      // catch de abajo).
       loadGeofences();
     } catch (err) {
       setFenceError(err.message);
@@ -245,23 +238,8 @@ export default function TabPosicion() {
     }
   }
 
-  async function resyncFence(id) {
-    setResyncingId(id);
-    setFenceNotice('');
-    setFenceError('');
-    try {
-      const res = await fetchAPI(`/geofences/${id}/resync`, { method: 'POST' });
-      setFenceNotice(res.message);
-      loadGeofences();
-    } catch (err) {
-      setFenceError(err.message);
-    } finally {
-      setResyncingId(null);
-    }
-  }
-
   async function removeFence(id) {
-    if (!confirm('¿Borrar esta geocerca? Esto solo la saca del panel — si el equipo la tiene configurada por SMS, hay que desactivarla aparte con FENCE,OFF#.')) return;
+    if (!confirm('¿Borrar esta geocerca? Esto la saca del panel y el servidor deja de vigilarla por GPS.')) return;
     try {
       await fetchAPI(`/geofences/${id}`, { method: 'DELETE' });
       loadGeofences();
@@ -384,7 +362,13 @@ export default function TabPosicion() {
   function segmentTripsForDisplay(rawSeries) {
     const points = rawSeries
       .map(p => ({ lat: toNum(p.lat), lng: toNum(p.lng), speed: toNum(p.speed_kmh), t: p.recorded_at }))
-      .filter(p => p.lat !== null && p.lng !== null);
+      .filter(p => p.lat !== null && p.lng !== null)
+      // [FIX 19/07/2026] Ordenar cronológicamente antes de segmentar.
+      // El backend devuelve DESC (más nuevo primero); sin este sort la
+      // línea puede unir puntos no consecutivos del recorrido. Mismo
+      // fix aplicado en la vista del chofer (DriverView.jsx) para que
+      // las dos se vean idénticas.
+      .sort((a, b) => new Date(a.t) - new Date(b.t));
 
     const segments = [];
     let current = [];
@@ -515,14 +499,13 @@ export default function TabPosicion() {
                   fillColor: f.mode === 'OUT' ? '#F59E0B' : f.mode === 'BOTH' ? '#EC4899' : '#6366F1',
                   fillOpacity: 0.12,
                   weight: 2,
-                  dashArray: f.device_synced ? undefined : '6 6', // punteado = todavía no confirmamos que llegó al equipo
                 }}
               >
                 <Popup>
                   <div className="text-black text-xs space-y-1">
                     <p className="font-bold">{f.name || `Geocerca #${f.id}`}</p>
                     <p>Radio: {f.radius_m}m · Modo: {f.mode === 'OUT' ? 'Avisa si sale' : f.mode === 'BOTH' ? 'Avisa si entra o sale' : 'Avisa si entra'}</p>
-                    <p>{f.device_synced ? '✅ Comando enviado al equipo' : '⚠️ Sin confirmar en el equipo'}</p>
+                    <p className="text-green-700">Vigilada por GPS del servidor</p>
                     <button onClick={() => removeFence(f.id)} className="text-red-600 font-semibold underline mt-1">Borrar</button>
                   </div>
                 </Popup>
@@ -795,19 +778,10 @@ export default function TabPosicion() {
                     <div className="min-w-0">
                       <p className="text-sm text-white font-medium truncate">{f.name || `Geocerca #${f.id}`}</p>
                       <p className="text-[11px] text-slate-500">
-                        {f.radius_m}m · {f.mode === 'BOTH' ? 'avisa al entrar y al salir' : f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · {f.device_synced ? '✅ en el equipo' : '⚠️ sin confirmar'}
+                        {f.radius_m}m · {f.mode === 'BOTH' ? 'avisa al entrar y al salir' : f.mode === 'OUT' ? 'avisa al salir' : 'avisa al entrar'} · <span className="text-[#10B981]">vigilada por GPS</span>
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {!f.device_synced && (
-                        <button
-                          onClick={() => resyncFence(f.id)}
-                          disabled={resyncingId === f.id}
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-[#6366F1]/10 text-[#818CF8] border border-[#6366F1]/30 hover:bg-[#6366F1]/20 disabled:opacity-50"
-                        >
-                          {resyncingId === f.id ? 'Enviando...' : 'Reintentar'}
-                        </button>
-                      )}
                       <button onClick={() => startEditFence(f)} className="text-slate-500 hover:text-[#818CF8]" title="Editar geocerca">
                         <Pencil size={15} />
                       </button>

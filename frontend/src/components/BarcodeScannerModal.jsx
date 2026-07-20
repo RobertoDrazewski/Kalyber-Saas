@@ -36,7 +36,17 @@ const HD_CONSTRAINTS = {
     advanced: [{ focusMode: 'continuous' }],
 };
 
-export default function BarcodeScannerModal({ onScan, onClose }) {
+export default function BarcodeScannerModal({
+  onScan,
+  onClose,
+  // [NUEVO 19/07/2026] Textos configurables para poder reusar este
+  // mismo modal en distintos contextos (ICC del chip M2M, device_uid
+  // del scanner de taller, etc.) sin duplicar el componente. Los
+  // defaults son los textos originales, así el uso en TabEquipos.jsx
+  // no cambia en nada.
+  title = 'Escaneá el código de barras del ICC',
+  errorHint = 'No se pudo acceder a la cámara en alta resolución. Revisá los permisos del navegador, o escribí el ICC a mano.',
+}) {
   const videoRef = useRef(null);
   const controlsRef = useRef(null); // guardamos los controls del scan en curso, no el reader
   const scannedRef = useRef(false); // evita procesar/loopear después del primer resultado
@@ -78,7 +88,7 @@ export default function BarcodeScannerModal({ onScan, onClose }) {
         if (cancelled || scannedRef.current) controls.stop();
       } catch (err) {
         if (!cancelled) {
-          setError('No se pudo acceder a la cámara en alta resolución. Revisá los permisos del navegador, o escribí el ICC a mano.');
+          setError(errorHint);
         }
       }
     }
@@ -98,7 +108,7 @@ export default function BarcodeScannerModal({ onScan, onClose }) {
   return (
     <div className="fixed inset-0 bg-black z-[60] flex flex-col">
       <div className="flex items-center justify-between p-4 bg-[#0B1120]">
-        <span className="text-white font-bold flex items-center gap-2"><CameraIcon size={18} /> Escaneá el código de barras del ICC</span>
+        <span className="text-white font-bold flex items-center gap-2"><CameraIcon size={18} /> {title}</span>
         <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24} /></button>
       </div>
 
