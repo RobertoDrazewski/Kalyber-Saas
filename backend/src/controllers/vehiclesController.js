@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { effectiveOwnerId } = require('../middlewares/requireRole');
+const { decodeVin } = require('../utils/vinDecoder');
 
 const getVehicles = async (req, res) => {
     try {
@@ -198,4 +199,25 @@ const assignDriverAsAdmin = async (req, res) => {
     }
 };
 
-module.exports = { getVehicles, addVehicle, updateVehicle, deleteVehicle, selectVehicleAsDriver, assignDriverAsAdmin };
+// [NUEVO 20/07/2026] Decodifica el VIN de un vehículo (offline) y
+// devuelve marca/país/año detectados. El VIN ya lo captura el VL502 y
+// se guarda en Vehicles.vin. Esto lo interpreta sin depender de
+// ninguna API externa. El modelo exacto NO se decodifica (no hay
+// estándar), lo confirma el usuario en el frontend.
+const decodeVehicleVin = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [[vehicle]] = await pool.query('SELECT id, vin FROM Vehicles WHERE id = ?', [id]);
+        if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
+        if (!vehicle.vin) {
+            return res.json({ has_vin: false, message: 'Este vehículo todavía no reportó su VIN. Aparece cuando el equipo lo lee de la ECU (Plan Avanzado / VL502).' });
+        }
+        const decoded = decodeVin(vehicle.vin);
+        res.json({ has_vin: true, ...decoded });
+    } catch (error) {
+        console.error('[vehicles] Error decodificando VIN:', error.message);
+        res.status(500).json({ error: 'Error decodificando el VIN' });
+    }
+};
+
+module.exports = { getVehicles, addVehicle, updateVehicle, deleteVehicle, selectVehicleAsDriver, assignDriverAsAdmin, decodeVehicleVin };

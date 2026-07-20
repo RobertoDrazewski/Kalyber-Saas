@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchAPI } from '../services/api';
 import { Plus, Trash2, Car, Upload, UserCheck, Pencil, X } from 'lucide-react';
 import ErrorBanner from './ErrorBanner';
+import VehicleRecognition from './VehicleRecognition';
 
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=200&q=60';
 
@@ -77,6 +78,18 @@ function EditVehicleModal({ vehicle, onClose, onSaved }) {
         </div>
         <form onSubmit={handleSave} className="p-6 space-y-4">
           {error && <div className="bg-[#EF4444]/20 text-[#EF4444] p-3 rounded-lg text-sm">{error}</div>}
+
+          {/* [NUEVO 20/07/2026] Reconocimiento por VIN — detecta marca,
+              origen y año del VIN que reporta el equipo, y ofrece
+              autocompletar el formulario. */}
+          <VehicleRecognition
+            vehicleId={vehicle.id}
+            onApply={({ brand, year }) => setForm(f => ({
+              ...f,
+              brand: brand ?? f.brand,
+              year: year ?? f.year,
+            }))}
+          />
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-slate-400 mb-1">Marca</label>

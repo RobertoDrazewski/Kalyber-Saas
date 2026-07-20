@@ -37,8 +37,29 @@ const lastAccByImei = new Map();
 // No es tan preciso como un acelerómetro — es lo mejor que se puede
 // hacer con los datos que el equipo sí manda de forma confiable.
 const lastSpeedByVehicle = new Map();
-const HARSH_BRAKE_KMH_PER_SEC = 2.5; // caída sostenida de >2.5 km/h por segundo, en promedio, entre dos lecturas
-const MAX_GAP_SECONDS = 30; // si el hueco entre lecturas es mayor a esto, no comparamos (podría ser una reconexión, no manejo continuo)
+
+// [RECALIBRADO 20/07/2026] El umbral anterior (2.5 km/h/s) estaba MAL
+// — era tan bajo que frenar normal en un semáforo (que ronda 8-10
+// km/h/s) lo disparaba. Resultado: falsos positivos constantes con
+// manejo tranquilo. Una frenada REALMENTE brusca (un frenazo, no un
+// frenado normal) es del orden de 8+ km/h/s de desaceleración
+// sostenida. Subo el umbral a un valor realista.
+//
+// Además, para reducir falsos positivos que vienen de la naturaleza
+// del GPS (reporta cada 10-20s, y el promedio de un intervalo largo
+// puede engañar), agrego 3 condiciones:
+//   1. Umbral de tasa realista (8 km/h/s).
+//   2. El intervalo entre lecturas debe ser CORTO (<=8s): sobre un
+//      hueco corto, el promedio sí refleja el pico real de la frenada.
+//      Sobre huecos largos no se puede distinguir un frenazo de una
+//      desaceleración progresiva, así que no arriesgamos el evento.
+//   3. La caída de velocidad debe ser significativa en términos
+//      absolutos (>=20 km/h): frenar de 8 a 0 km/h en una esquina no
+//      es una "frenada brusca" aunque la tasa dé alta por el intervalo
+//      corto — recién a partir de una caída grande tiene sentido.
+const HARSH_BRAKE_KMH_PER_SEC = 9;   // desaceleración sostenida para considerarla brusca (frenar normal en semáforo ronda 8)
+const MAX_GAP_SECONDS = 8;           // solo evaluamos sobre intervalos cortos (el promedio refleja el pico)
+const MIN_ABSOLUTE_DROP_KMH = 20;    // la caída total tiene que ser grande, no un frenado de baja velocidad
 
 function detectHarshBrakeByGps(vehicleId, speedKmh, timestampMs) {
     const prev = lastSpeedByVehicle.get(vehicleId);
@@ -46,10 +67,13 @@ function detectHarshBrakeByGps(vehicleId, speedKmh, timestampMs) {
 
     if (!prev) return false;
     const gapSeconds = (timestampMs - prev.t) / 1000;
+    // Intervalo inválido o demasiado largo → no evaluamos (evita marcar
+    // una desaceleración progresiva como si fuera un frenazo).
     if (gapSeconds <= 0 || gapSeconds > MAX_GAP_SECONDS) return false;
 
     const drop = prev.speed - speedKmh;
-    if (drop <= 0) return false;
+    // La caída absoluta tiene que ser grande de por sí.
+    if (drop < MIN_ABSOLUTE_DROP_KMH) return false;
 
     const dropRate = drop / gapSeconds; // km/h por segundo, promedio del intervalo
     return dropRate >= HARSH_BRAKE_KMH_PER_SEC;
