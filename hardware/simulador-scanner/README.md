@@ -74,3 +74,40 @@ x-internal-secret: <token de este equipo>
 4. **Asociar la patente automáticamente.** Hoy se tipea por Serial antes de cada auto. Cuando integres botones/selector en la pantalla OLED, se puede reemplazar por una selección visual — no se armó de antemano para no adivinar un flujo de UI que todavía no definiste.
 5. **GPIO real del WS2812.** Confirmar contra tu placa concreta — ver el placeholder en `led_status.h`.
 6. **Modo Simulador.** Fuera del alcance de esta prueba de campo (según tu plan de validación) — el código lee el switch y no rompe nada si está en esa posición, pero no está desarrollado más allá de eso.
+
+
+---
+
+# [ACTUALIZACIÓN 20/07/2026] Sistema de variantes de hardware
+
+El firmware ahora soporta DOS variantes con un solo código:
+
+| | DESKTOP | TALLER_MINI |
+|---|---|---|
+| Función | Simula y lee | Solo lee |
+| OLED | Sí | No (LEDs de la ESP32) |
+| Alimentación | 220V→12V→5V | Pin 16 del OBD (12V del auto) |
+| Protocolos que lee | OBD-II, J1939, J1708 | OBD-II, J1939, J1708 |
+| Simulador/DPDT/relé | Sí | No |
+
+**Cómo elegir la variante:** ver `../COMO-COMPILAR.md` (método simple:
+copiar el archivo de `variantes/` a `src/config_variant.h`; método por
+entorno: `pio run -e desktop` o `pio run -e taller-mini`).
+
+**Módulos nuevos en `src/diagnostics/`:** `j1939_engine` (DM1 por CAN
+29-bit) y `j1708_engine` (framing RS485). Ambos con la advertencia de
+validar contra tráfico real antes de producción — en particular:
+- J1939 DM1 multi-DTC usa transporte multi-frame TP.BAM que aún NO se
+  maneja (un frame simple trae 1 DTC; con varios activos solo se ve el
+  primero). Pendiente para la fase de sniffer.
+- J1708 PID 194 (los DTCs) todavía no se traduce — solo framing.
+
+**Identidad del equipo:** cada unidad se graba en fábrica por serial
+con `SETUID:KAL-SCAN-XXXX` (el MISMO código del barcode de la caja).
+Verificar con `GETUID`. El endpoint de ingesta usa el header
+`x-internal-secret` con token por equipo (confirmado — ya no es
+"pendiente de confirmar" como decía una versión anterior de este
+README).
+
+**Manual de armado completo** (BOM, alimentación, pinout, checklist):
+`../Kalyber_Manual_Armado_Prototipos.pdf`

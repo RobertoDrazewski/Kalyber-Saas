@@ -2,12 +2,21 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
+#include "config_variant.h"        // [VARIANTES 20/07/2026] DESKTOP o TALLER_MINI — ver /variantes
 #include "status/led_status.h"
-#include "status/display_manager.h"
+#if HAS_OLED
+  #include "status/display_manager.h"
+#endif
 #include "network/backend_client.h"
 #include "obd/can_engine.h"
-#include "mode_arbiter.h"
-#include "sim/sim_engine.h"
+#include "diagnostics/j1939_engine.h"   // [NUEVO] J1939 (CAN 29-bit) — camiones/maquinaria moderna
+#if HAS_RS485
+  #include "diagnostics/j1708_engine.h" // [NUEVO] J1708/J1587 (RS485) — maquinaria pesada legacy
+#endif
+#if HAS_SIMULATOR
+  #include "mode_arbiter.h"
+  #include "sim/sim_engine.h"
+#endif
 
 // ─────────────────────────────────────────────────────────────
 // Kalyber Scanner/Simulador — firmware principal
@@ -28,11 +37,9 @@
 // pin del WS2812 distinto, etc.)
 // ─────────────────────────────────────────────────────────────
 
-// ---- Pines confirmados (ver traspaso de contexto) ----
-#define PIN_MODE_SENSE   21
-#define PIN_RELAY_GATE   15
-// CAN (4,5) e I2C (8,9) se configuran adentro de sus propios módulos
-// (can_engine / display_manager) — no hace falta repetirlos acá.
+// ---- Pines: definidos en config_variant.h según la variante ----
+// (PIN_MODE_SENSE/PIN_RELAY_GATE solo existen si HAS_SIMULATOR;
+//  CAN 4/5 e I2C 8/9 se configuran en sus módulos.)
 
 // ---- Parámetro custom del portal cautivo: el token del equipo ----
 // Esto es lo que el mecánico pega en el portal WiFi la primera vez,
@@ -47,6 +54,7 @@ Preferences prefs; // NVS — para persistir token/imei fuera del ciclo de vida 
 
 String deviceToken;
 String deviceImei;
+String deviceUid;   // KAL-SCAN-XXXX — el mismo código del barcode de la caja
 bool wifiConnected = false;
 LiveStatus liveStatus;
 
@@ -69,8 +77,25 @@ void handleSerialCommands() {
     currentPatente = line.substring(8);
     currentPatente.trim();
     Serial.printf("[SERIAL] Patente activa seteada: %s\n", currentPatente.c_str());
+  } else if (line.startsWith("SETUID:")) {
+    // [NUEVO 20/07/2026] Identidad del equipo = el MISMO código del
+    // barcode de la caja (KAL-SCAN-XXXX). Se graba UNA vez en fábrica
+    // y persiste en NVS. Ver COMO-COMPILAR.md, sección "Grabar el ID".
+    String uid = line.substring(7);
+    uid.trim();
+    if (uid.startsWith("KAL-SCAN-") && uid.length() >= 13) {
+      prefs.begin("kalyber", false);
+      prefs.putString("device_uid", uid);
+      prefs.end();
+      deviceUid = uid;
+      Serial.printf("[SERIAL] ✅ UID guardado: %s (persiste en flash)\n", uid.c_str());
+    } else {
+      Serial.println("[SERIAL] ❌ Formato inválido. Esperado: SETUID:KAL-SCAN-0001");
+    }
+  } else if (line == "GETUID") {
+    Serial.printf("[SERIAL] UID actual: %s\n", deviceUid.length() ? deviceUid.c_str() : "(sin grabar)");
   } else if (line.length() > 0) {
-    Serial.println("[SERIAL] Comando no reconocido. Usá: PATENTE:AB123CD");
+    Serial.println("[SERIAL] Comandos: PATENTE:AB123CD | SETUID:KAL-SCAN-XXXX | GETUID");
   }
 }
 
@@ -78,7 +103,13 @@ void loadCredentialsFromNVS() {
   prefs.begin("kalyber", true); // solo lectura
   deviceToken = prefs.getString("device_token", "");
   deviceImei = prefs.getString("device_imei", "");
+  deviceUid = prefs.getString("device_uid", "");
   prefs.end();
+  if (deviceUid.length() == 0) {
+    Serial.println("[ID] ⚠️ SIN UID GRABADO — grabalo con SETUID:KAL-SCAN-XXXX antes de despachar (control de calidad de fábrica)");
+  } else {
+    Serial.printf("[ID] Equipo: %s\n", deviceUid.c_str());
+  }
 }
 
 void saveCredentialsToNVS() {
@@ -99,14 +130,21 @@ void setup() {
   ledStatus.begin();
   ledStatus.setStatus(SystemStatus::BOOTING);
 
+#if HAS_OLED
   bool hasDisplay = displayManager.begin();
   Serial.printf("[BOOT] Display OLED: %s\n", hasDisplay ? "detectado" : "NO detectado (el equipo sigue andando igual, sin pantalla)");
   displayManager.showBoot();
+#else
+  Serial.println("[BOOT] Variante sin OLED — estado por LEDs + monitor serie");
+#endif
 
+#if HAS_SIMULATOR
   modeArbiter.begin(PIN_MODE_SENSE);
   simEngine.begin(PIN_RELAY_GATE); // arranca apagado siempre, por seguridad
-
   Serial.printf("[BOOT] Modo detectado: %s\n", modeArbiter.current() == OperatingMode::SCANNER ? "SCANNER" : "SIMULATOR");
+#else
+  Serial.println("[BOOT] Variante TALLER_MINI — scanner puro (sin simulador)");
+#endif
 
   // ---- Cargar token/IMEI guardados de una configuración anterior ----
   loadCredentialsFromNVS();
@@ -129,7 +167,9 @@ void setup() {
   wm.setAPCallback([&](WiFiManager* mgr) {
     Serial.printf("[WiFiManager] Modo pareo — conectate a la red '%s'\n", apName.c_str());
     ledStatus.setStatus(SystemStatus::PAIRING);
+#if HAS_OLED
     displayManager.showPairingInstructions(apName);
+#endif
   });
 
   bool connected = wm.autoConnect(apName.c_str());
@@ -160,20 +200,39 @@ void setup() {
   liveStatus.wifiConnected = wifiConnected;
   liveStatus.paired = deviceToken.length() > 0;
 
-  if (modeArbiter.current() == OperatingMode::SCANNER) {
+#if HAS_SIMULATOR
+  const bool bootAsScanner = (modeArbiter.current() == OperatingMode::SCANNER);
+#else
+  const bool bootAsScanner = true; // TALLER_MINI: siempre scanner
+#endif
+
+  if (bootAsScanner) {
     bool canOk = canEngine.begin();
     Serial.printf("[BOOT] Bus CAN: %s\n", canOk ? "inicializado" : "ERROR al inicializar");
+
+    j1939Engine.begin();  // [NUEVO] mismo bus CAN físico, frames de 29 bits
+#if HAS_RS485
+    j1708Engine.begin();  // [NUEVO] bus RS485 aparte (J1708/J1587)
+#endif
+
     if (!canOk) {
       ledStatus.setStatus(SystemStatus::BUS_ERROR);
+#if HAS_OLED
       displayManager.showError("Fallo bus CAN");
+#endif
     } else {
       ledStatus.setStatus(wifiConnected ? SystemStatus::SCANNER_OK : SystemStatus::NO_INTERNET);
     }
-  } else {
+  }
+#if HAS_SIMULATOR
+  else {
     ledStatus.setStatus(SystemStatus::SIMULATOR_ACTIVE);
   }
+#endif
 
+#if HAS_OLED
   displayManager.showLive(liveStatus);
+#endif
   Serial.println("========================================\n");
 }
 
@@ -194,6 +253,7 @@ void loop() {
   wifiConnected = (WiFi.status() == WL_CONNECTED);
   liveStatus.wifiConnected = wifiConnected;
 
+#if HAS_SIMULATOR
   if (modeArbiter.current() == OperatingMode::SIMULATOR) {
     // Modo simulador — fuera del alcance de esta prueba de campo (ver
     // plan de validación: "el modo Simulador queda para después").
@@ -201,6 +261,7 @@ void loop() {
     delay(50);
     return;
   }
+#endif
 
   // ---- Modo SCANNER ----
   if (!wifiConnected) {
@@ -221,7 +282,9 @@ void loop() {
       Serial.printf("[SCANNER] DTC nuevo: %s — %s\n", dtc.code.c_str(), dtc.description.c_str());
 
       ledStatus.pulseDtcFound();
+#if HAS_OLED
       displayManager.showDtcFound(dtc.code, dtc.description);
+#endif
 
       liveStatus.lastDtcCode = dtc.code;
       liveStatus.lastDtcDesc = dtc.description;
@@ -248,10 +311,12 @@ void loop() {
     }
   }
 
+#if HAS_OLED
   if (now - lastDisplayRefresh >= DISPLAY_REFRESH_MS) {
     lastDisplayRefresh = now;
     displayManager.showLive(liveStatus);
   }
+#endif
 
   delay(50);
 }
