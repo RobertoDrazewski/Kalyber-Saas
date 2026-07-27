@@ -80,7 +80,7 @@ function Features() {
             </div>
             <h3 className="text-xl font-bold text-white mb-4">Datos Blindados de Ciberseguridad</h3>
             <p className="text-slate-400 leading-relaxed mb-4">
-              La filtración de rutas y operaciones logísticas es un riesgo real. Nuestra plataforma está sometida a pruebas activas de vulnerabilidades y monitoreo continuo por expertos para garantizar que <strong className="text-white">la información de su flota sea impenetrable.</strong>
+              La filtración de rutas y operaciones logísticas es un riesgo real. Nuestra plataforma está sometida a pruebas activas de vulnerabilidades y monitoreo continuo por expertos para garantizar que <strong className="text-white">la información de su flota esté protegida bajo estándares de seguridad auditados.</strong>
             </p>
           </div>
 
@@ -314,8 +314,8 @@ function Hardware() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
               </div>
-              <h4 className="text-white font-bold text-lg mb-1">Guardia 24/7</h4>
-              <p className="text-xs text-[#F59E0B] font-bold uppercase tracking-wide">Urgencias Críticas</p>
+              <h4 className="text-white font-bold text-lg mb-1">Operación 24/7</h4>
+              <p className="text-xs text-[#F59E0B] font-bold uppercase tracking-wide">Monitoreo Continuo</p>
             </div>
 
             <div className="bg-[#050B14] p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center shadow-md hover:border-[#EF4444]/50 transition-colors">
