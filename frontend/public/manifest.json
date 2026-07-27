@@ -1,11 +1,11 @@
 {
   "name": "Kalyber SaaS",
   "short_name": "Kalyber",
-  "description": "The AI Brain for your Fleet.",
+  "description": "El cerebro de IA para tu flota.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B1120",
-  "theme_color": "#6366F1",
+  "theme_color": "#0B1120",
   "icons": [
     {
       "src": "/android-logo.png",
