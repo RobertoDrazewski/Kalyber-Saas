@@ -187,9 +187,27 @@ const startSession = async (req, res) => {
         if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado en tu taller' });
         if (!device) return res.status(404).json({ error: 'Equipo no encontrado en tu taller' });
 
-        // Si ese equipo tenía otra sesión abierta (el mecánico se
-        // olvidó de cerrarla), la cerramos sola — un ESP32 solo puede
-        // estar "adentro" de un auto a la vez.
+        // [NUEVO 29/07/2026] Si YA hay una sesión en curso para ESTE
+        // MISMO auto + este mismo equipo — por ejemplo, el mecánico
+        // cerró la pestaña o el celular a mitad de un diagnóstico y
+        // volvió a entrar, o un DTC de prueba llegó por serial ANTES
+        // de abrir "En vivo" en la app — la reusamos en vez de
+        // cerrarla. Antes de este fix, acá abajo se cerraba SIEMPRE
+        // cualquier sesión abierta del equipo y se creaba una nueva
+        // vacía: los DTC que ya habían llegado quedaban "atrás", en
+        // una sesión recién finalizada, invisibles en "En vivo" y
+        // solo visibles yendo a Histórico.
+        const [[sameSession]] = await pool.query(
+            `SELECT id FROM DiagnosticSessions WHERE scan_vehicle_id = ? AND scanner_device_id = ? AND status = 'en_curso'`,
+            [scan_vehicle_id, scanner_device_id]
+        );
+        if (sameSession) {
+            return res.json({ session_id: sameSession.id, status: 'en_curso', reconnected: true });
+        }
+
+        // Si ese equipo tenía una sesión abierta para OTRO auto (se
+        // pasó de vehículo sin cerrarla), esa sí se cierra — un equipo
+        // solo puede estar "adentro" de un auto a la vez.
         await pool.query(`UPDATE DiagnosticSessions SET status='finalizada', ended_at=NOW() WHERE scanner_device_id = ? AND status='en_curso'`, [scanner_device_id]);
 
         const [result] = await pool.query(
