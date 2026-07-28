@@ -116,7 +116,7 @@ function Hardware() {
         <div className="grid md:grid-cols-3 gap-8 w-full mb-12 text-left ">
           
           {/* Hardware Básico */}
-          <div className="kb-card rounded-3xl overflow-hidden flex flex-col relative hover:brightness-110 transition-all">
+          <div className="bg-gradient-to-b from-slate-700/20 to-[#1E293B]/40 rounded-3xl border border-slate-700 overflow-hidden flex flex-col relative shadow-xl shadow-black/10 transform hover:-translate-y-2 transition-transform duration-300 h-full">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border border-slate-600">
                 Suscripción Básica
@@ -153,7 +153,7 @@ function Hardware() {
           </div>
 
           {/* Hardware Avanzado */}
-          <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300">
+          <div className="bg-gradient-to-b from-[#6366F1]/10 to-[#1E293B]/40 rounded-3xl border border-[#6366F1]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#6366F1]/10 transform hover:-translate-y-2 transition-transform duration-300 h-full">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-[#6366F1] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6366F1]/40">
                 Suscripción Avanzada
@@ -191,7 +191,7 @@ function Hardware() {
               que no corresponde. Cuando tengas la foto/render final,
               reemplazar este bloque de ícono por <img src="/kalyber-scanner.png" .../>
               con el mismo tamaño que las otras dos tarjetas. */}
-          <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 rounded-3xl border border-[#EC4899]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#EC4899]/10 transform hover:-translate-y-2 transition-transform duration-300">
+          <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 rounded-3xl border border-[#EC4899]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#EC4899]/10 transform hover:-translate-y-2 transition-transform duration-300 h-full">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-[#EC4899] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#EC4899]/40">
                 Plan Taller
@@ -379,9 +379,9 @@ function Pricing() {
 
         <div className="grid md:grid-cols-3 gap-8 w-full ">
           
-          <div className="kb-card p-8 rounded-3xl flex flex-col hover:brightness-110 transition-all">
+          <div className="bg-gradient-to-b from-slate-700/20 to-[#1E293B]/40 p-8 rounded-3xl border border-slate-700 flex flex-col shadow-2xl shadow-black/10 hover:brightness-110 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Plan Básico</h3>
-            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Rastreo satelital, odómetro real y eventos de manejo en vivo — colisión, corte de energía y frenada/aceleración brusca, sin datos de motor.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Rastreo satelital, odómetro real y eventos de manejo en vivo — colisión, corte de energía y frenada/aceleración brusca, sin datos de motor.</p>
             
             <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-slate-800">
               <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
@@ -436,7 +436,7 @@ function Pricing() {
             </div>
             
             <h3 className="text-2xl font-bold text-white mb-2">Plan Avanzado</h3>
-            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Solución integral de diagnóstico predictivo y telemetría para la gestión proactiva de flotas corporativas.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Solución integral de diagnóstico predictivo y telemetría para la gestión proactiva de flotas corporativas.</p>
             
             <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#6366F1]/30">
               <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
@@ -499,7 +499,7 @@ function Pricing() {
               </span>
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
-            <p className="text-slate-400 mb-5 md:mb-8 h-auto md:h-12 text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
 
             <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#EC4899]/30">
               <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
