@@ -34,6 +34,10 @@ const STATEMENTS = [
   // es el único protocolo que sube DTCs al backend (J1939/J1708 son
   // sniffer-only en el firmware todavía).
   ["Completar protocol='OBD-II' en DTCs existentes", `UPDATE DiagnosticDTC SET protocol = 'OBD-II' WHERE protocol IS NULL`],
+
+  // [NUEVO 29/07/2026] Para los relojes de datos en vivo — ver
+  // migration-scanner-clear-dtc.sql para la explicación completa.
+  ["Agregar ScannerDevices.live_view_last_poll_at", `ALTER TABLE ScannerDevices ADD COLUMN live_view_last_poll_at TIMESTAMP NULL`],
 ];
 
 async function main() {
@@ -73,6 +77,11 @@ async function main() {
         `SELECT protocol, COUNT(*) as cantidad FROM DiagnosticDTC GROUP BY protocol`
     );
     console.table(porProtocolo);
+
+    console.log('\n--- Columna nueva en ScannerDevices ---');
+    const [colsDevices] = await connection.query('DESCRIBE ScannerDevices');
+    const liveCol = colsDevices.find(c => c.Field === 'live_view_last_poll_at');
+    console.log(liveCol ? `✅ live_view_last_poll_at presente (${liveCol.Type})` : '❌ live_view_last_poll_at NO está — revisar el error de arriba');
 
     await connection.end();
     console.log('\n🎉 Listo.');

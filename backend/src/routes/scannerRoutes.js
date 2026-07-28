@@ -23,6 +23,7 @@ const {
     requestClearDtc,
     getPendingClearForDevice,
     reportClearResult,
+    ingestLiveData,
 } = require('../controllers/scannerController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
@@ -73,5 +74,6 @@ router.post('/dtc/:id/clear-request', verifyToken, requireRole('super_admin', 't
 router.post('/internal/diagnostics-log', requireDeviceToken, ingestDiagnosticsLog);
 router.get('/internal/clear-requests', requireDeviceToken, getPendingClearForDevice);
 router.post('/internal/clear-result', requireDeviceToken, reportClearResult);
+router.post('/internal/live-data', requireDeviceToken, ingestLiveData);
 
 module.exports = router;

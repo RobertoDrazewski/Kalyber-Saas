@@ -92,6 +92,69 @@ function haceTiempo(iso) {
   return `hace ${h}h`;
 }
 
+// ============================================================
+// [NUEVO 29/07/2026] Relojes de datos en vivo (Mode $01).
+//
+// El backend manda liveData como { "0C": {value, unit, recordedAt}, ... }
+// — la clave es el PID en hex, mismo código que ya conoce el firmware
+// (ver live_data_engine.cpp). Acá se traduce a algo legible, con un
+// máximo razonable por PID para dibujar la barra de progreso.
+//
+// [PENDIENTE — LADO FIRMWARE/EQUIPO] Esto solo muestra algo si el
+// equipo está mandando datos en vivo — eso pasa solo (sin tocar nada)
+// apenas esta pestaña está abierta, gracias al polling que ya hace
+// GET /live cada 4s (el backend le avisa al equipo). Si el equipo
+// tiene un firmware viejo (sin esto todavía), o el auto está apagado,
+// el panel simplemente no tiene nada que mostrar — no es un error.
+// ============================================================
+const PID_META = {
+  '0C': { label: 'RPM', unit: 'rpm', max: 6500 },
+  '05': { label: 'Temp. motor', unit: '°C', max: 120 },
+  '0D': { label: 'Velocidad', unit: 'km/h', max: 200 },
+  '11': { label: 'Acelerador', unit: '%', max: 100 },
+  '04': { label: 'Carga motor', unit: '%', max: 100 },
+};
+
+function LiveGauges({ liveData }) {
+  const pids = Object.keys(PID_META);
+  const tieneAlgo = pids.some(pid => liveData?.[pid]);
+
+  if (!tieneAlgo) {
+    return (
+      <div className="bg-[#1E293B]/40 rounded-xl border border-dashed border-slate-700 px-3 py-3 text-center">
+        <Activity size={16} className="mx-auto mb-1 text-slate-600" />
+        <p className="text-slate-500 text-xs">Esperando datos en vivo (RPM, temperatura, velocidad)...</p>
+        <p className="text-slate-600 text-[10px] mt-0.5">Aparecen solos apenas el equipo los detecte, con el motor en marcha.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {pids.map(pid => {
+        const meta = PID_META[pid];
+        const reading = liveData?.[pid];
+        const tieneValor = reading && reading.value !== null && reading.value !== undefined;
+        const stale = reading?.recordedAt && (Date.now() - new Date(reading.recordedAt).getTime() > 6000);
+        const pct = tieneValor ? Math.max(0, Math.min(100, (reading.value / meta.max) * 100)) : 0;
+
+        return (
+          <div key={pid} className={`bg-[#1E293B]/60 rounded-xl border p-2.5 ${stale ? 'border-slate-800 opacity-50' : 'border-slate-700'}`}>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">{meta.label}</p>
+            <p className="text-white font-bold text-lg leading-tight">
+              {tieneValor ? Math.round(reading.value) : '—'}
+              <span className="text-slate-500 text-xs font-normal ml-1">{meta.unit}</span>
+            </p>
+            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5">
+              <div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -686,7 +749,7 @@ function TabDiagnosticoVivo() {
   // [PRO 28/07/2026] "device" es el estado en vivo del equipo (WiFi,
   // protocolo que está leyendo AHORA, último frame) — ver contrato
   // nuevo del endpoint /live al principio del archivo.
-  const [live, setLive] = useState({ dtcs: [], device: null });
+  const [live, setLive] = useState({ dtcs: [], device: null, liveData: {} });
   const [starting, setStarting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -709,6 +772,7 @@ function TabDiagnosticoVivo() {
         dtcs: Array.isArray(data?.dtcs) ? data.dtcs : [],
         frames: Array.isArray(data?.frames) ? data.frames : [],
         device: data?.device || null,
+        liveData: data?.liveData || {},
       }))
       .catch(() => {})
       .finally(() => { if (manual) setRefreshing(false); });
@@ -742,7 +806,7 @@ function TabDiagnosticoVivo() {
   const handleEnd = async () => {
     await fetchAPI(`/scanner/sessions/${session.session_id}/end`, { method: 'POST' }).catch(() => {});
     setSession(null);
-    setLive({ dtcs: [], device: null });
+    setLive({ dtcs: [], device: null, liveData: {} });
   };
 
   const handleConfirm = async (dtcId, confirmed, correction) => {
@@ -860,6 +924,11 @@ function TabDiagnosticoVivo() {
           </div>
         </div>
       )}
+
+      {/* [NUEVO 29/07/2026] Relojes de datos en vivo — RPM, temperatura,
+          velocidad, acelerador, carga del motor. Se actualizan solos
+          con el mismo polling de 4s que ya trae los DTC. */}
+      <LiveGauges liveData={live.liveData} />
 
       {live.dtcs.length === 0 ? (
         <div className="text-center py-12 text-slate-500">

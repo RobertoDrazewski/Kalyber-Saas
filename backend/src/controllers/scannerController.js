@@ -340,9 +340,30 @@ const getSessionLive = async (req, res) => {
 
         const [frames] = await pool.query(
             `SELECT id, recorded_at, protocol, can_id, raw_frame_hex, decoded_pid, decoded_value, decoded_unit
-             FROM DiagnosticFrames WHERE session_id = ? ORDER BY recorded_at DESC LIMIT 200`,
+             FROM DiagnosticFrames WHERE session_id = ? ORDER BY recorded_at DESC LIMIT 100`,
             [id]
         );
+
+        // [NUEVO 29/07/2026] "Alguien está mirando esto ahora" — el
+        // equipo consulta esta marca de tiempo en su polling normal
+        // (ver getPendingClearForDevice) para decidir si vale la pena
+        // subir datos en vivo o no. No usamos await aparte porque no
+        // hace falta bloquear la respuesta por esto — si falla, no
+        // pasa nada grave (el equipo simplemente no sube datos en vivo
+        // esta vez, no es una operación crítica).
+        pool.query('UPDATE ScannerDevices SET live_view_last_poll_at = NOW() WHERE id = ?', [session.scanner_device_id]).catch(() => {});
+
+        // [NUEVO 29/07/2026] "Últimos valores" por PID — para los
+        // relojes en vivo del frontend. frames ya viene ordenado más
+        // reciente primero, así que el PRIMER frame que aparece para
+        // cada decoded_pid es, por definición, el más nuevo.
+        const liveData = {};
+        for (const f of frames) {
+            if (f.decoded_pid && !(f.decoded_pid in liveData)) {
+                liveData[f.decoded_pid] = { value: f.decoded_value, unit: f.decoded_unit, recordedAt: f.recorded_at };
+            }
+        }
+
         const [dtcs] = await pool.query(
             `SELECT id, detected_at, raw_code_hex, decoded_code, description_guess,
                     protocol, clear_status, clear_detail, cleared_at,
@@ -365,7 +386,7 @@ const getSessionLive = async (req, res) => {
             lastFrameAt: session.last_seen_at,
         };
 
-        res.json({ frames: frames.reverse(), dtcs, device });
+        res.json({ frames: frames.reverse(), dtcs, device, liveData });
     } catch (error) {
         console.error('[Scanner] Error obteniendo datos en vivo de la sesión:', error.message);
         res.status(500).json({ error: 'Error obteniendo datos en vivo de la sesión' });
@@ -388,12 +409,14 @@ const confirmDtc = async (req, res) => {
 };
 
 // ============================================================
-// [NUEVO 28/07/2026] Borrado de fallas (Mode $04) — el contrato que
-// ya está esperando el firmware del Taller Mini (ver backend_client.h
-// del proyecto KalyberScanner-TallerMini). Tres puntas:
-//   1. requestClearDtc      — el mecánico aprieta "Borrar falla" en la app
-//   2. getPendingClearForDevice — el equipo pregunta cada 5s "¿hay algo para mí?"
-//   3. reportClearResult    — el equipo reporta qué pasó
+// [NUEVO 28/07/2026, ampliado 29/07/2026] Borrado de fallas (Mode
+// $04) + datos en vivo (Mode $01) — el contrato que ya está
+// esperando el firmware del Taller Mini (ver backend_client.h del
+// proyecto KalyberScanner-TallerMini). Cuatro puntas:
+//   1. requestClearDtc          — el mecánico aprieta "Borrar falla" en la app
+//   2. getPendingClearForDevice — el equipo pregunta cada 5s "¿hay algo para mí? ¿me están mirando?"
+//   3. reportClearResult        — el equipo reporta qué pasó con el borrado
+//   4. ingestLiveData           — el equipo sube RPM/temp/velocidad mientras alguien mira "En vivo"
 // ============================================================
 
 // ---- 1) El mecánico pide borrar un DTC puntual ----
@@ -439,6 +462,12 @@ const requestClearDtc = async (req, res) => {
 // Auth por device token (igual que /internal/diagnostics-log), NO por
 // JWT de usuario — este endpoint lo llama el ESP32 directo, cada 5s
 // (CLEAR_POLL_MS en el firmware).
+// [ACTUALIZADO 29/07/2026] Ahora también devuelve "live_watch": true
+// si algún mecánico tiene "En vivo" abierto para ESTE equipo en los
+// últimos 15s (ver live_view_last_poll_at, actualizado en
+// getSessionLive). El firmware usa esto para decidir si vale la pena
+// subir datos en vivo (Mode $01) o quedarse callado — no tiene
+// sentido gastar tráfico/ciclos de bus si nadie está mirando.
 const getPendingClearForDevice = async (req, res) => {
     try {
         const [[row]] = await pool.query(
@@ -450,8 +479,16 @@ const getPendingClearForDevice = async (req, res) => {
              ORDER BY dd.clear_requested_at ASC LIMIT 1`,
             [req.scannerDevice.id]
         );
-        if (!row) return res.json({ pending: false });
-        res.json({ pending: true, patente: row.plate_text, dtc_code: row.decoded_code });
+
+        const [[deviceRow]] = await pool.query(
+            `SELECT (live_view_last_poll_at IS NOT NULL AND live_view_last_poll_at > DATE_SUB(NOW(), INTERVAL 15 SECOND)) as live_watch
+             FROM ScannerDevices WHERE id = ?`,
+            [req.scannerDevice.id]
+        );
+        const liveWatch = !!deviceRow?.live_watch;
+
+        if (!row) return res.json({ pending: false, live_watch: liveWatch });
+        res.json({ pending: true, patente: row.plate_text, dtc_code: row.decoded_code, live_watch: liveWatch });
     } catch (error) {
         console.error('[Scanner] Error consultando borrado pendiente:', error.message);
         res.status(500).json({ error: 'Error consultando borrado pendiente' });
@@ -494,6 +531,60 @@ const reportClearResult = async (req, res) => {
     } catch (error) {
         console.error('[Scanner] Error guardando resultado de borrado:', error.message);
         res.status(500).json({ error: 'Error guardando el resultado del borrado' });
+    }
+};
+
+// ---- 4) El equipo sube una tanda de lecturas en vivo (Mode $01) ----
+// [NUEVO 29/07/2026] Auth por device token. Body esperado:
+//   { patente, readings: [{ pid, value, unit, ok }, ...] }
+// Solo se guardan las lecturas con ok=true — un PID sin respuesta no
+// aporta nada a los relojes del frontend. Van a DiagnosticFrames, la
+// tabla que ya estaba armada para esto y hasta ahora vacía.
+const ingestLiveData = async (req, res) => {
+    const { patente, readings } = req.body;
+    if (!patente || !Array.isArray(readings)) {
+        return res.status(400).json({ error: 'Faltan patente y/o readings (array) en el body' });
+    }
+    try {
+        const [[vehicle]] = await pool.query(
+            `SELECT id FROM ScanVehicles WHERE workshop_id = ? AND plate_text = ? ORDER BY created_at DESC LIMIT 1`,
+            [req.scannerDevice.workshop_id, patente]
+        );
+        if (!vehicle) {
+            return res.status(404).json({ error: `No hay ningún auto cargado con la patente "${patente}" en este taller.` });
+        }
+
+        let [[session]] = await pool.query(
+            `SELECT id FROM DiagnosticSessions WHERE scan_vehicle_id = ? AND scanner_device_id = ? AND status = 'en_curso' ORDER BY started_at DESC LIMIT 1`,
+            [vehicle.id, req.scannerDevice.id]
+        );
+        if (!session) {
+            const [result] = await pool.query(
+                `INSERT INTO DiagnosticSessions (scan_vehicle_id, scanner_device_id, mode) VALUES (?, ?, ?)`,
+                [vehicle.id, req.scannerDevice.id, req.scannerDevice.mode]
+            );
+            session = { id: result.insertId };
+        }
+
+        const validos = readings.filter(r => r && r.ok && r.pid);
+        if (validos.length === 0) return res.json({ ok: true, guardadas: 0 });
+
+        // Insert en lote — una tanda por PID cada ~1s desde el
+        // firmware, nada de N round-trips a la DB por cada valor.
+        // raw_frame_hex es NOT NULL en el schema — guardamos ahí el
+        // código de PID (no es la trama CAN cruda todavía, pero
+        // alcanza para debug; el día que el firmware mande la trama
+        // real, este es el único lugar que hay que tocar).
+        const values = validos.map(r => [session.id, 'ISO15765', String(r.pid), String(r.pid), r.value ?? null, r.unit || null]);
+        await pool.query(
+            `INSERT INTO DiagnosticFrames (session_id, protocol, raw_frame_hex, decoded_pid, decoded_value, decoded_unit) VALUES ?`,
+            [values]
+        );
+
+        res.json({ ok: true, guardadas: validos.length });
+    } catch (error) {
+        console.error('[Scanner] Error guardando datos en vivo:', error.message);
+        res.status(500).json({ error: 'Error guardando datos en vivo' });
     }
 };
 
@@ -832,4 +923,5 @@ module.exports = {
     requestClearDtc,
     getPendingClearForDevice,
     reportClearResult,
+    ingestLiveData,
 };
