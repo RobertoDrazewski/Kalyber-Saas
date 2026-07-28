@@ -462,12 +462,17 @@ const requestClearDtc = async (req, res) => {
 // Auth por device token (igual que /internal/diagnostics-log), NO por
 // JWT de usuario — este endpoint lo llama el ESP32 directo, cada 5s
 // (CLEAR_POLL_MS en el firmware).
-// [ACTUALIZADO 29/07/2026] Ahora también devuelve "live_watch": true
-// si algún mecánico tiene "En vivo" abierto para ESTE equipo en los
-// últimos 15s (ver live_view_last_poll_at, actualizado en
-// getSessionLive). El firmware usa esto para decidir si vale la pena
-// subir datos en vivo (Mode $01) o quedarse callado — no tiene
-// sentido gastar tráfico/ciclos de bus si nadie está mirando.
+// [ACTUALIZADO 29/07/2026] Ahora también devuelve:
+//   - "live_watch": true si algún mecánico tiene "En vivo" abierto
+//     para ESTE equipo en los últimos 15s (live_view_last_poll_at,
+//     actualizado en getSessionLive). El firmware usa esto para
+//     decidir si vale la pena subir datos en vivo (Mode $01).
+//   - "live_patente": la patente del auto de la sesión activa, SOLO
+//     si live_watch=true. El equipo no tiene forma propia de saber
+//     qué auto eligió el mecánico en la web — antes necesitaba que
+//     alguien tipeara PATENTE:XXX por Monitor Serie, lo cual nunca
+//     pasa en el flujo real de "abrir En vivo desde el celular". Con
+//     esto, el equipo aprende la patente solo, del mismo poll.
 const getPendingClearForDevice = async (req, res) => {
     try {
         const [[row]] = await pool.query(
@@ -487,8 +492,21 @@ const getPendingClearForDevice = async (req, res) => {
         );
         const liveWatch = !!deviceRow?.live_watch;
 
-        if (!row) return res.json({ pending: false, live_watch: liveWatch });
-        res.json({ pending: true, patente: row.plate_text, dtc_code: row.decoded_code, live_watch: liveWatch });
+        let livePatente = null;
+        if (liveWatch) {
+            const [[activeSession]] = await pool.query(
+                `SELECT sv.plate_text
+                 FROM DiagnosticSessions ds
+                 JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+                 WHERE ds.scanner_device_id = ? AND ds.status = 'en_curso'
+                 ORDER BY ds.started_at DESC LIMIT 1`,
+                [req.scannerDevice.id]
+            );
+            livePatente = activeSession?.plate_text || null;
+        }
+
+        if (!row) return res.json({ pending: false, live_watch: liveWatch, live_patente: livePatente });
+        res.json({ pending: true, patente: row.plate_text, dtc_code: row.decoded_code, live_watch: liveWatch, live_patente: livePatente });
     } catch (error) {
         console.error('[Scanner] Error consultando borrado pendiente:', error.message);
         res.status(500).json({ error: 'Error consultando borrado pendiente' });
