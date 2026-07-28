@@ -20,6 +20,9 @@ const {
     getWorkshopStats,
     provisionScannerDevice,
     listProvisionedDevices,
+    requestClearDtc,
+    getPendingClearForDevice,
+    reportClearResult,
 } = require('../controllers/scannerController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/requireRole');
@@ -60,8 +63,15 @@ router.post('/sessions/:id/end', verifyToken, requireRole('super_admin', 'taller
 router.get('/sessions/:id/live', verifyToken, requireRole('super_admin', 'taller'), getSessionLive);
 router.patch('/dtc/:id/confirm', verifyToken, requireRole('super_admin', 'taller'), confirmDtc);
 
-// Único endpoint que llama el ESP32 directamente — auth por device
-// token, nunca por JWT de usuario.
+// [NUEVO 28/07/2026] El mecánico pide borrar una falla puntual desde
+// la vista de taller (botón "Borrar falla" en DtcCard).
+router.post('/dtc/:id/clear-request', verifyToken, requireRole('super_admin', 'taller'), requestClearDtc);
+
+// Endpoints que llama el ESP32 directamente — auth por device token,
+// nunca por JWT de usuario. El firmware ya los tiene cableados (ver
+// backend_client.h / .cpp del proyecto KalyberScanner-TallerMini).
 router.post('/internal/diagnostics-log', requireDeviceToken, ingestDiagnosticsLog);
+router.get('/internal/clear-requests', requireDeviceToken, getPendingClearForDevice);
+router.post('/internal/clear-result', requireDeviceToken, reportClearResult);
 
 module.exports = router;

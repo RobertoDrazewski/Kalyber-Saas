@@ -150,7 +150,10 @@ const getScanVehicleHistory = async (req, res) => {
         let dtcsBySession = {};
         if (sessionIds.length > 0) {
             const [dtcs] = await pool.query(
-                `SELECT id, session_id, detected_at, decoded_code, description_guess, source, confirmed_by_mechanic, mechanic_correction
+                `SELECT id, session_id, detected_at, decoded_code, description_guess, source,
+                        protocol, clear_status, clear_detail, cleared_at,
+                        (decoded_code IS NOT NULL AND CHAR_LENGTH(decoded_code) >= 2 AND SUBSTRING(decoded_code, 2, 1) = '0') as is_generic,
+                        confirmed_by_mechanic, mechanic_correction
                  FROM DiagnosticDTC WHERE session_id IN (?) ORDER BY detected_at DESC`,
                 [sessionIds]
             );
@@ -266,9 +269,14 @@ const ingestDiagnosticsLog = async (req, res) => {
             session = { id: result.insertId };
         }
 
+        // [NUEVO 28/07/2026] protocol = 'OBD-II' fijo: hoy es el ÚNICO
+        // protocolo que llega hasta este endpoint (j1939Engine y
+        // j1708Engine todavía son sniffer-only en el firmware, no suben
+        // DTC). El día que eso cambie, este INSERT es el único lugar que
+        // hay que tocar para leer un protocol real del body.
         const [dtcResult] = await pool.query(
-            `INSERT INTO DiagnosticDTC (session_id, decoded_code, description_guess, source) VALUES (?, ?, ?, ?)`,
-            [session.id, dtc_code, dtc_description_es || null, ['local', 'remote', 'unknown'].includes(dtc_source) ? dtc_source : 'unknown']
+            `INSERT INTO DiagnosticDTC (session_id, decoded_code, description_guess, source, protocol) VALUES (?, ?, ?, ?, ?)`,
+            [session.id, dtc_code, dtc_description_es || null, ['local', 'remote', 'unknown'].includes(dtc_source) ? dtc_source : 'unknown', 'OBD-II']
         );
 
         res.status(201).json({ session_id: session.id, dtc_id: dtcResult.insertId });
@@ -279,21 +287,69 @@ const ingestDiagnosticsLog = async (req, res) => {
 };
 
 // ---- Vista en vivo para el mecánico — últimas tramas + DTCs de una sesión ----
+// [ACTUALIZADO 28/07/2026]
+//   1. Agrega "device": estado del equipo (online/wifi/último visto)
+//      para el panel en vivo de ScannerMechanicView.jsx — honesto con
+//      lo que el backend realmente sabe, no inventa "leyendo X ahora"
+//      salvo que haya un DTC de verdad detectado hace <15s.
+//   2. Cada DTC ahora trae protocol/is_generic/clear_status/clear_detail
+//      — lo que necesita el DtcCard "pro" (badge de protocolo, badge
+//      de fabricante, y el estado del botón "Borrar falla").
+//   3. [FIX de seguridad, de paso] Antes esta consulta no verificaba
+//      que la sesión pedida fuera de un auto del taller de quien
+//      pregunta — cualquier 'taller' autenticado podía ver el /live
+//      de OTRO taller sabiendo el session_id. Ahora se valida igual
+//      que en getScanVehicleHistory. super_admin (sin taller propio)
+//      sigue viendo cualquiera, como en el resto del panel admin.
 const getSessionLive = async (req, res) => {
     const { id } = req.params;
     try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+
+        const [[session]] = await pool.query(
+            `SELECT ds.id, ds.scanner_device_id, sv.workshop_id, sd.last_seen_at,
+                    (sd.last_seen_at IS NOT NULL AND sd.last_seen_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as online
+             FROM DiagnosticSessions ds
+             JOIN ScannerDevices sd ON ds.scanner_device_id = sd.id
+             JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+             WHERE ds.id = ?`,
+            [id]
+        );
+        if (!session) return res.status(404).json({ error: 'Sesión no encontrada' });
+        if (workshopId && session.workshop_id !== workshopId) {
+            return res.status(404).json({ error: 'Sesión no encontrada en tu taller' });
+        }
+
         const [frames] = await pool.query(
             `SELECT id, recorded_at, protocol, can_id, raw_frame_hex, decoded_pid, decoded_value, decoded_unit
              FROM DiagnosticFrames WHERE session_id = ? ORDER BY recorded_at DESC LIMIT 200`,
             [id]
         );
         const [dtcs] = await pool.query(
-            `SELECT id, detected_at, raw_code_hex, decoded_code, description_guess, confirmed_by_mechanic, mechanic_correction
+            `SELECT id, detected_at, raw_code_hex, decoded_code, description_guess,
+                    protocol, clear_status, clear_detail, cleared_at,
+                    (decoded_code IS NOT NULL AND CHAR_LENGTH(decoded_code) >= 2 AND SUBSTRING(decoded_code, 2, 1) = '0') as is_generic,
+                    confirmed_by_mechanic, mechanic_correction
              FROM DiagnosticDTC WHERE session_id = ? ORDER BY detected_at DESC`,
             [id]
         );
-        res.json({ frames: frames.reverse(), dtcs });
+
+        const [[recentDtc]] = await pool.query(
+            `SELECT protocol, detected_at FROM DiagnosticDTC WHERE session_id = ? ORDER BY detected_at DESC LIMIT 1`,
+            [id]
+        );
+        const recentEnough = recentDtc && (Date.now() - new Date(recentDtc.detected_at).getTime() < 15000);
+
+        const device = {
+            online: !!session.online,
+            wifiConnected: !!session.online, // el equipo solo manda heartbeat/DTC con WiFi arriba — mismo dato, no hay una señal separada
+            activeProtocol: recentEnough ? recentDtc.protocol : null,
+            lastFrameAt: session.last_seen_at,
+        };
+
+        res.json({ frames: frames.reverse(), dtcs, device });
     } catch (error) {
+        console.error('[Scanner] Error obteniendo datos en vivo de la sesión:', error.message);
         res.status(500).json({ error: 'Error obteniendo datos en vivo de la sesión' });
     }
 };
@@ -310,6 +366,116 @@ const confirmDtc = async (req, res) => {
         res.json({ message: 'Diagnóstico actualizado' });
     } catch (error) {
         res.status(500).json({ error: 'Error actualizando el DTC' });
+    }
+};
+
+// ============================================================
+// [NUEVO 28/07/2026] Borrado de fallas (Mode $04) — el contrato que
+// ya está esperando el firmware del Taller Mini (ver backend_client.h
+// del proyecto KalyberScanner-TallerMini). Tres puntas:
+//   1. requestClearDtc      — el mecánico aprieta "Borrar falla" en la app
+//   2. getPendingClearForDevice — el equipo pregunta cada 5s "¿hay algo para mí?"
+//   3. reportClearResult    — el equipo reporta qué pasó
+// ============================================================
+
+// ---- 1) El mecánico pide borrar un DTC puntual ----
+const requestClearDtc = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const workshopId = await resolveWorkshopId(req.user.id);
+        if (!workshopId) return res.status(400).json({ error: 'Taller no encontrado para este usuario' });
+
+        // El DTC tiene que ser de un auto de ESTE taller — mismo
+        // aislamiento que el resto del controller. De paso, traemos todo
+        // lo necesario para decidir si el pedido tiene sentido: con qué
+        // patente identificar el auto en el equipo, y si ese equipo está
+        // conectado ahora mismo (si no, el pedido quedaría pendiente para
+        // siempre sin que el mecánico se entere de por qué).
+        const [[row]] = await pool.query(
+            `SELECT dd.id, dd.clear_status, sv.plate_text,
+                    (sd.last_seen_at IS NOT NULL AND sd.last_seen_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as device_online
+             FROM DiagnosticDTC dd
+             JOIN DiagnosticSessions ds ON dd.session_id = ds.id
+             JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+             JOIN ScannerDevices sd ON ds.scanner_device_id = sd.id
+             WHERE dd.id = ? AND sv.workshop_id = ?`,
+            [id, workshopId]
+        );
+        if (!row) return res.status(404).json({ error: 'DTC no encontrado en tu taller' });
+        if (!row.plate_text) return res.status(409).json({ error: 'Este auto no tiene patente cargada — el equipo no puede identificarlo para borrar' });
+        if (!row.device_online) return res.status(409).json({ error: 'El equipo no está conectado ahora mismo — no se puede enviar el borrado' });
+        if (row.clear_status === 'pending') return res.status(409).json({ error: 'Ya hay un borrado en curso para esta falla' });
+
+        await pool.query(
+            `UPDATE DiagnosticDTC SET clear_status = 'pending', clear_requested_at = NOW(), clear_detail = NULL WHERE id = ?`,
+            [id]
+        );
+        res.json({ ok: true, message: 'Pedido enviado — el equipo lo va a tomar en los próximos segundos.' });
+    } catch (error) {
+        console.error('[Scanner] Error pidiendo borrado de DTC:', error.message);
+        res.status(500).json({ error: 'Error pidiendo el borrado' });
+    }
+};
+
+// ---- 2) El equipo pregunta si hay un borrado pendiente para él ----
+// Auth por device token (igual que /internal/diagnostics-log), NO por
+// JWT de usuario — este endpoint lo llama el ESP32 directo, cada 5s
+// (CLEAR_POLL_MS en el firmware).
+const getPendingClearForDevice = async (req, res) => {
+    try {
+        const [[row]] = await pool.query(
+            `SELECT dd.decoded_code, sv.plate_text
+             FROM DiagnosticDTC dd
+             JOIN DiagnosticSessions ds ON dd.session_id = ds.id
+             JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+             WHERE ds.scanner_device_id = ? AND dd.clear_status = 'pending'
+             ORDER BY dd.clear_requested_at ASC LIMIT 1`,
+            [req.scannerDevice.id]
+        );
+        if (!row) return res.json({ pending: false });
+        res.json({ pending: true, patente: row.plate_text, dtc_code: row.decoded_code });
+    } catch (error) {
+        console.error('[Scanner] Error consultando borrado pendiente:', error.message);
+        res.status(500).json({ error: 'Error consultando borrado pendiente' });
+    }
+};
+
+// ---- 3) El equipo reporta el resultado del Mode $04 ----
+// Body esperado (ver BackendClient::reportClearResult en el firmware):
+//   { patente, dtc_code, success, nrc_code, detail }
+const reportClearResult = async (req, res) => {
+    const { patente, dtc_code, success, detail } = req.body;
+    if (!patente || !dtc_code) {
+        return res.status(400).json({ error: 'Faltan patente y/o dtc_code en el body' });
+    }
+    try {
+        const [[row]] = await pool.query(
+            `SELECT dd.id
+             FROM DiagnosticDTC dd
+             JOIN DiagnosticSessions ds ON dd.session_id = ds.id
+             JOIN ScanVehicles sv ON ds.scan_vehicle_id = sv.id
+             WHERE ds.scanner_device_id = ? AND sv.plate_text = ? AND dd.decoded_code = ? AND dd.clear_status = 'pending'
+             ORDER BY dd.clear_requested_at ASC LIMIT 1`,
+            [req.scannerDevice.id, patente, dtc_code]
+        );
+        if (!row) {
+            // No hay match contra un pedido pendiente — pudo ser un
+            // reporte duplicado (el equipo reintentando) o el mecánico
+            // canceló entre medio. Contestamos 200 igual para que el
+            // equipo no quede reintentando en loop; queda logueado por
+            // si hace falta revisar un caso puntual.
+            console.warn(`[Scanner] clear-result sin pedido pendiente que matchee — device=${req.scannerDevice.device_uid} patente=${patente} dtc=${dtc_code}`);
+            return res.json({ ok: true, matched: false });
+        }
+
+        await pool.query(
+            `UPDATE DiagnosticDTC SET clear_status = ?, clear_detail = ?, cleared_at = ? WHERE id = ?`,
+            [success ? 'success' : 'failed', detail || null, success ? new Date() : null, row.id]
+        );
+        res.json({ ok: true, matched: true });
+    } catch (error) {
+        console.error('[Scanner] Error guardando resultado de borrado:', error.message);
+        res.status(500).json({ error: 'Error guardando el resultado del borrado' });
     }
 };
 
@@ -645,4 +811,7 @@ module.exports = {
     getWorkshopStats,
     provisionScannerDevice,
     listProvisionedDevices,
+    requestClearDtc,
+    getPendingClearForDevice,
+    reportClearResult,
 };
