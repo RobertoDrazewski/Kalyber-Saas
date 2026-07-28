@@ -741,10 +741,8 @@ function TabParear() {
 // ver DTC en vivo → confirmar/corregir cada uno
 // ============================================================
 function TabDiagnosticoVivo() {
-  const [vehicles, setVehicles] = useState([]);
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState('');
-  const [selectedVehicle, setSelectedVehicle] = useState('');
   const [session, setSession] = useState(null);
   // [PRO 28/07/2026] "device" es el estado en vivo del equipo (WiFi,
   // protocolo que está leyendo AHORA, último frame) — ver contrato
@@ -755,14 +753,46 @@ function TabDiagnosticoVivo() {
   const [error, setError] = useState('');
   const pollRef = useRef(null);
 
+  // [NUEVO 29/07/2026] Buscador de patente en vez de un <select> con
+  // TODOS los autos del taller — no escala bien pasados los primeros
+  // meses. Mismo endpoint que ya usa "Autos" al cargar un auto nuevo
+  // (lookupScanVehicleByPlate), reusado acá para el caso "el auto
+  // vuelve": buscás la patente, si existe arrancás directo con su
+  // historial de fondo; si no existe, alta rápida sin salir de la
+  // pantalla.
+  const [plateQuery, setPlateQuery] = useState('');
+  const [lookupResult, setLookupResult] = useState(null); // null = nada buscado todavía | 'not_found' | { id, brand, model, ... }
+  const [checkingPlate, setCheckingPlate] = useState(false);
+  const lookupTimer = useRef(null);
+
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickForm, setQuickForm] = useState({ brand: '', model: '', customer_label: '' });
+  const [creating, setCreating] = useState(false);
+
   useEffect(() => {
-    fetchAPI('/scanner/vehicles').then(rows => setVehicles(Array.isArray(rows) ? rows : [])).catch(() => {});
     fetchAPI('/scanner/devices').then(rows => {
       const list = Array.isArray(rows) ? rows : [];
       setDevices(list);
       if (list.length === 1) setSelectedDevice(list[0].id);
     }).catch(() => {});
   }, []);
+
+  // Búsqueda con debounce — mismo criterio que NuevoAutoForm.
+  useEffect(() => {
+    clearTimeout(lookupTimer.current);
+    setLookupResult(null);
+    setShowQuickCreate(false);
+    setError('');
+    if (plateQuery.trim().length < 3) return;
+    setCheckingPlate(true);
+    lookupTimer.current = setTimeout(() => {
+      fetchAPI(`/scanner/vehicles/lookup?plate=${encodeURIComponent(plateQuery.trim())}`)
+        .then(res => setLookupResult(res || 'not_found'))
+        .catch(() => setLookupResult('not_found'))
+        .finally(() => setCheckingPlate(false));
+    }, 500);
+    return () => clearTimeout(lookupTimer.current);
+  }, [plateQuery]);
 
   const loadLive = (manual = false) => {
     if (!session) return Promise.resolve();
@@ -786,14 +816,14 @@ function TabDiagnosticoVivo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  const handleStart = async () => {
-    if (!selectedVehicle || !selectedDevice) return;
+  const handleStart = async (vehicleId) => {
+    if (!vehicleId || !selectedDevice) return;
     setStarting(true);
     setError('');
     try {
       const res = await fetchAPI('/scanner/sessions', {
         method: 'POST',
-        body: JSON.stringify({ scan_vehicle_id: selectedVehicle, scanner_device_id: selectedDevice }),
+        body: JSON.stringify({ scan_vehicle_id: vehicleId, scanner_device_id: selectedDevice }),
       });
       setSession(res);
     } catch (err) {
@@ -803,10 +833,35 @@ function TabDiagnosticoVivo() {
     }
   };
 
+  // [NUEVO 29/07/2026] Alta rápida — la patente no existía, el
+  // mecánico completa lo mínimo (marca/modelo/cliente, opcionales) y
+  // arranca la sesión en el mismo paso, sin ir y volver a "Autos".
+  // Foto de patente y VIN quedan afuera a propósito acá — se pueden
+  // completar después desde "Autos" si hace falta, no vale la pena
+  // trabarlo con la cámara en este flujo rápido.
+  const handleQuickCreate = async () => {
+    if (!plateQuery.trim()) return;
+    setCreating(true);
+    setError('');
+    try {
+      const res = await fetchAPI('/scanner/vehicles', {
+        method: 'POST',
+        body: JSON.stringify({ plate_text: plateQuery.trim().toUpperCase(), ...quickForm }),
+      });
+      await handleStart(res.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleEnd = async () => {
     await fetchAPI(`/scanner/sessions/${session.session_id}/end`, { method: 'POST' }).catch(() => {});
     setSession(null);
     setLive({ dtcs: [], device: null, liveData: {} });
+    setPlateQuery('');
+    setLookupResult(null);
   };
 
   const handleConfirm = async (dtcId, confirmed, correction) => {
@@ -839,20 +894,80 @@ function TabDiagnosticoVivo() {
   };
 
   if (!session) {
+    const encontrado = lookupResult && lookupResult !== 'not_found';
     return (
       <div className="space-y-4">
         <h2 className="text-white font-bold">Empezar diagnóstico</h2>
-        <p className="text-slate-500 text-sm">Elegí el auto — el equipo tiene que estar conectado y apuntando a él.</p>
-        <select
-          value={selectedVehicle}
-          onChange={e => setSelectedVehicle(e.target.value)}
-          className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm"
-        >
-          <option value="">Seleccioná un auto...</option>
-          {vehicles.map(v => (
-            <option key={v.id} value={v.id}>{v.plate_text} — {v.brand} {v.model}</option>
-          ))}
-        </select>
+        <p className="text-slate-500 text-sm">Escribí la patente del auto — el equipo tiene que estar conectado y apuntando a él.</p>
+
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">Patente</label>
+          <input
+            value={plateQuery}
+            onChange={e => setPlateQuery(e.target.value.toUpperCase())}
+            placeholder="AB123CD"
+            className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm font-mono"
+            autoFocus
+          />
+        </div>
+
+        {checkingPlate && (
+          <p className="text-[11px] text-slate-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Buscando...</p>
+        )}
+
+        {encontrado && (
+          <div className="p-3 rounded-lg bg-[#10B981]/10 border border-[#10B981]/30">
+            <p className="text-[#10B981] text-xs font-semibold flex items-center gap-1.5"><CheckCircle2 size={13} /> Auto encontrado — vuelve a tu taller</p>
+            <p className="text-white text-sm font-bold mt-1">{lookupResult.brand || 'Marca ?'} {lookupResult.model || ''} {lookupResult.model_year ? `(${lookupResult.model_year})` : ''}</p>
+            {lookupResult.last_session ? (
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Última vez: {new Date(lookupResult.last_session.started_at).toLocaleDateString('es-AR')} · {lookupResult.last_session.dtc_count} DTC(s) detectado(s)
+              </p>
+            ) : (
+              <p className="text-slate-500 text-[11px] mt-0.5">Sin sesiones previas registradas.</p>
+            )}
+          </div>
+        )}
+
+        {lookupResult === 'not_found' && !showQuickCreate && (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <p className="text-amber-400 text-xs font-semibold flex items-center gap-1.5"><AlertTriangle size={13} /> No encontramos ningún auto con esa patente</p>
+            <button
+              type="button"
+              onClick={() => setShowQuickCreate(true)}
+              className="mt-2 w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold"
+            >
+              Cargar este auto ahora
+            </button>
+          </div>
+        )}
+
+        {showQuickCreate && (
+          <div className="space-y-2.5 p-3 rounded-lg bg-[#1E293B]/60 border border-slate-700">
+            <p className="text-white text-xs font-semibold">Alta rápida — patente {plateQuery}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={quickForm.brand}
+                onChange={e => setQuickForm({ ...quickForm, brand: e.target.value })}
+                placeholder="Marca"
+                className="bg-[#0B1120] border border-slate-700 rounded-lg px-2.5 py-2 text-white text-xs"
+              />
+              <input
+                value={quickForm.model}
+                onChange={e => setQuickForm({ ...quickForm, model: e.target.value })}
+                placeholder="Modelo"
+                className="bg-[#0B1120] border border-slate-700 rounded-lg px-2.5 py-2 text-white text-xs"
+              />
+            </div>
+            <input
+              value={quickForm.customer_label}
+              onChange={e => setQuickForm({ ...quickForm, customer_label: e.target.value })}
+              placeholder="Cliente (opcional)"
+              className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-2.5 py-2 text-white text-xs"
+            />
+            <p className="text-[10px] text-slate-500">Foto de patente, VIN y año se pueden completar después desde "Autos".</p>
+          </div>
+        )}
 
         {devices.length > 1 && (
           <select
@@ -871,14 +986,24 @@ function TabDiagnosticoVivo() {
         )}
 
         {error && <p className="text-red-400 text-sm">{error}</p>}
-        <button
-          onClick={handleStart}
-          disabled={!selectedVehicle || !selectedDevice || starting}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm disabled:opacity-50"
-        >
-          <Play size={16} /> {starting ? 'Iniciando...' : 'Iniciar diagnóstico'}
-        </button>
-        <p className="text-[11px] text-slate-600 text-center">Si no ves tu auto acá, primero cargalo en la pestaña "Autos".</p>
+
+        {showQuickCreate ? (
+          <button
+            onClick={handleQuickCreate}
+            disabled={!selectedDevice || creating}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm disabled:opacity-50"
+          >
+            <Play size={16} /> {creating ? 'Creando...' : 'Crear y empezar diagnóstico'}
+          </button>
+        ) : (
+          <button
+            onClick={() => handleStart(lookupResult?.id)}
+            disabled={!encontrado || !selectedDevice || starting}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm disabled:opacity-50"
+          >
+            <Play size={16} /> {starting ? 'Iniciando...' : 'Iniciar diagnóstico'}
+          </button>
+        )}
       </div>
     );
   }
