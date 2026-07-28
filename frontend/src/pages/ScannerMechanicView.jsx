@@ -381,6 +381,23 @@ function NuevoAutoForm({ onDone, onCancel }) {
 // PESTAÑA 2 — Parear equipo: wizard de 3 pasos para el WiFi del ESP32
 // ============================================================
 function TabParear() {
+  // [NUEVO 28/07/2026] Antes esta pestaña arrancaba SIEMPRE directo en
+  // el wizard de pareo (paso 1) — no había forma de ver "¿mi scanner
+  // ya pareado sigue online?" sin arrancar a parear uno nuevo. El
+  // estado del equipo solo aparecía en "En vivo", y encima solo si
+  // había MÁS DE UN equipo (el <select> ahí abajo tiene ese if). Con
+  // un solo scanner — el caso más común — no se veía en ningún lado.
+  //
+  // Ahora: si ya hay equipos pareados, esta pestaña arranca mostrando
+  // ESO (lista con 🟢/⚪ y "hace Xm"), y el wizard queda atrás de un
+  // botón explícito "+ Parear otro equipo". Si es la primera vez (0
+  // equipos), va directo al wizard como antes — no hay nada que listar.
+  const [mode, setMode] = useState('loading'); // 'loading' | 'list' | 'wizard'
+  const [devices, setDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const pollDevicesRef = useRef(null);
+
   const [step, setStep] = useState(1);
   const [deviceUid, setDeviceUid] = useState('');
   const [deviceId, setDeviceId] = useState(null);
@@ -393,6 +410,51 @@ function TabParear() {
   const [paired, setPaired] = useState(false);
   const [scanning, setScanning] = useState(false); // muestra el modal de cámara para escanear el barcode
   const pollRef = useRef(null);
+
+  const loadDevices = (manual = false) => {
+    if (manual) setRefreshing(true);
+    return fetchAPI('/scanner/devices')
+      .then(rows => setDevices(Array.isArray(rows) ? rows : []))
+      .catch(() => {})
+      .finally(() => {
+        setLoadingDevices(false);
+        if (manual) setRefreshing(false);
+      });
+  };
+
+  // Primera carga: decide si arrancar en la lista o directo en el wizard.
+  useEffect(() => {
+    loadDevices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (mode === 'loading' && !loadingDevices) {
+      setMode(devices.length > 0 ? 'list' : 'wizard');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingDevices]);
+
+  // Mientras se está mirando la lista, se refresca sola cada 8s — así
+  // el mecánico ve pasar el equipo de ⚪ a 🟢 sin tener que salir y
+  // volver a entrar a la pestaña.
+  useEffect(() => {
+    if (mode !== 'list') return;
+    pollDevicesRef.current = setInterval(() => loadDevices(), 8000);
+    return () => clearInterval(pollDevicesRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const startWizard = () => {
+    setStep(1);
+    setDeviceUid(''); setLabel(''); setToken(''); setDeviceId(null); setPaired(false); setError('');
+    setMode('wizard');
+  };
+
+  const backToList = () => {
+    setMode('list');
+    loadDevices();
+  };
 
   const handleClaim = async (e) => {
     e.preventDefault();
@@ -421,7 +483,7 @@ function TabParear() {
   // 4s si ESTE device_id puntual ya mandó un "estoy vivo" reciente
   // (last_seen_at actualizado, ver requireDeviceToken en el backend).
   useEffect(() => {
-    if (step !== 3 || !deviceId) return;
+    if (mode !== 'wizard' || step !== 3 || !deviceId) return;
     setChecking(true);
     const check = () => {
       fetchAPI('/scanner/devices').then(rows => {
@@ -432,10 +494,66 @@ function TabParear() {
     check();
     pollRef.current = setInterval(check, 4000);
     return () => clearInterval(pollRef.current);
-  }, [step, deviceId]);
+  }, [mode, step, deviceId]);
 
+  // ---- Vista LISTA — "Tus equipos", el estado que faltaba ----
+  if (mode === 'loading') {
+    return <p className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Cargando...</p>;
+  }
+
+  if (mode === 'list') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-bold">Tus equipos</h2>
+          <button onClick={() => loadDevices(true)} title="Actualizar ahora" className="text-slate-400">
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {devices.map(d => (
+            <div key={d.id} className="bg-[#1E293B]/60 rounded-xl border border-slate-700 p-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-white font-bold text-sm truncate">{d.label || d.device_uid}</p>
+                <p className="text-slate-500 text-xs font-mono truncate">{d.device_uid}</p>
+              </div>
+              <div className="text-right shrink-0">
+                {d.online ? (
+                  <span className="inline-flex items-center gap-1.5 text-[#10B981] text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" /> En línea
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-slate-500 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-slate-600" /> Sin conexión
+                  </span>
+                )}
+                {d.last_seen_at && (
+                  <p className="text-[10px] text-slate-600 mt-0.5">Visto {haceTiempo(d.last_seen_at)}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={startWizard}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm active:scale-95 transition-transform"
+        >
+          <Plus size={18} /> Parear otro equipo
+        </button>
+      </div>
+    );
+  }
+
+  // ---- Vista WIZARD — pareo de un equipo nuevo (o el primero) ----
   return (
     <div className="space-y-5">
+      {devices.length > 0 && (
+        <button onClick={backToList} className="text-slate-400 text-xs font-semibold flex items-center gap-1">
+          <ChevronRight size={13} className="rotate-180" /> Volver a tus equipos
+        </button>
+      )}
       <div className="flex items-center gap-2 text-xs text-slate-500">
         {[1, 2, 3].map(n => (
           <div key={n} className={`flex-1 h-1.5 rounded-full ${step >= n ? 'bg-[#10B981]' : 'bg-slate-800'}`} />
@@ -523,6 +641,9 @@ function TabParear() {
               <CheckCircle2 size={40} className="mx-auto text-[#10B981]" />
               <h2 className="text-white font-bold">¡Conectado!</h2>
               <p className="text-slate-400 text-sm px-4">El equipo ya está en línea y listo para escanear.</p>
+              <button onClick={backToList} className="w-full mt-2 py-3.5 rounded-xl bg-[#10B981] text-[#0B1120] font-bold text-sm">
+                Ver mis equipos
+              </button>
             </>
           ) : (
             <>
@@ -533,7 +654,7 @@ function TabParear() {
               </p>
             </>
           )}
-          <button onClick={() => { setStep(1); setDeviceUid(''); setLabel(''); setToken(''); setDeviceId(null); setPaired(false); }} className="text-[#6366F1] text-sm font-semibold mt-4">
+          <button onClick={startWizard} className="text-[#6366F1] text-sm font-semibold mt-4">
             Parear otro equipo
           </button>
         </div>
