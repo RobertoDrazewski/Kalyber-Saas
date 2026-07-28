@@ -3,12 +3,94 @@ import { useNavigate } from 'react-router-dom';
 import { fetchAPI, API_URL } from '../services/api';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import {
-  Car, Wifi, Activity, Camera, Plus, X, Copy, CheckCircle2,
+  Car, Wifi, WifiOff, Activity, Camera, Plus, X, Copy, CheckCircle2,
   AlertTriangle, ShieldAlert, Loader2, ChevronRight, RadioTower,
   Wrench, ThumbsUp, ThumbsDown, Play, Square, Clock, History,
   LogOut, Home, ChevronDown, ChevronUp, BarChart3, Download,
-  Search, TrendingUp, ScanLine,
+  Search, TrendingUp, ScanLine, Eraser, ShieldCheck, RefreshCw,
+  Radio, XCircle, Info,
 } from 'lucide-react';
+
+// ============================================================
+// [NUEVO 28/07/2026] "Versión PRO" — todo lo que el hardware del
+// Kalyber Scanner ya sabe hacer, reflejado acá:
+//   - Protocolo con el que se detectó cada DTC (OBD-II / J1939 /
+//     J1708), mismo color que usa el LED del equipo — así el
+//     mecánico asocia de un vistazo lo que ve en pantalla con lo
+//     que ve en el equipo físico.
+//   - Estado en vivo del equipo (WiFi, protocolo leyendo ahora,
+//     "hace Xs" del último frame) — sin tener que mirar el OLED.
+//   - Borrado de fallas (Mode $04) desde acá, con el flujo completo:
+//     reparar → re-escanear (automático, cada 4s) → si no vuelve,
+//     borrar → confirmación real de la ECU (no un "listo" fake).
+//
+// [PENDIENTE — LADO BACKEND] Estos 3 endpoints/campos nuevos hacen
+// falta del lado Express para que esto funcione de punta a punta —
+// el firmware YA está listo para el paso 3 (ver backend_client.h
+// del proyecto KalyberScanner-TallerMini):
+//
+//   1. GET /scanner/sessions/:id/live  → agregar al JSON que ya
+//      devuelve, un objeto "device":
+//        { online: true, activeProtocol: "OBD-II", wifiConnected: true,
+//          lastFrameAt: "2026-07-28T19:04:00Z" }
+//      Sale del último heartbeat/lectura de ESE device_id.
+//
+//   2. Cada DTC en "dtcs" necesita 4 campos nuevos (columnas en
+//      dtc_readings, o derivados):
+//        protocol: "OBD-II" | "J1939" | "J1708" | null
+//        is_generic: true | false   (código genérico SAE vs. de fabricante)
+//        clear_status: "none" | "pending" | "success" | "failed"
+//        clear_detail: string | null  (motivo si failed — el NRC
+//          traducido que ya arma nrcDescription() en el firmware)
+//        cleared_at: timestamp | null
+//
+//   3. POST /scanner/dtc/:dtcId/clear-request → el mecánico aprieta
+//      "Borrar falla" acá. El backend deja pendiente el pedido
+//      para el device correspondiente (ver GET /clear-requests que
+//      el equipo consulta cada 5s) y devuelve { ok: true }. El
+//      resultado real (success/failed) llega después, vía
+//      POST /clear-result del propio equipo — este componente lo ve
+//      reflejado en el próximo poll de /live (clear_status).
+//
+// Mientras esos 3 puntos no estén, el botón "Borrar falla" queda
+// visible pero el pedido no llega a ningún lado — fetchAPI va a
+// tirar 404 y el catch de abajo lo muestra como error legible, sin
+// romper el resto de la vista.
+// ============================================================
+
+// Mismos colores que usa el LED del equipo para cada protocolo —
+// consistencia entre lo que el mecánico ve en pantalla y en el LED.
+const PROTOCOL_STYLE = {
+  'OBD-II': { label: 'OBD-II', dot: 'bg-cyan-400', text: 'text-cyan-300', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+  'J1939':  { label: 'J1939',  dot: 'bg-violet-400', text: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/30' },
+  'J1708':  { label: 'J1708',  dot: 'bg-orange-400', text: 'text-orange-300', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+};
+
+function ProtocolBadge({ protocol }) {
+  const style = PROTOCOL_STYLE[protocol];
+  if (!style) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${style.bg} ${style.text} ${style.border}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+      {style.label}
+    </span>
+  );
+}
+
+// "hace Xs" / "hace Xm" a partir de un timestamp ISO — usado en el
+// panel de estado del equipo y en el detalle de cada DTC.
+function haceTiempo(iso) {
+  if (!iso) return null;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (diffMs < 0) return 'ahora';
+  const s = Math.floor(diffMs / 1000);
+  if (s < 5) return 'ahora';
+  if (s < 60) return `hace ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m}m`;
+  const h = Math.floor(m / 60);
+  return `hace ${h}h`;
+}
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -480,8 +562,12 @@ function TabDiagnosticoVivo() {
   const [selectedDevice, setSelectedDevice] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [session, setSession] = useState(null);
-  const [live, setLive] = useState({ dtcs: [] });
+  // [PRO 28/07/2026] "device" es el estado en vivo del equipo (WiFi,
+  // protocolo que está leyendo AHORA, último frame) — ver contrato
+  // nuevo del endpoint /live al principio del archivo.
+  const [live, setLive] = useState({ dtcs: [], device: null });
   const [starting, setStarting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const pollRef = useRef(null);
 
@@ -494,14 +580,25 @@ function TabDiagnosticoVivo() {
     }).catch(() => {});
   }, []);
 
+  const loadLive = (manual = false) => {
+    if (!session) return Promise.resolve();
+    if (manual) setRefreshing(true);
+    return fetchAPI(`/scanner/sessions/${session.session_id}/live`)
+      .then(data => setLive({
+        dtcs: Array.isArray(data?.dtcs) ? data.dtcs : [],
+        frames: Array.isArray(data?.frames) ? data.frames : [],
+        device: data?.device || null,
+      }))
+      .catch(() => {})
+      .finally(() => { if (manual) setRefreshing(false); });
+  };
+
   useEffect(() => {
     if (!session) return;
-    const load = () => fetchAPI(`/scanner/sessions/${session.session_id}/live`)
-      .then(data => setLive({ dtcs: Array.isArray(data?.dtcs) ? data.dtcs : [], frames: Array.isArray(data?.frames) ? data.frames : [] }))
-      .catch(() => {});
-    load();
-    pollRef.current = setInterval(load, 4000);
+    loadLive();
+    pollRef.current = setInterval(() => loadLive(), 4000);
     return () => clearInterval(pollRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   const handleStart = async () => {
@@ -524,12 +621,36 @@ function TabDiagnosticoVivo() {
   const handleEnd = async () => {
     await fetchAPI(`/scanner/sessions/${session.session_id}/end`, { method: 'POST' }).catch(() => {});
     setSession(null);
-    setLive({ dtcs: [] });
+    setLive({ dtcs: [], device: null });
   };
 
   const handleConfirm = async (dtcId, confirmed, correction) => {
     await fetchAPI(`/scanner/dtc/${dtcId}/confirm`, { method: 'PATCH', body: JSON.stringify({ confirmed, correction }) });
     setLive(prev => ({ ...prev, dtcs: prev.dtcs.map(d => d.id === dtcId ? { ...d, confirmed_by_mechanic: confirmed ? 1 : 0, mechanic_correction: correction || null } : d) }));
+  };
+
+  // [NUEVO 28/07/2026] El mecánico pide borrar una falla puntual.
+  // Optimista: marcamos "pending" al toque (el equipo puede tardar
+  // hasta ~7s en verlo por el polling propio + el Mode $04), y el
+  // resultado real llega solo, en el próximo loadLive() — no hace
+  // falta que el mecánico se quede mirando la pantalla.
+  const handleClearRequest = async (dtcId) => {
+    setLive(prev => ({ ...prev, dtcs: prev.dtcs.map(d => d.id === dtcId ? { ...d, clear_status: 'pending' } : d) }));
+    try {
+      await fetchAPI(`/scanner/dtc/${dtcId}/clear-request`, { method: 'POST' });
+    } catch (err) {
+      setLive(prev => ({ ...prev, dtcs: prev.dtcs.map(d => d.id === dtcId ? { ...d, clear_status: 'failed', clear_detail: err.message } : d) }));
+      return;
+    }
+    // Empujamos un par de polls más seguidos (cada 2s, 4 veces) para
+    // que la confirmación llegue rápido a la pantalla en vez de
+    // esperar hasta 4s del intervalo normal.
+    let tries = 0;
+    const fast = setInterval(() => {
+      tries++;
+      loadLive();
+      if (tries >= 4) clearInterval(fast);
+    }, 2000);
   };
 
   if (!session) {
@@ -577,6 +698,8 @@ function TabDiagnosticoVivo() {
     );
   }
 
+  const deviceOnline = live.device?.online ?? true; // si el backend todavía no manda "device", no bloqueamos el borrado por las dudas
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -584,10 +707,38 @@ function TabDiagnosticoVivo() {
           <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
           <h2 className="text-white font-bold">Diagnóstico en curso</h2>
         </div>
-        <button onClick={handleEnd} className="flex items-center gap-1.5 text-red-400 text-xs font-semibold">
-          <Square size={13} /> Finalizar
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => loadLive(true)} title="Actualizar ahora" className="text-slate-400">
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={handleEnd} className="flex items-center gap-1.5 text-red-400 text-xs font-semibold">
+            <Square size={13} /> Finalizar
+          </button>
+        </div>
       </div>
+
+      {/* [NUEVO 28/07/2026] Estado en vivo del equipo — lo mismo que
+          muestra el OLED, acá en la app. Si "device" todavía no viene
+          del backend (falta implementarlo), esta tarjeta simplemente
+          no se muestra — no rompe nada. */}
+      {live.device && (
+        <div className="bg-[#1E293B]/60 rounded-xl border border-slate-700 px-3 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {live.device.wifiConnected ? <Wifi size={15} className="text-[#10B981] shrink-0" /> : <WifiOff size={15} className="text-red-400 shrink-0" />}
+            <span className="text-xs text-slate-300 truncate">
+              {live.device.wifiConnected ? 'Equipo conectado' : 'Equipo sin WiFi'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {live.device.activeProtocol && <ProtocolBadge protocol={live.device.activeProtocol} />}
+            {live.device.lastFrameAt && (
+              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                <Radio size={10} /> {haceTiempo(live.device.lastFrameAt)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {live.dtcs.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
@@ -597,33 +748,68 @@ function TabDiagnosticoVivo() {
         </div>
       ) : (
         <div className="space-y-2">
-          {live.dtcs.map(d => <DtcCard key={d.id} dtc={d} onConfirm={handleConfirm} />)}
+          {live.dtcs.map(d => (
+            <DtcCard key={d.id} dtc={d} onConfirm={handleConfirm} onClear={handleClearRequest} deviceOnline={deviceOnline} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function DtcCard({ dtc, onConfirm }) {
+// [PRO 28/07/2026] Infiere el protocolo por la forma del código si el
+// backend todavía no manda dtc.protocol explícito — así la badge
+// aparece igual mientras se termina de cablear ese campo del lado
+// del servidor. OBD-II genérico/fabricante = letra P/C/B/U + 4
+// dígitos; J1939 se identifica por el prefijo SPN que ya arma
+// j1939Engine en el firmware; J1708 no tiene traducción automática
+// todavía (ver j1708_engine — es solo sniffer), así que ese prefijo
+// no se infiere, tiene que venir del backend.
+function inferProtocol(dtc) {
+  if (dtc.protocol) return dtc.protocol;
+  if (/^[PCBU]\d{4}$/i.test(dtc.decoded_code || '')) return 'OBD-II';
+  if (/^SPN/i.test(dtc.decoded_code || '')) return 'J1939';
+  return null;
+}
+
+function DtcCard({ dtc, onConfirm, onClear, deviceOnline = true }) {
   const [showCorrect, setShowCorrect] = useState(false);
   const [correction, setCorrection] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false); // modal de confirmación antes de borrar
   const reviewed = dtc.confirmed_by_mechanic !== null;
+  const protocol = inferProtocol(dtc);
+
+  // [NUEVO 28/07/2026] Solo P0xxx (genérico SAE) tiene traducción
+  // garantizada — igual criterio que dtc_database.h en el firmware.
+  // Si el backend no manda is_generic explícito, lo inferimos del
+  // mismo patrón que usa el equipo: 2do carácter '0'.
+  const isGeneric = dtc.is_generic ?? (dtc.decoded_code?.length >= 2 && dtc.decoded_code[1] === '0');
+
+  const clearStatus = dtc.clear_status || 'none'; // 'none' | 'pending' | 'success' | 'failed'
 
   return (
-    <div className={`rounded-xl border p-3 ${reviewed ? 'border-slate-800 bg-[#1E293B]/30' : 'border-red-500/30 bg-red-500/5'}`}>
+    <div className={`rounded-xl border p-3 ${clearStatus === 'success' ? 'border-slate-800 bg-[#1E293B]/20 opacity-70' : reviewed ? 'border-slate-800 bg-[#1E293B]/30' : 'border-red-500/30 bg-red-500/5'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-red-300 font-bold text-sm">{dtc.decoded_code}</p>
-          <p className="text-slate-300 text-xs mt-0.5">{dtc.description_guess || 'Sin descripción'}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className={`font-mono font-bold text-sm ${clearStatus === 'success' ? 'text-slate-500 line-through decoration-slate-600' : 'text-red-300'}`}>{dtc.decoded_code}</p>
+            {protocol && <ProtocolBadge protocol={protocol} />}
+            {!isGeneric && (
+              <span className="text-[10px] text-slate-500 px-1.5 py-0.5 rounded-full border border-slate-700" title="Código específico del fabricante — confirmar manualmente">
+                fabricante
+              </span>
+            )}
+          </div>
+          <p className="text-slate-300 text-xs mt-0.5">{dtc.description_guess || 'Código específico de fabricante — no traducido automáticamente todavía'}</p>
           <p className="text-slate-600 text-[10px] mt-1 flex items-center gap-1"><Clock size={9} /> {new Date(dtc.detected_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} · fuente: {dtc.source || 'desconocida'}</p>
         </div>
-        {!reviewed && (
+        {!reviewed && clearStatus === 'none' && (
           <div className="flex gap-1 shrink-0">
             <button onClick={() => onConfirm(dtc.id, true)} className="p-2 rounded-lg bg-[#10B981]/10 text-[#10B981]"><ThumbsUp size={14} /></button>
             <button onClick={() => setShowCorrect(true)} className="p-2 rounded-lg bg-red-500/10 text-red-400"><ThumbsDown size={14} /></button>
           </div>
         )}
-        {reviewed && (
+        {reviewed && clearStatus === 'none' && (
           <span className={`text-[10px] px-2 py-1 rounded-full font-bold shrink-0 ${dtc.confirmed_by_mechanic ? 'bg-[#10B981]/15 text-[#10B981]' : 'bg-amber-500/15 text-amber-400'}`}>
             {dtc.confirmed_by_mechanic ? 'Confirmado' : 'Corregido'}
           </span>
@@ -648,6 +834,87 @@ function DtcCard({ dtc, onConfirm }) {
           >
             Guardar
           </button>
+        </div>
+      )}
+
+      {/* [NUEVO 28/07/2026] Borrado de la falla (Mode $04) — solo
+          disponible cuando hay un onClear (o sea, sesión en vivo con
+          el auto conectado; en el histórico no se muestra, porque el
+          auto ya no está en el elevador). */}
+      {onClear && (
+        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80">
+          {clearStatus === 'none' && (
+            <button
+              onClick={() => setConfirmClear(true)}
+              disabled={!deviceOnline}
+              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-slate-800/60 text-slate-300 text-xs font-semibold border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Eraser size={13} /> {deviceOnline ? 'Borrar falla' : 'Equipo sin conexión'}
+            </button>
+          )}
+
+          {clearStatus === 'pending' && (
+            <div className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-800/40 text-slate-400 text-xs font-semibold">
+              <Loader2 size={13} className="animate-spin" /> Enviando a la ECU (Mode $04)...
+            </div>
+          )}
+
+          {clearStatus === 'success' && (
+            <div className="flex items-start gap-2 py-2 px-2.5 rounded-lg bg-[#10B981]/10 border border-[#10B981]/30">
+              <ShieldCheck size={14} className="text-[#10B981] shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[#10B981] text-xs font-semibold">Falla borrada — MIL apagado</p>
+                <p className="text-slate-500 text-[10px] mt-0.5">Si vuelve a aparecer, la reparación no fue efectiva — es normal y esperado revisarla de nuevo.</p>
+              </div>
+            </div>
+          )}
+
+          {clearStatus === 'failed' && (
+            <div className="space-y-1.5">
+              <div className="flex items-start gap-2 py-2 px-2.5 rounded-lg bg-red-500/10 border border-red-500/30">
+                <XCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-red-400 text-xs font-semibold">No se pudo borrar</p>
+                  <p className="text-slate-400 text-[10px] mt-0.5">{dtc.clear_detail || 'La ECU rechazó el pedido o no respondió.'}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmClear(true)}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-slate-800/60 text-slate-300 text-xs font-semibold border border-slate-700"
+              >
+                <RefreshCw size={12} /> Reintentar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal de confirmación — explica qué hace realmente el
+          borrado antes de mandarlo, para que no se use como "tapar"
+          una falla que sigue presente. */}
+      {confirmClear && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={() => setConfirmClear(false)}>
+          <div className="w-full max-w-sm bg-[#111827] rounded-2xl border border-slate-700 p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <Eraser size={18} className="text-[#10B981]" />
+              <h3 className="text-white font-bold text-sm">Borrar {dtc.decoded_code}</h3>
+            </div>
+            <div className="flex items-start gap-2 text-xs text-slate-400 bg-slate-800/40 rounded-lg p-2.5">
+              <Info size={13} className="shrink-0 mt-0.5 text-slate-500" />
+              <p>Esto apaga la luz del check y limpia el historial de la ECU — no repara nada. Si el problema real sigue presente, la falla va a volver a aparecer en el próximo manejo, y eso es lo esperado.</p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setConfirmClear(false)} className="flex-1 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-semibold">
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setConfirmClear(false); onClear(dtc.id); }}
+                className="flex-1 py-2.5 rounded-lg bg-[#10B981] text-[#0B1120] text-sm font-bold"
+              >
+                Confirmar borrado
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
