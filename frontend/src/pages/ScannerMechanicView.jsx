@@ -753,14 +753,16 @@ function TabDiagnosticoVivo() {
   const [error, setError] = useState('');
   const pollRef = useRef(null);
 
-  // [NUEVO 29/07/2026] Buscador de patente en vez de un <select> con
-  // TODOS los autos del taller — no escala bien pasados los primeros
-  // meses. Mismo endpoint que ya usa "Autos" al cargar un auto nuevo
-  // (lookupScanVehicleByPlate), reusado acá para el caso "el auto
-  // vuelve": buscás la patente, si existe arrancás directo con su
-  // historial de fondo; si no existe, alta rápida sin salir de la
-  // pantalla.
+  // [NUEVO 29/07/2026] Combobox: buscador predictivo por patente + ver
+  // el listado completo con un clic. Se trae la lista completa UNA vez
+  // (mismo endpoint que antes tenía el <select> viejo) y se filtra del
+  // lado del cliente por prefijo — sin pegarle al backend en cada
+  // letra. Cuando el auto se selecciona (de la lista o tipeando exacto),
+  // se enriquece con el historial (última sesión) vía el lookup exacto
+  // que ya existía, para la tarjeta verde de "auto encontrado".
+  const [allVehicles, setAllVehicles] = useState([]);
   const [plateQuery, setPlateQuery] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [lookupResult, setLookupResult] = useState(null); // null = nada buscado todavía | 'not_found' | { id, brand, model, ... }
   const [checkingPlate, setCheckingPlate] = useState(false);
   const lookupTimer = useRef(null);
@@ -775,9 +777,22 @@ function TabDiagnosticoVivo() {
       setDevices(list);
       if (list.length === 1) setSelectedDevice(list[0].id);
     }).catch(() => {});
+    fetchAPI('/scanner/vehicles').then(rows => setAllVehicles(Array.isArray(rows) ? rows : [])).catch(() => {});
   }, []);
 
-  // Búsqueda con debounce — mismo criterio que NuevoAutoForm.
+  // Sugerencias predictivas — por prefijo, sin pegarle al backend.
+  const suggestions = plateQuery.trim().length === 0
+    ? allVehicles.slice(0, 50)
+    : allVehicles.filter(v => (v.plate_text || '').toUpperCase().startsWith(plateQuery.trim().toUpperCase())).slice(0, 50);
+
+  const selectPlate = (plate) => {
+    setPlateQuery(plate);
+    setDropdownOpen(false);
+  };
+
+  // Búsqueda EXACTA con debounce, para traer el historial (última
+  // sesión) — solo dispara cuando lo tipeado matchea una patente
+  // completa, no en cada letra mientras se filtra la lista.
   useEffect(() => {
     clearTimeout(lookupTimer.current);
     setLookupResult(null);
@@ -898,17 +913,51 @@ function TabDiagnosticoVivo() {
     return (
       <div className="space-y-4">
         <h2 className="text-white font-bold">Empezar diagnóstico</h2>
-        <p className="text-slate-500 text-sm">Escribí la patente del auto — el equipo tiene que estar conectado y apuntando a él.</p>
+        <p className="text-slate-500 text-sm">Escribí la patente, o tocá el campo para ver todos los autos ya cargados.</p>
 
-        <div>
+        <div className="relative">
           <label className="text-xs text-slate-400 mb-1 block">Patente</label>
           <input
             value={plateQuery}
-            onChange={e => setPlateQuery(e.target.value.toUpperCase())}
+            onChange={e => { setPlateQuery(e.target.value.toUpperCase()); setDropdownOpen(true); }}
+            onFocus={() => setDropdownOpen(true)}
+            onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
             placeholder="AB123CD"
             className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm font-mono"
             autoFocus
           />
+
+          {/* [NUEVO 29/07/2026] Dropdown predictivo — muestra TODOS los
+              autos al tocar el campo vacío, y filtra por prefijo a
+              medida que se escribe. onMouseDown con preventDefault en
+              el contenedor evita que el input pierda el foco (blur)
+              antes de que el clic en una opción llegue a registrarse. */}
+          {dropdownOpen && suggestions.length > 0 && (
+            <div
+              onMouseDown={e => e.preventDefault()}
+              className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-[#1E293B] border border-slate-700 rounded-lg shadow-xl"
+            >
+              {suggestions.map(v => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => selectPlate(v.plate_text)}
+                  className="w-full text-left px-3 py-2.5 hover:bg-slate-700/50 border-b border-slate-800 last:border-0 flex items-center justify-between gap-2"
+                >
+                  <span className="text-white text-sm font-mono font-bold">{v.plate_text}</span>
+                  <span className="text-slate-500 text-xs truncate">{v.brand} {v.model}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {dropdownOpen && plateQuery.trim().length > 0 && suggestions.length === 0 && (
+            <div
+              onMouseDown={e => e.preventDefault()}
+              className="absolute z-10 mt-1 w-full bg-[#1E293B] border border-slate-700 rounded-lg shadow-xl px-3 py-2.5"
+            >
+              <p className="text-slate-500 text-xs">Ningún auto cargado empieza con "{plateQuery.trim()}"</p>
+            </div>
+          )}
         </div>
 
         {checkingPlate && (
