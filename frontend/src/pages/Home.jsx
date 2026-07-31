@@ -185,34 +185,27 @@ function Hardware() {
             </div>
           </div>
 
-          {/* [NUEVO 18/07/2026] Kalyber Scanner — para talleres, no para
-              flota. Sin foto de producto real todavía (no hay archivo
-              en /public) — uso un ícono en vez de inventar una imagen
-              que no corresponde. Cuando tengas la foto/render final,
-              reemplazar este bloque de ícono por <img src="/kalyber-scanner.png" .../>
-              con el mismo tamaño que las otras dos tarjetas. */}
+          {/* [ACTUALIZADO 31/07/2026] Kalyber Scanner — el hardware ya
+              está listo en versión beta (KAL-SCAN-0001, Demo v1.0).
+              Se saca el badge "Próximamente" y el ícono placeholder,
+              entra la foto real del producto. */}
           <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 rounded-3xl border border-[#EC4899]/50 overflow-hidden flex flex-col relative shadow-xl shadow-[#EC4899]/10 transform hover:-translate-y-2 transition-transform duration-300 h-full">
             <div className="p-5 md:p-8 pb-0 flex justify-center items-center h-36 md:h-56 bg-gradient-to-b from-transparent to-[#0B1120]/50 relative">
               <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 bg-[#EC4899] text-white px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#EC4899]/40">
                 Plan Taller
               </div>
-              {/* [NUEVO 19/07/2026] El hardware físico todavía se está
-                  armando (ver la conversación de ensamblado) — se lo
-                  dejamos claro al visitante en vez de dar a entender
-                  que ya está listo para comprar hoy mismo. */}
-              <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10 bg-amber-500 text-[#0B1120] px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-amber-500/40">
-                🚧 Próximamente
+              {/* [NUEVO 31/07/2026] Reemplaza al viejo badge ámbar de
+                  "Próximamente" — el hardware ya está en versión beta,
+                  disponible para probar. */}
+              <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10 bg-emerald-500 text-[#0B1120] px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/40">
+                ✅ 30 días gratis
               </div>
-              <div className="w-20 h-20 md:w-32 md:h-32 rounded-2xl bg-[#EC4899]/15 border border-[#EC4899]/30 flex items-center justify-center">
-                <svg className="w-10 h-10 md:w-16 md:h-16 text-[#EC4899]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-              </div>
+              <img src="/scannerpro.png" alt="Kalyber Scanner" className="h-24 md:h-48 w-auto object-contain drop-shadow-[0_10px_20px_rgba(236,72,153,0.3)] transform hover:scale-105 transition-transform duration-500" />
             </div>
             <div className="p-5 md:p-8 pt-4 md:pt-6 flex-1 flex flex-col">
               <h3 className="text-xl md:text-2xl font-bold text-white mb-1">Kalyber Scanner</h3>
               <p className="text-xs md:text-sm font-semibold text-[#EC4899] mb-2 uppercase tracking-widest">Diagnóstico OBD-II para Talleres</p>
-              <p className="text-[11px] md:text-xs text-amber-400/90 mb-4 md:mb-6">Estamos armando el primer prototipo — reserve su lugar dejando su email más abajo y le avisamos apenas esté disponible.</p>
+              <p className="text-[11px] md:text-xs text-emerald-400/90 mb-4 md:mb-6">Hardware listo en versión beta — pruébelo 30 días gratis en su taller, sin cargo.</p>
 
               <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
@@ -485,21 +478,26 @@ function Pricing() {
             </ul>
           </div>
 
-          {/* [ACTUALIZADO 18/07/2026] Kalyber Scanner — ahora en la MISMA
-              grilla que Básico/Avanzado, uno al lado del otro (antes era
-              una sección propia más abajo, rompía la estética con los 3
-              hardware de arriba que sí están en una sola fila). */}
+          {/* [ACTUALIZADO 31/07/2026] Kalyber Scanner — hardware ya
+              disponible en versión beta, se saca el badge de
+              "Próximamente" y se suma la promo de prueba gratuita. */}
           <div className="bg-gradient-to-b from-[#EC4899]/10 to-[#1E293B]/40 p-8 rounded-3xl border border-[#EC4899]/50 flex flex-col shadow-2xl shadow-[#EC4899]/10 hover:brightness-110 transition-all">
             <div className="flex items-center gap-2 mb-3">
               <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-[#EC4899] bg-[#EC4899]/10 px-3 py-1 rounded-full">
                 Nuevo — Para Talleres
               </span>
-              <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full">
-                🚧 Próximamente
+              <span className="inline-block w-fit text-[10px] font-bold tracking-widest uppercase text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
+                ✅ 30 días gratis
               </span>
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
             <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
+
+            {/* [NUEVO 31/07/2026] Promo de lanzamiento — 30 días de
+                prueba sin cargo antes de que arranque la suscripción. */}
+            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
+              <p className="text-emerald-400 text-xs md:text-sm font-semibold">✅ Pruébelo 30 días gratis en su taller, sin cargo y sin compromiso, antes de decidir.</p>
+            </div>
 
             <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#050B14] rounded-2xl border border-[#EC4899]/30">
               <p className="text-xs md:text-sm text-slate-400 mb-2 uppercase tracking-wide font-semibold">Inversión Inicial (Hardware)</p>
