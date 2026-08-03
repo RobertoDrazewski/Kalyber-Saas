@@ -741,6 +741,12 @@ function startGt06Server(port = PORT, { label = null, expectedProto = null } = {
                                     coolant_temp: null,
                                     battery_voltage: null,
                                     harsh_brake: false,
+                                    // [FIX] El odómetro, combustible y satélites del VL502 llegan
+                                    // en el reporte de POSICIÓN (0x0200), no en el de OBD (0x0900).
+                                    // Antes se descartaban acá — ahora los guardamos.
+                                    device_odometer_km: loc.mileageKm,
+                                    fuel_level: loc.fuelLiters,
+                                    acc_signal: loc.accOn,
                                     dtc_codes: loc.sinIdentificar.length ? `JT808_TLV:${loc.sinIdentificar.join('|')}` : null,
                                 });
                             }
