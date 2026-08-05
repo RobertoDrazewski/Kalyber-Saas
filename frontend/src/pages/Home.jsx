@@ -50,7 +50,7 @@ function Features() {
             </div>
             <h3 className="text-xl font-bold mb-3 text-white">Evaluación de Conductores</h3>
             <p className="text-slate-400 leading-relaxed">
-              Eventos de manejo reales con hora y ubicación exacta — colisión, frenada y aceleración brusca ya llegan al panel <strong className="text-slate-300">desde el Plan Básico</strong>. Con el <strong className="text-slate-300">Plan Avanzado</strong> se suma la lectura directa de la ECU: giros cerrados, exceso de velocidad cruzado con datos de motor, y el score de conducción más preciso del mercado.
+              Eventos de manejo reales con hora y ubicación exacta — colisión, frenada y aceleración brusca, giros y exceso de velocidad llegan al panel <strong className="text-slate-300">desde el Plan Básico</strong>, con aviso sonoro en cabina. El <strong className="text-slate-300">Plan Avanzado</strong> suma la lectura directa de la ECU (RPM, temperatura, combustible) y el mantenimiento predictivo con IA sobre esos datos de motor.
             </p>
           </div>
 
@@ -171,15 +171,15 @@ function Hardware() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Diagnóstico de Errores (DTC):</strong> Compatibilidad con protocolos K-Line y CAN Bus para la identificación de fallas mecánicas.</div>
+                  <div><strong className="text-white">Telemetría de Motor por CAN Bus y K-Line:</strong> Lectura en tiempo real de los parámetros de la ECU (RPM, temperatura, combustible) que alimentan los modelos de mantenimiento predictivo.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Eventos de Manejo con Ubicación:</strong> Frenadas y aceleraciones bruscas, giros cerrados, colisiones y exceso de velocidad, cada uno con hora y GPS exacto — no un puntaje estimado, el evento real.</div>
+                  <div><strong className="text-white">Posición y Velocidad con Geocercas:</strong> Ubicación en tiempo real, velocidad y alertas de exceso, cada evento con hora y GPS exacto.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#6366F1] font-bold">✓</span>
-                  <div><strong className="text-white">Estado Completo del Vehículo:</strong> Puertas, luces, cinturones de seguridad y freno de mano, visibles en vivo en el panel.</div>
+                  <div><strong className="text-white">Estado de Marcha y Batería:</strong> Ignición (encendido/apagado), voltaje de batería y odómetro, visibles en vivo en el panel.</div>
                 </li>
               </ul>
             </div>
@@ -210,7 +210,7 @@ function Hardware() {
               <ul className="space-y-3 md:space-y-4 text-slate-300 text-sm flex-1">
                 <li className="flex items-start gap-3">
                   <span className="text-[#EC4899] font-bold">✓</span>
-                  <div><strong className="text-white">Diagnóstico en Vivo:</strong> Conecte el scanner al auto y vea los códigos de falla (DTC) aparecer en tiempo real, desde el celular o la computadora del taller.</div>
+                  <div><strong className="text-white">Diagnóstico y Borrado de Fallas:</strong> Conecte el scanner al auto, vea los códigos de falla (DTC) en tiempo real, y bórrelos directamente desde el celular con confirmación real de la ECU.</div>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-[#EC4899] font-bold">✓</span>
@@ -414,7 +414,11 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Eventos de Manejo en Vivo:</strong> Colisión, corte de energía y desconexión física llegan al panel en tiempo real, con hora y ubicación — no es solo un aviso sonoro en cabina.</div>
+                <div><strong className="text-white font-semibold">Alarmas de Manejo y Seguridad:</strong> Colisión, frenada y aceleración brusca, giros bruscos y exceso de velocidad — cada evento llega al panel con hora y GPS, y suena en cabina para avisar al conductor en el momento.</div>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
+                <div><strong className="text-white font-semibold">Protección Anti-Robo:</strong> Corte de energía, remolque, manipulación del equipo (tamper) y cambio de SIM disparan una alerta inmediata en el panel.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#10B981] mt-0.5 font-bold">✓</span> 
@@ -453,15 +457,15 @@ function Pricing() {
             <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Mantenimiento Predictivo Integral:</strong> Heurísticas de desgaste (frenos, neumáticos) combinadas con eventos de manejo reales reportados por el propio equipo — no una estimación, el dato real de la ECU.</div>
+                <div><strong className="text-white font-semibold">Score de Desgaste por Kilometraje:</strong> Estimación de desgaste de frenos y neumáticos combinando el kilometraje real del vehículo con su historial de uso — para planificar el service antes de que sea urgente.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Datos Directos del Motor (ECU):</strong> Acceso en tiempo real a indicadores críticos de rendimiento mecánico.</div>
+                <div><strong className="text-white font-semibold">Telemetría de Motor en Tiempo Real:</strong> RPM, temperatura de refrigerante, nivel de combustible y voltaje de batería leídos directo de la ECU por CAN Bus — datos que el Plan Básico no puede ver.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Detección Temprana de Fallas:</strong> Leemos y registramos en tiempo real los códigos de diagnóstico (DTC) que reporta la computadora del vehículo, para que puedas anticiparte a una falla antes de que se convierta en una rotura mayor.</div>
+                <div><strong className="text-white font-semibold">Detección Temprana de Anomalías:</strong> Monitoreamos en tiempo real los parámetros de la ECU (RPM, temperatura, voltaje) con detección estadística de anomalías, para avisar cuando un vehículo se comporta distinto a su patrón normal.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
@@ -473,7 +477,7 @@ function Pricing() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#6366F1] mt-0.5 font-bold">✓</span> 
-                <div><strong className="text-white font-semibold">Funcionalidad Completa de Plataforma:</strong> Incluye todas las capacidades de software del Plan Básico (Soberanía de Datos, geocercas, score de manejo). Único punto a aclarar: el aviso sonoro en cabina es una capacidad física del hardware VL04 — el escáner VL502 no tiene buzzer local, reporta sus eventos por red igual que todo lo demás.</div>
+                <div><strong className="text-white font-semibold">Todo lo del Plan Básico, más el motor:</strong> Incluye rastreo, geocercas, odómetro e historial completo del Plan Básico — y le suma la capa de inteligencia mecánica. (El aviso sonoro en cabina es exclusivo del hardware del Plan Básico; el escáner VL502 reporta sus eventos por red.)</div>
               </li>
             </ul>
           </div>
@@ -491,7 +495,7 @@ function Pricing() {
               </span>
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">Plan Taller</h3>
-            <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Diagnóstico OBD-II en vivo, códigos de falla (DTC) e historial completo de cada vehículo que pasa por su taller.</p>
+            <p className="text-slate-400 mb-5 md:mb-8 min-h-[3rem] md:min-h-[4.5rem] text-sm md:text-base">Diagnóstico OBD-II en vivo, lectura y borrado de códigos de falla (DTC), e historial completo de cada vehículo que pasa por su taller.</p>
 
             {/* [NUEVO 31/07/2026] Promo de lanzamiento — 30 días de
                 prueba sin cargo antes de que arranque la suscripción. */}
@@ -521,7 +525,7 @@ function Pricing() {
             <ul className="text-slate-300 space-y-3.5 md:space-y-5 flex-1 text-sm md:text-base">
               <li className="flex items-start gap-3">
                 <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>
-                <div><strong className="text-white font-semibold">Diagnóstico en Vivo:</strong> Conecte el scanner al auto y vea los códigos de falla (DTC) aparecer en tiempo real desde su celular o computadora.</div>
+                <div><strong className="text-white font-semibold">Diagnóstico y Borrado de Fallas:</strong> Vea los códigos de falla (DTC) en tiempo real y bórrelos desde su celular — con la confirmación real de la computadora del auto, no un "listo" a ciegas.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-[#EC4899] mt-0.5 font-bold">✓</span>

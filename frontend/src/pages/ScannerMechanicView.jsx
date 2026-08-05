@@ -207,6 +207,7 @@ export default function ScannerMechanicView() {
 
       <div className="flex-1 overflow-y-auto pb-20 px-4 pt-4">
         {tab === 'autos' && <TabAutos />}
+        {tab === 'escanear' && <TabEscanear />}
         {tab === 'parear' && <TabParear />}
         {tab === 'vivo' && <TabDiagnosticoVivo />}
         {tab === 'historico' && <TabHistoricoVehiculos />}
@@ -216,7 +217,7 @@ export default function ScannerMechanicView() {
       {/* Nav inferior fija — igual criterio que BottomNav del resto de la app */}
       <div className="fixed bottom-0 left-0 right-0 h-16 bg-[#050B14] border-t border-slate-800 flex items-stretch z-40">
         <NavBtn icon={Car} label="Autos" active={tab === 'autos'} onClick={() => setTab('autos')} />
-        <NavBtn icon={Wifi} label="Parear" active={tab === 'parear'} onClick={() => setTab('parear')} />
+        <NavBtn icon={ScanLine} label="Escanear" active={tab === 'escanear'} onClick={() => setTab('escanear')} />
         <NavBtn icon={Activity} label="En vivo" active={tab === 'vivo'} onClick={() => setTab('vivo')} />
         <NavBtn icon={History} label="Histórico" active={tab === 'historico'} onClick={() => setTab('historico')} />
         <NavBtn icon={BarChart3} label="Stats" active={tab === 'stats'} onClick={() => setTab('stats')} />
@@ -1521,6 +1522,269 @@ function TabEstadisticas() {
             })}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// [NUEVO] TabEscanear — la herramienta rápida del taller.
+//
+// A diferencia de "En vivo" (que es una sesión de diagnóstico formal),
+// esta pestaña es el flujo directo que un mecánico espera: elegir el
+// auto, escanear las fallas AHORA, y borrarlas si corresponde — todo
+// en una pantalla, sin pasos intermedios. Reusa los mismos endpoints
+// que ya existen (sessions + live + clear-request), solo que con un
+// flujo pensado para "leo y borro" en vez de "diagnostico y confirmo".
+// ============================================================
+function TabEscanear() {
+  const [vehicles, setVehicles] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [selectedDevice, setSelectedDevice] = useState('');
+  const [session, setSession] = useState(null);
+  const [dtcs, setDtcs] = useState([]);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState('');
+  const pollRef = useRef(null);
+
+  useEffect(() => {
+    fetchAPI('/scanner/vehicles').then(rows => setVehicles(Array.isArray(rows) ? rows : [])).catch(() => {});
+    fetchAPI('/scanner/devices').then(rows => {
+      const list = Array.isArray(rows) ? rows : [];
+      setDevices(list);
+      if (list.length === 1) setSelectedDevice(list[0].id);
+    }).catch(() => {});
+  }, []);
+
+  // Mientras hay sesión activa, refrescar las fallas cada 4s
+  useEffect(() => {
+    if (!session) return;
+    const load = () => fetchAPI(`/scanner/sessions/${session.session_id}/live`)
+      .then(data => setDtcs(Array.isArray(data?.dtcs) ? data.dtcs : []))
+      .catch(() => {});
+    load();
+    pollRef.current = setInterval(load, 4000);
+    return () => clearInterval(pollRef.current);
+  }, [session]);
+
+  const deviceOnline = devices.find(d => d.id === selectedDevice)?.online;
+
+  const handleScan = async () => {
+    if (!selectedVehicle || !selectedDevice) return;
+    setScanning(true);
+    setError('');
+    try {
+      const res = await fetchAPI('/scanner/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ scan_vehicle_id: selectedVehicle, scanner_device_id: selectedDevice }),
+      });
+      setSession(res);
+      setDtcs([]);
+    } catch (err) {
+      setError(err.message || 'No se pudo iniciar el escaneo');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (session) {
+      await fetchAPI(`/scanner/sessions/${session.session_id}/end`, { method: 'POST' }).catch(() => {});
+    }
+    setSession(null);
+    setDtcs([]);
+    setSelectedVehicle('');
+  };
+
+  const handleClear = async (dtcId) => {
+    try {
+      await fetchAPI(`/scanner/dtc/${dtcId}/clear-request`, { method: 'POST' });
+      // Marcar localmente como "pendiente" hasta que el equipo confirme
+      setDtcs(prev => prev.map(d => d.id === dtcId ? { ...d, clear_status: 'pending' } : d));
+    } catch (err) {
+      setError(err.message || 'No se pudo enviar el borrado');
+    }
+  };
+
+  const handleClearAll = async () => {
+    const borrables = dtcs.filter(d => d.clear_status !== 'success');
+    for (const d of borrables) {
+      await handleClear(d.id);
+    }
+  };
+
+  // --- Pantalla 1: elegir auto y equipo ---
+  if (!session) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <ScanLine size={22} className="text-[#6366F1]" />
+          <h2 className="text-white font-bold text-lg">Escanear y borrar fallas</h2>
+        </div>
+        <p className="text-slate-400 text-sm">
+          Elegí el auto y el equipo. Vas a leer las fallas actuales y, si querés, borrarlas — todo desde acá.
+        </p>
+
+        <div>
+          <label className="text-slate-400 text-xs uppercase tracking-wide">Auto</label>
+          <select
+            value={selectedVehicle}
+            onChange={e => setSelectedVehicle(e.target.value)}
+            className="w-full mt-1 bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm"
+          >
+            <option value="">Seleccioná un auto...</option>
+            {vehicles.map(v => (
+              <option key={v.id} value={v.id}>{v.plate_text} — {v.brand} {v.model}</option>
+            ))}
+          </select>
+        </div>
+
+        {devices.length > 1 && (
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wide">Equipo</label>
+            <select
+              value={selectedDevice}
+              onChange={e => setSelectedDevice(e.target.value)}
+              className="w-full mt-1 bg-[#1E293B] border border-slate-700 rounded-lg px-3 py-3 text-white text-sm"
+            >
+              <option value="">Seleccioná el equipo...</option>
+              {devices.map(d => (
+                <option key={d.id} value={d.id}>{d.label || d.device_uid} {d.online ? '🟢' : '⚪'}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedDevice && !deviceOnline && (
+          <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+            <WifiOff size={16} className="text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-amber-200 text-xs">El equipo no aparece conectado. Verificá que esté encendido y con WiFi antes de escanear.</p>
+          </div>
+        )}
+
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+
+        <button
+          onClick={handleScan}
+          disabled={!selectedVehicle || !selectedDevice || scanning}
+          className="w-full bg-[#6366F1] hover:bg-[#4F46E5] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg px-4 py-3.5 flex items-center justify-center gap-2 transition-colors"
+        >
+          {scanning ? <Loader2 size={18} className="animate-spin" /> : <ScanLine size={18} />}
+          {scanning ? 'Iniciando escaneo...' : 'Escanear fallas ahora'}
+        </button>
+      </div>
+    );
+  }
+
+  // --- Pantalla 2: fallas leídas + borrado ---
+  const activas = dtcs.filter(d => d.clear_status !== 'success');
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ScanLine size={20} className="text-[#6366F1]" />
+          <h2 className="text-white font-bold">Escaneando...</h2>
+          <Loader2 size={14} className="animate-spin text-slate-500" />
+        </div>
+        <button onClick={handleFinish} className="text-slate-400 hover:text-white text-sm flex items-center gap-1">
+          <Square size={14} /> Terminar
+        </button>
+      </div>
+
+      {dtcs.length === 0 && (
+        <div className="bg-[#0F1B2E] border border-slate-800 rounded-xl p-6 text-center">
+          <RadioTower size={28} className="text-slate-600 mx-auto mb-2 animate-pulse" />
+          <p className="text-slate-400 text-sm">Esperando lecturas del equipo...</p>
+          <p className="text-slate-600 text-xs mt-1">El scanner tiene que estar conectado al auto y con el contacto puesto.</p>
+        </div>
+      )}
+
+      {dtcs.length > 0 && (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-slate-400 text-sm">{activas.length} falla(s) activa(s)</p>
+            {activas.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="text-xs bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+              >
+                <Eraser size={13} /> Borrar todas
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {dtcs.map(d => (
+              <DtcClearCard key={d.id} dtc={d} onClear={() => handleClear(d.id)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="flex items-start gap-2 bg-slate-500/10 border border-slate-700 rounded-lg p-3 mt-2">
+        <Info size={15} className="text-slate-400 mt-0.5 shrink-0" />
+        <p className="text-slate-400 text-xs">
+          Borrar una falla apaga el testigo, pero si el problema mecánico sigue, la falla vuelve a aparecer.
+          Repará primero, después borrá y verificá que no reaparezca.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Tarjeta de una falla con su botón de borrado y el estado real de la ECU
+function DtcClearCard({ dtc, onClear }) {
+  const status = dtc.clear_status || 'none';
+  const protoColor = {
+    'OBD-II': 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
+    'J1939': 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+    'J1708': 'text-orange-400 border-orange-500/30 bg-orange-500/10',
+  }[dtc.protocol] || 'text-slate-400 border-slate-600 bg-slate-700/30';
+
+  return (
+    <div className="bg-[#0F1B2E] border border-slate-800 rounded-xl p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold text-white">{dtc.decoded_code || dtc.raw_code_hex}</span>
+            {dtc.protocol && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${protoColor}`}>{dtc.protocol}</span>
+            )}
+          </div>
+          {dtc.description_guess && (
+            <p className="text-slate-400 text-xs mt-1">{dtc.description_guess}</p>
+          )}
+        </div>
+
+        <div className="shrink-0">
+          {status === 'none' && (
+            <button
+              onClick={onClear}
+              className="text-xs bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+            >
+              <Eraser size={13} /> Borrar
+            </button>
+          )}
+          {status === 'pending' && (
+            <span className="text-xs text-amber-300 flex items-center gap-1.5">
+              <Loader2 size={13} className="animate-spin" /> Borrando...
+            </span>
+          )}
+          {status === 'success' && (
+            <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+              <ShieldCheck size={13} /> Borrada
+            </span>
+          )}
+          {status === 'failed' && (
+            <span className="text-xs text-red-400 flex items-center gap-1.5" title={dtc.clear_detail || ''}>
+              <XCircle size={13} /> Rechazada
+            </span>
+          )}
+        </div>
+      </div>
+      {status === 'failed' && dtc.clear_detail && (
+        <p className="text-red-300/70 text-[11px] mt-2 border-t border-slate-800 pt-2">{dtc.clear_detail}</p>
       )}
     </div>
   );
