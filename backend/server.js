@@ -18,6 +18,7 @@ const apiKeysRoutes = require('./src/routes/apiKeysRoutes');
 const publicApiRoutes = require('./src/routes/publicApiRoutes');
 const geofenceRoutes = require('./src/routes/geofenceRoutes'); // [NUEVO] crear/listar/borrar geocercas
 const scannerRoutes = require('./src/routes/scannerRoutes'); // [NUEVO 17/07/2026] producto Kalyber Scanner (talleres/mecánicos)
+const internalRoutes = require('./src/routes/internalRoutes'); // [NUEVO] estado agregado de la flota, para el panel de Asistentes de Puma Code
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/apikeys', apiKeysRoutes);
 app.use('/api/geofences', geofenceRoutes); // [NUEVO]
 app.use('/api/scanner', scannerRoutes); // [NUEVO 17/07/2026] producto Kalyber Scanner — endpoints propios + /internal/diagnostics-log para el ESP32
 app.use('/api/v1', publicApiRoutes); // API pública para terceros, autenticada con API key (no JWT)
+app.use('/internal', internalRoutes); // Estado agregado para el panel de Asistentes de Puma Code (secreto compartido, no JWT ni API key de cliente)
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });
