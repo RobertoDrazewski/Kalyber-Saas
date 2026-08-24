@@ -19,7 +19,7 @@ const publicApiRoutes = require('./src/routes/publicApiRoutes');
 const geofenceRoutes = require('./src/routes/geofenceRoutes'); // [NUEVO] crear/listar/borrar geocercas
 const scannerRoutes = require('./src/routes/scannerRoutes'); // [NUEVO 17/07/2026] producto Kalyber Scanner (talleres/mecánicos)
 const internalRoutes = require('./src/routes/internalRoutes'); // [NUEVO] estado agregado de la flota, para el panel de Asistentes de Puma Code
-
+const pool = require('./src/config/database');
 const app = express();
 
 // Confía en el primer proxy (Railway) — necesario para el rate limit
@@ -60,6 +60,15 @@ app.use('/internal', internalRoutes); // Estado agregado para el panel de Asiste
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'Kyber API Online', timestamp: new Date() });
+});
+app.get('/api/db-ping', async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        res.json({ ok: true, timestamp: new Date() });
+    } catch (error) {
+        console.error('[db-ping] Error consultando la BD:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
 const PORT = process.env.PORT || 3001;
