@@ -30,7 +30,7 @@ const getCalendar = async (req, res) => {
         const params = [];
         let where = 'WHERE 1=1';
         if (month) {
-            where += ' AND DATE_FORMAT(t.start_time, "%Y-%m") = ?';
+            where += " AND DATE_FORMAT(t.start_time, '%Y-%m') = ?";
             params.push(month);
         }
         if (ownerId) {
