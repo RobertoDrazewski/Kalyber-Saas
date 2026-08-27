@@ -54,7 +54,8 @@ const getCalendar = async (req, res) => {
 
         res.json(days);
     } catch (error) {
-        res.status(500).json({ error: 'Error obteniendo calendario de actividad' });
+        console.error('[getCalendar] Error real:', error.message);
+        res.status(500).json({ error: 'Error obteniendo calendario de actividad', detalle: error.message });
     }
 };
 
