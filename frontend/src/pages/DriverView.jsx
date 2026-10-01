@@ -480,7 +480,7 @@ export default function DriverView() {
         </div>
       </div>
       {/* [NUEVO 19/07/2026] Celebración de logro recién desbloqueado —
-          aparece una sola vez, el chofer lo cierra. Refuerzo positivo. */}
+          aparece una sola vez, el chofer lo cierra. Refuerzo positivo test. */}
       {newAchievement && (
         <div
           className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-6"
