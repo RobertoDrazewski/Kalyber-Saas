@@ -462,9 +462,12 @@ export default function TabPosicion() {
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} maxZoom={19} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
             {mapStyle === 'calles' ? (
+              // CORRECCIÓN: se reemplaza CARTO por OpenStreetMap para evitar el error "API KEY REQUIRED".
+              // Si en algún momento querés volver a CARTO, agregá tu key así:
+              // `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=TU_API_KEY_AQUI`
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; OpenStreetMap contributors'
                 maxZoom={20}
                 maxNativeZoom={19}
               />

@@ -248,9 +248,12 @@ export default function DriverView() {
         <div className="w-full bg-[#1E293B]/30 border border-slate-700 rounded-2xl overflow-hidden h-[340px] md:h-[500px] relative z-0">
           <MapContainer center={[-32.8895, -68.8458]} zoom={12} style={{ height: '100%', width: '100%' }}>
             <MapResizer />
+            {/* CORRECCIÓN: se reemplaza CARTO por OpenStreetMap para evitar el error "API KEY REQUIRED".
+                Si en algún momento querés volver a CARTO, agregá tu key así:
+                `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=TU_API_KEY_AQUI` */}
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; OpenStreetMap contributors'
             />
             {myVehicle && <FlyToVehicle vehicle={myVehicle} />}
             {/* [FIX 19/07/2026] Antes se dibujaba `trail` crudo como UNA

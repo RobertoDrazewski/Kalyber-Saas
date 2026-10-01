@@ -267,9 +267,12 @@ export default function TabHistorico() {
             </div>
             <div className="h-64">
               <MapContainer center={tripTrail[0] || [-32.8895, -68.8458]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                {/* CORRECCIÓN: se reemplaza CARTO por OpenStreetMap para evitar el error "API KEY REQUIRED".
+                    Si en algún momento querés volver a CARTO, agregá tu key así:
+                    `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=TU_API_KEY_AQUI` */}
                 <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                  attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                  url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; OpenStreetMap contributors'
                 />
                 {tripTrail.length > 1 && <Polyline positions={tripTrail} pathOptions={{ color: '#6366F1', weight: 4 }} />}
                 {tripTrail.length > 0 && <Marker position={tripTrail[0]} icon={dotIcon('#10B981')} />}
